@@ -449,11 +449,86 @@
   // ---------- Оформление ----------
   const THEMES = { auto: [['Как в системе', 'System'], ICON.auto], light: [['Светлая', 'Light'], ICON.sun], dark: [['Тёмная', 'Dark'], ICON.moon] };
   const ACCENTS = { copper: ['Медь', 'Copper'], mint: ['Мята', 'Mint'], plum: ['Слива', 'Plum'], ember: ['Уголь', 'Ember'] };
+  // Праздничное оформление включается само по датам: Хэллоуин 23.10–03.11, Новый год 22.12–10.01.
+  const SEASONS = { auto: ['По датам', 'By date'], halloween: ['Хэллоуин', 'Halloween'], newyear: ['Новый год', 'New Year'], off: ['Выключить', 'Off'] };
+  function seasonByDate(d = new Date()) {
+    const m = d.getMonth() + 1, day = d.getDate();
+    if ((m === 10 && day >= 23) || (m === 11 && day <= 3)) return 'halloween';
+    if ((m === 12 && day >= 22) || (m === 1 && day <= 10)) return 'newyear';
+    return '';
+  }
+  function activeSeason() {
+    const p = prefs.get('season', 'auto');
+    return p === 'auto' ? seasonByDate() : p === 'off' ? '' : (SEASONS[p] ? p : '');
+  }
   function applyLook() {
     const root = document.documentElement, theme = prefs.get('theme', 'auto'), accent = prefs.get('accent', 'copper');
     if (theme === 'auto') delete root.dataset.theme; else root.dataset.theme = theme;
     root.dataset.accent = ACCENTS[accent] ? accent : 'copper';
+    const season = activeSeason();
+    if (season) root.dataset.season = season; else delete root.dataset.season;
     root.lang = lang;
+    seasonFx(season);
+  }
+
+  // Летучие мыши на Хэллоуин и снег на Новый год. Слой не ловит клики и выключается при «уменьшить движение».
+  let fxSeason = null, snow = null;
+  const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  function seasonFx(season) {
+    snow?.recolor();
+    if (season === fxSeason) return;
+    fxSeason = season;
+    $('.season-fx')?.remove();
+    snow?.stop();
+    if (!season) return;
+    const fx = document.createElement('div');
+    fx.className = 'season-fx'; fx.setAttribute('aria-hidden', 'true');
+    if (season === 'halloween') fx.innerHTML = [1, 2, 3].map(i => `<span class="bat bat-${i}"><i></i></span>`).join('');
+    document.body.append(fx);
+    if (season === 'newyear' && !reducedMotion()) startSnow();
+  }
+  function startSnow() {
+    const c = document.createElement('canvas'), ctx = c.getContext && c.getContext('2d');
+    if (!ctx) return;
+    c.className = 'snow-canvas'; c.setAttribute('aria-hidden', 'true');
+    document.body.append(c);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let W = 0, H = 0, color = '#fff', raf = 0, flakes = [];
+    const make = anywhere => ({ x: Math.random() * W, y: anywhere ? Math.random() * H : -8, r: .8 + Math.random() * 2.2, vy: .25 + Math.random() * .65, vx: -.15 + Math.random() * .3, ph: Math.random() * 6.3, o: .3 + Math.random() * .5 });
+    const size = () => {
+      W = window.innerWidth; H = window.innerHeight; c.width = W * dpr; c.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      color = getComputedStyle(document.documentElement).getPropertyValue('--snow').trim() || '#fff';
+      const n = Math.round(Math.min(90, W * H / 15000));
+      while (flakes.length < n) flakes.push(make(true));
+      flakes.length = n;
+    };
+    const tick = () => {
+      ctx.clearRect(0, 0, W, H); ctx.fillStyle = color;
+      for (const f of flakes) {
+        f.ph += .012; f.y += f.vy; f.x += f.vx + Math.sin(f.ph) * .3;
+        if (f.y > H + 6 || f.x < -6 || f.x > W + 6) Object.assign(f, make(false));
+        ctx.globalAlpha = f.o; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, 6.283); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(tick);
+    };
+    size(); window.addEventListener('resize', size); tick();
+    snow = { stop() { cancelAnimationFrame(raf); window.removeEventListener('resize', size); c.remove(); snow = null; }, recolor() { setTimeout(size, 0); } };
+  }
+  function seasonRibbon() {
+    const season = activeSeason(), el = $('#season-ribbon');
+    if (!el) return;
+    const key = season + new Date().getFullYear();
+    if (!season || prefs.get('ribbonClosed', '') === key) { el.hidden = true; el.innerHTML = ''; return; }
+    const icon = season === 'halloween'
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7c-1-2.5 0-4 2-4.5"/><path d="M12 7c-4.5-1-8 2-8 6.5S7 21 12 21s8-3 8-7.5S16.5 6 12 7z"/><path d="M8.5 12l1.5 1.5L11.5 12M12.5 12l1.5 1.5 1.5-1.5M9 16.5c1 .8 2 1 3 1s2-.2 3-1"/></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9.5 3.5L12 6l2.5-2.5M9.5 20.5L12 18l2.5 2.5M2.7 9.6l3.4.9-.9 3.4M21.3 14.4l-3.4-.9.9-3.4M2.7 14.4l3.4-.9-.9-3.4M21.3 9.6l-3.4.9.9 3.4"/></svg>';
+    const text = season === 'halloween'
+      ? L('Хэллоуин в Hookah Party · тыквенное настроение до 3 ноября', 'Halloween at Hookah Party · pumpkin mood until 3 November')
+      : L('С наступающим Новым годом! Праздничное оформление до 10 января', 'Happy New Year! Festive look until 10 January');
+    el.hidden = false;
+    el.innerHTML = `<div class="wrap ribbon-in"><span class="ribbon-ic">${icon}</span><span>${text}</span>
+      <button class="ribbon-x" type="button" data-action="closeRibbon" data-key="${key}" aria-label="${L('Скрыть', 'Hide')}">×</button></div>`;
   }
   applyLook();
 
@@ -501,6 +576,7 @@
         <span>${L('Карта', 'Map')}: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a></span>
       </div>`;
     $$('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === page));
+    seasonRibbon();
   }
 
   // ---------- Вкладки ----------
@@ -833,7 +909,7 @@
   };
   function tilesHtml() {
     const t = (k, href, label, sub) => `<a class="tile" href="${href}" aria-label="${label}. ${sub}">
-      <span class="tile-box">${tileArt[k]}</span><span class="tile-label">${label}</span><span class="tile-sub">${sub}</span></a>`;
+      <span class="tile-box">${tileArt[k]}<span class="tile-text"><span class="tile-label">${label}</span><span class="tile-sub">${sub}</span></span></span></a>`;
     return `<nav class="tiles" aria-label="${L('Разделы', 'Sections')}">
       ${t('venues', '#/venues', L('Заведения', 'Venues'), L(`${VENUES.length} мест в Бишкеке`, `${VENUES.length} places in Bishkek`))}
       ${t('hookah', '#/catalog', L('Кальян', 'Hookah'), L('Табаки, миксы, чаши', 'Tobacco, mixes, bowls'))}
@@ -1519,7 +1595,7 @@
     const favs = u.favs.map(tobacco).filter(Boolean);
     const friends = u.friends.map(userById).filter(Boolean);
     const venues = [...new Set([...VENUES.map(v => v.name), ...db.events.map(e => e.venue)])];
-    const theme = prefs.get('theme', 'auto'), accent = prefs.get('accent', 'copper');
+    const theme = prefs.get('theme', 'auto'), accent = prefs.get('accent', 'copper'), seasonPref = prefs.get('season', 'auto');
     const panels = {
       about: `<section class="panel">
           <div class="panel-head"><h2>${L('Личные данные', 'Personal details')}</h2></div>
@@ -1556,6 +1632,8 @@
               <button role="radio" aria-checked="${lang === 'ru'}" class="${lang === 'ru' ? 'on' : ''}" data-action="setLang" data-lang="ru">Русский</button>
               <button role="radio" aria-checked="${lang === 'en'}" class="${lang === 'en' ? 'on' : ''}" data-action="setLang" data-lang="en">English</button></div></div>
             <div class="field"><span class="label">${L('Тема', 'Theme')}</span><div class="segmented" role="radiogroup" aria-label="${L('Тема', 'Theme')}">${Object.entries(THEMES).map(([k, [label, ic]]) => `<button role="radio" aria-checked="${theme === k}" class="${theme === k ? 'on' : ''}" data-action="setTheme" data-theme="${k}">${ic}${tr(label)}</button>`).join('')}</div></div>
+            <div class="field"><span class="label">${L('Праздничное оформление', 'Holiday look')}</span><div class="segmented" role="radiogroup" aria-label="${L('Праздничное оформление', 'Holiday look')}">${Object.entries(SEASONS).map(([k, label]) => `<button role="radio" aria-checked="${seasonPref === k}" class="${seasonPref === k ? 'on' : ''}" data-action="setSeason" data-season="${k}">${tr(label)}</button>`).join('')}</div>
+              <small class="muted">${L('По датам: Хэллоуин с 23 октября по 3 ноября, Новый год с 22 декабря по 10 января. На время праздника цвет акцента меняется.', 'By date: Halloween from 23 October to 3 November, New Year from 22 December to 10 January. The accent colour changes during the holiday.')}</small></div>
             <div class="field"><span class="label">${L('Цвет акцента', 'Accent colour')}</span><div class="swatches" role="radiogroup" aria-label="${L('Цвет акцента', 'Accent colour')}">${Object.entries(ACCENTS).map(([k, label]) => `<button role="radio" aria-checked="${accent === k}" class="sw sw-${k} ${accent === k ? 'on' : ''}" data-action="setAccent" data-accent="${k}"><i></i>${tr(label)}</button>`).join('')}</div></div>
           </div>
         </section>
@@ -2058,6 +2136,8 @@
     },
     setTheme({ theme }) { prefs.set('theme', theme); applyLook(); render(); },
     setAccent({ accent }) { prefs.set('accent', accent); applyLook(); render(); },
+    setSeason({ season }) { prefs.set('season', season); prefs.set('ribbonClosed', ''); applyLook(); render(); },
+    closeRibbon({ key }) { prefs.set('ribbonClosed', key); seasonRibbon(); },
     uploadAvatar() { const u = me(); pickAvatarFile(url => { u.avatar = url; save(); toast(L('Фото обновлено', 'Photo updated')); render(); }); },
     removeAvatar() { const u = me(); u.avatar = null; save(); render(); },
     logout() { db.session = null; save(); toast(L('Вы вышли из аккаунта', 'You have signed out')); go(''); },
