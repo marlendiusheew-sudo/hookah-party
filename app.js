@@ -168,8 +168,8 @@
           at: at(2, 20, 30), hostId: 'u1', desc: 'Забронирован диван у окна на 6 человек. Берём два кальяна, второй — на фанеле.',
           hookahs: 2, price: 1800, paid: { u1: true, u2: true },
           invites: [
-            { userId: 'u2', status: 'going' }, { userId: 'u3', status: 'going' }, { userId: 'u4', status: 'pending' },
-            { userId: 'u5', status: 'going' }, { phone: '79001234567', status: 'pending' }
+            { userId: 'u2', status: 'going', at: ago(600) }, { userId: 'u3', status: 'going', at: ago(420) }, { userId: 'u4', status: 'pending' },
+            { userId: 'u5', status: 'going', at: ago(95) }, { phone: '79001234567', status: 'pending' }
           ],
           picks: { u1: ['ds-supernova', 'mh-pinkman'], u2: ['ds-supernova', 'ad-love66'], u3: ['ds-supernova', 'mh-pinkman', 'tg-canemint'], u5: ['ds-bananapapa'] },
           bowls: { u1: 'b-phunnel', u2: 'b-phunnel', u3: 'b-killer' },
@@ -182,9 +182,9 @@
         },
         {
           id: 'e2', title: 'День рождения Тимура', venue: 'Северный дым', address: 'пр. Мира, 48', mapUrl: '',
-          at: at(6, 19), hostId: 'u3', desc: 'Отмечаем 25 лет. Подарок собираем вскладчину, детали у Сабины.',
+          at: at(6, 19), hostId: 'u3', createdAt: ago(60 * 20), desc: 'Отмечаем 25 лет. Подарок собираем вскладчину, детали у Сабины.',
           hookahs: 3, price: 2200, paid: { u3: true },
-          invites: [{ userId: 'u1', status: 'pending' }, { userId: 'u4', status: 'going' }, { userId: 'u6', status: 'going' }],
+          invites: [{ userId: 'u1', status: 'pending' }, { userId: 'u4', status: 'going', at: ago(500) }, { userId: 'u6', status: 'going', at: ago(210) }],
           picks: { u3: ['af-twoapples', 'sb-bluemist'], u4: ['af-twoapples'], u6: ['fu-gummi', 'sb-bluemist', 'af-twoapples'] },
           bowls: { u3: 'b-turka' },
           comments: [{ id: 'c4', userId: 'u4', text: 'Торт беру на себя.', at: ago(300) }],
@@ -409,37 +409,244 @@
     </a>`;
   }
 
+  // ---------- Вкладки ----------
+  // Одни и те же вкладки на главной, в каталоге, у людей и в профиле. Последняя открытая запоминается.
+  const tab = {
+    home: prefs.get('tab.home', 'upcoming'), guest: prefs.get('tab.guest', 'how'), cat: prefs.get('tab.cat', 'tobaccos'),
+    people: prefs.get('tab.people', 'friends'), profile: prefs.get('tab.profile', 'about')
+  };
+  const tabKeys = {};
+  let tabDir = null;
+  function uTabs(name, items) {
+    tabKeys[name] = items.map(t => t.key);
+    if (!tabKeys[name].includes(tab[name])) tab[name] = tabKeys[name][0];
+    return `<div class="utabs-wrap"><div class="utabs" role="tablist" data-tabs="${name}">${items.map(t => {
+      const on = t.key === tab[name];
+      return `<button role="tab" type="button" id="tab-${name}-${t.key}" aria-selected="${on}" tabindex="${on ? 0 : -1}" class="${on ? 'active' : ''}" data-action="switchTab" data-tabs="${name}" data-tab="${t.key}">${t.label}${t.count ? `<span class="cnt ${t.alert ? 'alert' : ''}">${t.count}</span>` : ''}</button>`;
+    }).join('')}<span class="utabs-ink" aria-hidden="true"></span></div></div>`;
+  }
+  function tabPanel(name, html) {
+    const anim = tabDir && tabDir.name === name ? `in-${tabDir.dir}` : '';
+    if (anim) tabDir = null;
+    return `<div class="tab-panel ${anim}" role="tabpanel" aria-labelledby="tab-${name}-${tab[name]}" data-swipe="${name}">${html}</div>`;
+  }
+  function inkTo(bar, from) {
+    const ink = bar.querySelector('.utabs-ink'), a = bar.querySelector('[role=tab].active');
+    if (!ink || !a) return;
+    const set = b => { ink.style.transform = `translateX(${b.l}px)`; ink.style.width = b.w + 'px'; ink.dataset.l = b.l; };
+    ink.style.transition = 'none';
+    set(from || { l: a.offsetLeft, w: a.offsetWidth });
+    void ink.offsetWidth;
+    ink.style.transition = '';
+    if (from) set({ l: a.offsetLeft, w: a.offsetWidth });
+    const left = a.offsetLeft - 24, right = a.offsetLeft + a.offsetWidth + 24;
+    if (left < bar.scrollLeft) bar.scrollLeft = left; else if (right > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = right - bar.clientWidth;
+  }
+  const inkAll = () => $$('.utabs').forEach(b => inkTo(b));
+  window.addEventListener('resize', inkAll);
+  document.fonts?.ready.then(inkAll);
+  function switchTo(name, key) {
+    if (!key || tab[name] === key) return;
+    const keys = tabKeys[name] || [], bar = $(`.utabs[data-tabs="${name}"]`), ink = bar?.querySelector('.utabs-ink');
+    const from = ink ? { l: +ink.dataset.l || 0, w: ink.offsetWidth } : null;
+    tabDir = { name, dir: keys.indexOf(key) > keys.indexOf(tab[name]) ? 'next' : 'prev' };
+    tab[name] = key; prefs.set('tab.' + name, key);
+    if (name === 'cat') cat.q = '';
+    if (name === 'home') homeQ = '';
+    render();
+    const nb = $(`.utabs[data-tabs="${name}"]`);
+    if (nb && from) inkTo(nb, from);
+    // Если вкладки прилипли к шапке, показываем новую вкладку с начала.
+    const wrap = nb?.parentElement;
+    if (wrap) {
+      const head = $('.topbar').offsetHeight, top = wrap.getBoundingClientRect().top + window.scrollY - head - 1;
+      if (window.scrollY > top) window.scrollTo(0, top);
+    }
+  }
+  // Свайп влево-вправо по содержимому переключает вкладки на телефоне.
+  let swipe = null;
+  document.addEventListener('touchstart', e => {
+    const p = e.target.closest('[data-swipe]');
+    if (!p || e.touches.length > 1 || e.target.closest('input, textarea, select, .utabs, .cal')) { swipe = null; return; }
+    swipe = { name: p.dataset.swipe, x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+  }, { passive: true });
+  document.addEventListener('touchend', e => {
+    if (!swipe) return;
+    const t = e.changedTouches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y, s = swipe;
+    swipe = null;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.6 || Date.now() - s.t > 700) return;
+    const keys = tabKeys[s.name] || [], i = keys.indexOf(tab[s.name]);
+    switchTo(s.name, keys[i + (dx < 0 ? 1 : -1)]);
+  }, { passive: true });
+  // Стрелки влево-вправо на вкладках, как в обычных вкладках браузера.
+  document.addEventListener('keydown', e => {
+    const b = e.target.closest?.('.utabs [role=tab]');
+    if (!b || !['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+    const name = b.dataset.tabs, keys = tabKeys[name], i = keys.indexOf(tab[name]);
+    switchTo(name, keys[i + (e.key === 'ArrowRight' ? 1 : -1)]);
+    $(`.utabs[data-tabs="${name}"] [role=tab].active`)?.focus();
+  });
+
+  function emptyState(title, text, action = '') {
+    return `<div class="empty-state">
+      <svg class="empty-art" viewBox="0 0 120 96" aria-hidden="true">
+        <path class="es-smoke" d="M66 6c6 4-3 9 3 13s-3 9 2 13" />
+        <path class="es-smoke" d="M54 10c5 3-2 7 2 10" />
+        <path d="M44 34h32l-5 10H49z" /><path d="M58 44h4v18h-4z" /><path d="M50 50h20" />
+        <path d="M60 62c-14 0-21 8-21 15 0 6 6 10 21 10s21-4 21-10c0-7-7-15-21-15z" />
+        <path d="M64 54c10 0 18 3 22 10l6 4" />
+      </svg>
+      <h3>${title}</h3><p>${text}</p>${action}</div>`;
+  }
+
+  function countdown(iso) {
+    const ms = new Date(iso) - Date.now();
+    if (ms <= 0) return ms > -4 * 3600e3 ? 'идёт сейчас' : 'прошёл';
+    const m = Math.floor(ms / 60000), d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mm = m % 60;
+    if (d) return `через ${d} ${plural(d, 'день', 'дня', 'дней')}${h ? ` ${h} ${plural(h, 'час', 'часа', 'часов')}` : ''}`;
+    if (h) return `через ${h} ${plural(h, 'час', 'часа', 'часов')}${mm ? ` ${mm} мин` : ''}`;
+    return `через ${mm || 1} мин`;
+  }
+  setInterval(() => $$('[data-countdown]').forEach(el => { el.textContent = countdown(el.dataset.countdown); }), 30000);
+
+  // Лента: что происходит у друзей и в ваших сборах.
+  function feedItems(u) {
+    const items = [], friends = new Set(u.friends), nm = id => `<a href="#/user/${id}"><b>${esc(userById(id)?.name || 'Кто-то')}</b></a>`;
+    const ev = e => `«<a href="#/event/${e.id}">${esc(e.title)}</a>»`;
+    for (const e of db.events) {
+      if (!isMember(e, u)) continue;
+      for (const c of e.comments) if (c.userId !== u.id) items.push({ at: c.at, who: c.userId, icon: 'chat', html: `${nm(c.userId)} в ${ev(e)}: ${esc(c.text.length > 90 ? c.text.slice(0, 90) + '…' : c.text)}` });
+      for (const i of e.invites) if (i.at && i.userId && i.userId !== u.id && i.status !== 'pending') items.push({ at: i.at, who: i.userId, icon: i.status === 'going' ? 'check' : 'x', html: `${nm(i.userId)} ${i.status === 'going' ? 'идёт на' : 'не сможет прийти на'} ${ev(e)}` });
+      if (e.createdAt && e.hostId !== u.id && myInvite(e, u)) items.push({ at: e.createdAt, who: e.hostId, icon: 'plus', html: `${nm(e.hostId)} зовёт вас на ${ev(e)}` });
+    }
+    for (const m of db.mixes) if (friends.has(m.authorId)) items.push({ at: m.at, who: m.authorId, icon: 'smoke', html: `${nm(m.authorId)} делится миксом <button class="link-btn" data-action="catTab" data-tab="mixes">«${esc(m.name)}»</button>` });
+    for (const r of db.reviews) if (friends.has(r.userId)) items.push({ at: r.at, who: r.userId, icon: 'star', html: `${nm(r.userId)} оценивает <button class="link-btn" data-action="tobacco" data-id="${r.tobaccoId}">${esc(tobaccoName(r.tobaccoId))}</button> на ${r.rating} из 5` });
+    return items.filter(x => x.at).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 40);
+  }
+  function feedHtml(items) {
+    if (!items.length) return emptyState('В ленте пока тихо', 'Здесь появятся новые сообщения в ваших сборах, ответы на приглашения и миксы друзей.', '<a class="btn btn-primary btn-sm" href="#/people">Найти друзей</a>');
+    const dayKey = iso => { const d = new Date(iso); d.setHours(0, 0, 0, 0); return d.getTime(); };
+    const today = dayKey(Date.now()), label = k => k === today ? 'Сегодня' : k === today - 864e5 ? 'Вчера' : dtShort.format(new Date(k));
+    const xIcon = svg('<path d="M6 6l12 12M18 6L6 18"/>');
+    let out = '', last = null;
+    for (const it of items) {
+      const k = dayKey(it.at);
+      if (k !== last) { out += `${last === null ? '' : '</ul>'}<h4 class="feed-day">${label(k)}</h4><ul class="feed">`; last = k; }
+      out += `<li class="feed-item"><span class="feed-av">${avatar(userById(it.who), 'sm')}<span class="feed-ic ic-${it.icon}">${it.icon === 'x' ? xIcon : ICON[it.icon]}</span></span>
+        <p>${it.html}</p><time class="mono">${dtTime.format(new Date(it.at))}</time></li>`;
+    }
+    return out + '</ul>';
+  }
+
+  // Календарь сборов на месяц.
+  const cal = { y: new Date().getFullYear(), m: new Date().getMonth(), day: null };
+  function calendarHtml(list, u) {
+    const first = new Date(cal.y, cal.m, 1), startPad = (first.getDay() + 6) % 7, days = new Date(cal.y, cal.m + 1, 0).getDate();
+    const title = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(first).replace(' г.', '');
+    const todayYmd = ymd(new Date());
+    const byDay = {};
+    for (const e of list) { const k = ymd(new Date(e.at)); (byDay[k] ||= []).push(e); }
+    let cells = '';
+    for (let i = 0; i < startPad; i++) cells += '<span class="cal-cell pad"></span>';
+    for (let d = 1; d <= days; d++) {
+      const k = ymd(new Date(cal.y, cal.m, d)), evs = byDay[k] || [];
+      cells += `<button type="button" class="cal-cell ${k === todayYmd ? 'today' : ''} ${cal.day === k ? 'sel' : ''} ${evs.length ? 'has' : ''}" data-action="calDay" data-day="${k}" aria-label="${d}${evs.length ? `, ${evs.length} ${plural(evs.length, 'сбор', 'сбора', 'сборов')}` : ''}">
+        <span class="cal-n">${d}</span>${evs.slice(0, 3).map(e => `<i class="cal-dot ${isPast(e) ? 'past' : e.hostId === u.id ? 'host' : ''}"></i>`).join('')}</button>`;
+    }
+    const sel = cal.day ? (byDay[cal.day] || []) : [];
+    return `<div class="cal">
+      <div class="cal-head"><button class="icon-btn" type="button" data-action="calNav" data-step="-1" aria-label="Предыдущий месяц">‹</button>
+        <b>${title[0].toUpperCase() + title.slice(1)}</b><button class="icon-btn" type="button" data-action="calNav" data-step="1" aria-label="Следующий месяц">›</button></div>
+      <div class="cal-grid">${['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map(w => `<span class="cal-w">${w}</span>`).join('')}${cells}</div>
+      <div class="cal-legend"><span><i class="cal-dot"></i>Иду</span><span><i class="cal-dot host"></i>Организую</span><span><i class="cal-dot past"></i>Прошёл</span></div>
+    </div>
+    ${cal.day ? `<h4 class="feed-day">${dtFull.format(new Date(cal.day + 'T12:00'))}</h4>${sel.length ? `<div class="ev-grid">${sel.map(e => eventCard(e, u)).join('')}</div>` : '<p class="muted">В этот день сборов нет.</p>'}` : '<p class="muted">Нажмите на день, чтобы увидеть сборы.</p>'}`;
+  }
+
+  let homeQ = '';
   function pageHome() {
     const u = me();
     if (!u) return pageLanding();
     const mine = db.events.filter(e => isMember(e, u)).sort((a, b) => new Date(a.at) - new Date(b.at));
     const invites = mine.filter(e => !isPast(e) && myInvite(e, u)?.status === 'pending');
     const upcoming = mine.filter(e => !isPast(e) && !invites.includes(e));
+    const hosting = upcoming.filter(e => e.hostId === u.id);
     const past = mine.filter(isPast).reverse();
-    const soon = upcoming.filter(e => goingIds(e).includes(u.id) && new Date(e.at) - Date.now() < 864e5 && new Date(e.at) > Date.now() - 3 * 3600e3);
+    const feed = feedItems(u), seen = +prefs.get('feedSeen', 0);
+    const unseen = tab.home === 'feed' ? 0 : feed.filter(f => new Date(f.at) > seen && f.who !== u.id).length;
+    const next = upcoming.find(e => goingIds(e).includes(u.id));
+    const homeView = prefs.get('homeView', 'list');
+
+    const nextCard = next ? (() => {
+      const b = bill(next), picked = (next.picks[u.id] || []).length;
+      return `<section class="next-card">
+        <div class="next-main">
+          <span class="next-when"><span class="soon-dot"></span><span data-countdown="${next.at}">${countdown(next.at)}</span></span>
+          <h2><a href="#/event/${next.id}">${esc(next.title)}</a></h2>
+          <div class="next-facts"><span>${ICON.pin}${esc(next.venue)}</span><span>${ICON.cal}${whenLabel(next)}</span>${b.total ? `<span>${ICON.wallet}${money(b.per)} с человека</span>` : ''}</div>
+        </div>
+        <div class="next-side">${avatarStack(goingIds(next), 5)}
+          <div class="btn-row">${canVote(next, u) && !picked ? `<button class="btn btn-sm" data-action="pickTobacco" data-id="${next.id}">Выбрать табаки</button>` : ''}<a class="btn btn-primary btn-sm" href="#/event/${next.id}">Открыть</a></div></div>
+      </section>`;
+    })() : invites.length ? `<a class="next-card next-invite" href="#" data-action="switchTab" data-tabs="home" data-tab="invites"><div class="next-main"><span class="next-when"><span class="soon-dot"></span>Новые приглашения</span>
+        <h2>Вас зовут на ${invites.length} ${plural(invites.length, 'сбор', 'сбора', 'сборов')}</h2></div><span class="btn btn-primary btn-sm">Посмотреть</span></a>` : '';
+
+    const qa = (icon, label, attrs) => `<${attrs.startsWith('href') ? 'a' : 'button type="button"'} class="qa" ${attrs}><span class="qa-ic">${icon}</span>${label}</${attrs.startsWith('href') ? 'a' : 'button'}>`;
+    const grid = list => list.length ? `<div class="ev-grid">${list.map(e => eventCard(e, u)).join('')}</div>` : '';
+    const filterQ = list => { const q = homeQ.trim().toLowerCase(); return q ? list.filter(e => `${e.title} ${e.venue} ${e.address}`.toLowerCase().includes(q)) : list; };
+    const search = (extra = '') => `<div class="panel-tools"><input class="input" id="home-q" type="search" placeholder="Поиск по названию или заведению" value="${esc(homeQ)}" aria-label="Поиск сборов">${extra}</div>`;
+    const newBtn = '<button class="btn btn-primary btn-sm" data-action="newEvent">Создать сбор</button>';
+
+    const lists = { upcoming, hosting, past };
+    const empties = {
+      upcoming: emptyState('Ближайших сборов нет', 'Создайте сбор, выберите заведение и позовите друзей по номеру телефона.', newBtn),
+      hosting: emptyState('Вы пока ничего не организуете', 'Соберите друзей сами: это займёт меньше минуты.', newBtn),
+      past: emptyState('Здесь будет история', 'После первого сбора тут появится, где вы были и что курили.')
+    };
+    let body;
+    if (tab.home === 'invites') {
+      body = invites.length ? `<div class="ev-grid">${invites.map(e => {
+        const host = userById(e.hostId);
+        return `<div class="ev-card invite-card">${dateBlock(e)}
+          <div class="ev-body"><h3><a href="#/event/${e.id}">${esc(e.title)}</a></h3>
+            <div class="ev-venue">${ICON.pin}<span>${esc(e.venue)}</span></div>
+            <div class="ev-venue">${avatar(host, 'xs')}<span>Зовёт ${esc(host?.name)}</span></div>
+            <div class="invite-actions"><button class="btn btn-primary btn-sm" data-action="rsvp" data-id="${e.id}" data-status="going">Иду</button>
+            <button class="btn btn-sm" data-action="rsvp" data-id="${e.id}" data-status="declined">Не смогу</button></div></div></div>`;
+      }).join('')}</div>` : emptyState('Новых приглашений нет', 'Когда друзья позовут вас на сбор, приглашение появится здесь.', '<a class="btn btn-sm" href="#/people">Найти друзей</a>');
+    } else if (tab.home === 'feed') {
+      body = feedHtml(feed);
+    } else {
+      const k = tab.home, toggle = k === 'upcoming' ? `<div class="segmented sm" role="radiogroup" aria-label="Вид">
+          <button role="radio" aria-checked="${homeView === 'list'}" class="${homeView === 'list' ? 'on' : ''}" data-action="homeView" data-view="list">Список</button>
+          <button role="radio" aria-checked="${homeView === 'cal'}" class="${homeView === 'cal' ? 'on' : ''}" data-action="homeView" data-view="cal">Календарь</button></div>` : '';
+      if (k === 'upcoming' && homeView === 'cal') body = `<div class="panel-tools">${toggle}</div>${calendarHtml(mine.filter(e => myInvite(e, u)?.status !== 'declined'), u)}`;
+      else body = lists[k].length ? `${search(toggle)}<div id="home-grid">${grid(filterQ(lists[k])) || '<p class="muted">Ничего не нашлось.</p>'}</div>` : (toggle ? `<div class="panel-tools">${toggle}</div>` : '') + empties[k];
+    }
+
     view.innerHTML = `
-      <section class="greet">
-        <div><span class="eyebrow">Мои сборы</span><h1>Привет, ${esc(u.name)}</h1>
-          <p>${upcoming.length ? `Впереди ${upcoming.length} ${plural(upcoming.length, 'сбор', 'сбора', 'сборов')}` : 'Пока нет запланированных сборов'}${invites.length ? ` и ${invites.length} ${plural(invites.length, 'новое приглашение', 'новых приглашения', 'новых приглашений')}` : ''}.</p></div>
-        <button class="btn btn-primary" type="button" data-action="newEvent">+ Новый сбор</button>
-      </section>
-      ${soon.map(e => `<a class="soon" href="#/event/${e.id}"><span class="soon-dot"></span><span><b>${whenLabel(e)}</b> · ${esc(e.title)} · ${esc(e.venue)}</span><span class="soon-go">Открыть →</span></a>`).join('')}
-      ${invites.length ? `<section class="section"><div class="section-head"><h2>Приглашения</h2></div><div class="ev-grid">
-        ${invites.map(e => {
-          const host = userById(e.hostId);
-          return `<div class="ev-card invite-card">
-            ${dateBlock(e)}
-            <div class="ev-body"><h3><a href="#/event/${e.id}">${esc(e.title)}</a></h3>
-              <div class="ev-venue">${ICON.pin}<span>${esc(e.venue)}</span></div>
-              <div class="ev-venue">${avatar(host, 'xs')}<span>Зовёт ${esc(host?.name)}</span></div>
-              <div class="invite-actions"><button class="btn btn-primary btn-sm" data-action="rsvp" data-id="${e.id}" data-status="going">Иду</button>
-              <button class="btn btn-sm" data-action="rsvp" data-id="${e.id}" data-status="declined">Не смогу</button></div></div></div>`;
-        }).join('')}</div></section>` : ''}
-      <section class="section"><div class="section-head"><h2>Ближайшие</h2></div>
-        ${upcoming.length ? `<div class="ev-grid">${upcoming.map(e => eventCard(e, u)).join('')}</div>`
-          : `<div class="empty"><p>Создайте сбор, выберите заведение и пригласите друзей по номеру телефона.</p><button class="btn btn-primary" data-action="newEvent">Создать сбор</button></div>`}
-      </section>
-      ${past.length ? `<section class="section"><div class="section-head"><h2>Прошедшие</h2><span class="muted" style="font-size:13.5px">Сбор можно повторить с теми же людьми</span></div><div class="ev-grid">${past.map(e => eventCard(e, u)).join('')}</div></section>` : ''}`;
+      <section class="greet-line"><h1>Привет, ${esc(u.name)}</h1><span class="muted">${dtFull.format(new Date())}</span></section>
+      ${nextCard}
+      <nav class="quick" aria-label="Быстрые действия">
+        ${qa(ICON.plus, 'Новый сбор', 'data-action="newEvent"')}
+        ${qa(ICON.smoke, 'Свой микс', 'data-action="newMix"')}
+        ${qa(ICON.users, 'Позвать друга', 'href="#/people"')}
+        ${qa(ICON.star, 'Каталог', 'href="#/catalog"')}
+      </nav>
+      ${uTabs('home', [
+        { key: 'upcoming', label: 'Ближайшие', count: upcoming.length },
+        { key: 'invites', label: 'Приглашения', count: invites.length, alert: invites.length > 0 },
+        { key: 'hosting', label: 'Организую', count: hosting.length },
+        { key: 'past', label: 'Прошедшие' },
+        { key: 'feed', label: 'Лента', count: unseen, alert: unseen > 0 }
+      ])}
+      ${tabPanel('home', body)}`;
+
+    if (tab.home === 'feed') prefs.set('feedSeen', Date.now());
+    $('#home-q')?.addEventListener('input', ev => {
+      homeQ = ev.target.value;
+      $('#home-grid').innerHTML = grid(filterQ(lists[tab.home])) || '<p class="muted">Ничего не нашлось.</p>';
+    });
   }
 
   function stepsHtml() {
@@ -464,9 +671,19 @@
 
   function pageLanding() {
     const sample = eventById('e1') || db.events[0];
-    const topMixes = [...db.mixes].sort((a, b) => b.likes.length - a.likes.length).slice(0, 3);
-    const topT = [...CATALOG.tobaccos].sort((a, b) => ratingOf(b.id).avg - ratingOf(a.id).avg || ratingOf(b.id).n - ratingOf(a.id).n).slice(0, 4);
+    const topMixes = [...db.mixes].sort((a, b) => b.likes.length - a.likes.length).slice(0, 6);
+    const topT = [...CATALOG.tobaccos].sort((a, b) => ratingOf(b.id).avg - ratingOf(a.id).avg || ratingOf(b.id).n - ratingOf(a.id).n).slice(0, 8);
     const feat = (icon, h, p) => `<div class="feature"><span class="feature-ic">${icon}</span><h3>${h}</h3><p>${p}</p></div>`;
+    const body = {
+      how: `<section class="features">
+          ${feat(ICON.users, 'Приглашения по номеру', 'Зовите друзей из контактов. Кого нет в сервисе, получит сбор после регистрации.')}
+          ${feat(ICON.star, 'Голосование за табаки', 'Каждый отмечает вкусы и чашу. Популярное поднимается наверх списка.')}
+          ${feat(ICON.wallet, 'Складчина', 'Укажите число кальянов и цену. Сервис посчитает, сколько с каждого, и отметит, кто скинулся.')}
+          ${feat(ICON.chat, 'Обсуждение и напоминания', 'Чат внутри сбора, напоминание за час и выгрузка в календарь телефона.')}
+        </section>${stepsHtml()}`,
+      mixes: `<div class="cat-grid">${topMixes.map(m => mixCard(m, null)).join('')}</div>`,
+      top: `<div class="cat-grid">${topT.map(t => tobaccoCard(t, null)).join('')}</div>`
+    }[tab.guest] || '';
     view.innerHTML = `
       <section class="hero">
         <div><span class="eyebrow">Hookah Party</span>
@@ -476,17 +693,8 @@
         </div>
         <div class="hero-preview">${sample ? `<span class="eyebrow">Пример сбора</span><div style="height:10px"></div>${eventCard(sample, null, '#/login')}` : ''}</div>
       </section>
-      <section class="features">
-        ${feat(ICON.users, 'Приглашения по номеру', 'Зовите друзей из контактов. Кого нет в сервисе, получит сбор после регистрации.')}
-        ${feat(ICON.star, 'Голосование за табаки', 'Каждый отмечает вкусы и чашу. Популярное поднимается наверх списка.')}
-        ${feat(ICON.wallet, 'Складчина', 'Укажите число кальянов и цену. Сервис посчитает, сколько с каждого, и отметит, кто скинулся.')}
-        ${feat(ICON.chat, 'Обсуждение и напоминания', 'Чат внутри сбора, напоминание за час и выгрузка в календарь телефона.')}
-      </section>
-      <section class="section"><div class="section-head"><h2>Популярные миксы</h2><a class="btn btn-sm" href="#/catalog" data-action="catTab" data-tab="mixes">Все миксы</a></div>
-        <div class="cat-grid">${topMixes.map(m => mixCard(m, null)).join('')}</div></section>
-      <section class="section"><div class="section-head"><h2>Лучшие по отзывам</h2><a class="btn btn-sm" href="#/catalog">Каталог</a></div>
-        <div class="cat-grid">${topT.map(t => tobaccoCard(t, null)).join('')}</div></section>
-      <section class="section"><div class="section-head"><h2>Как это работает</h2></div>${stepsHtml()}</section>
+      ${uTabs('guest', [{ key: 'how', label: 'Как это работает' }, { key: 'mixes', label: 'Популярные миксы' }, { key: 'top', label: 'Лучшие табаки' }])}
+      ${tabPanel('guest', body)}
       <section class="cta-band"><div><h2>Пятница уже скоро</h2><p>Регистрация занимает минуту: имя, номер и код из SMS.</p></div><a class="btn btn-primary" href="#/register">Создать аккаунт</a></section>`;
   }
 
@@ -638,7 +846,7 @@
   }
 
   // ---------- Каталог ----------
-  const cat = { tab: 'tobaccos', q: '', strength: 'all', tag: '', sort: 'rating' };
+  const cat = { q: '', strength: 'all', tag: '', sort: 'rating' };
   function tobaccoCard(t, u) {
     const r = ratingOf(t.id), fav = !!u && u.favs.includes(t.id);
     return `<article class="cat-card t-card" data-action="tobacco" data-id="${t.id}" role="button" tabindex="0" aria-label="${esc(t.brand + ' ' + t.flavor)}: подробнее и отзывы">
@@ -655,17 +863,17 @@
 
   function pageCatalog() {
     const u = me();
-    const tabs = { tobaccos: 'Табаки', mixes: 'Миксы', bowls: 'Чаши', gear: 'Аксессуары' };
     view.innerHTML = `
       <section class="section"><span class="eyebrow">Каталог</span><h1>Табаки, миксы и всё для кальяна</h1></section>
-      <div class="toolbar">
-        <div class="tabs" role="tablist">${Object.entries(tabs).map(([k, v]) => `<button role="tab" aria-selected="${k === cat.tab}" class="${k === cat.tab ? 'active' : ''}" data-action="catTab" data-tab="${k}">${v}</button>`).join('')}</div>
-        <div class="btn-row">
-          ${cat.tab === 'mixes' ? '<button class="btn btn-primary btn-sm" data-action="newMix">+ Свой микс</button>' : ''}
-          <input class="input" id="cat-q" type="search" placeholder="${cat.tab === 'mixes' ? 'Поиск по названию или табаку' : 'Поиск по бренду или вкусу'}" value="${esc(cat.q)}" style="max-width:300px" aria-label="Поиск">
-        </div>
+      ${uTabs('cat', [
+        { key: 'tobaccos', label: 'Табаки', count: CATALOG.tobaccos.length }, { key: 'mixes', label: 'Миксы', count: db.mixes.length },
+        { key: 'bowls', label: 'Чаши', count: CATALOG.bowls.length }, { key: 'gear', label: 'Аксессуары', count: CATALOG.gear.length }
+      ])}
+      ${tabPanel('cat', `<div class="panel-tools">
+        <input class="input" id="cat-q" type="search" placeholder="${tab.cat === 'mixes' ? 'Поиск по названию или табаку' : 'Поиск по бренду или вкусу'}" value="${esc(cat.q)}" aria-label="Поиск">
+        ${tab.cat === 'mixes' ? '<button class="btn btn-primary btn-sm" data-action="newMix">+ Свой микс</button>' : ''}
       </div>
-      ${cat.tab === 'tobaccos' ? `<div class="filters">
+      ${tab.cat === 'tobaccos' ? `<div class="filters">
         <div class="chip-row" role="group" aria-label="Крепость">${Object.entries(STRENGTH).map(([k, [label]]) => `<button class="chip-btn ${cat.strength === k ? 'on' : ''}" data-action="catFilter" data-strength="${k}">${label}</button>`).join('')}</div>
         <div class="chip-row" role="group" aria-label="Вкус"><button class="chip-btn ${!cat.tag ? 'on' : ''}" data-action="catFilter" data-tag="">Все вкусы</button>${ALL_TAGS.map(x => `<button class="chip-btn ${cat.tag === x ? 'on' : ''}" data-action="catFilter" data-tag="${esc(x)}">${esc(x)}</button>`).join('')}</div>
         <label class="sort">Сортировка <select id="cat-sort" class="input">
@@ -674,12 +882,12 @@
           <option value="strong" ${cat.sort === 'strong' ? 'selected' : ''}>Сначала крепкие</option>
           <option value="light" ${cat.sort === 'light' ? 'selected' : ''}>Сначала лёгкие</option></select></label>
       </div>` : ''}
-      <div class="cat-grid" id="cat-grid"></div>`;
+      <div class="cat-grid" id="cat-grid"></div>`)}`;
     const grid = $('#cat-grid');
     const draw = () => {
       const q = cat.q.trim().toLowerCase();
       let html = '';
-      if (cat.tab === 'tobaccos') {
+      if (tab.cat === 'tobaccos') {
         const [, lo, hi] = STRENGTH[cat.strength];
         const list = CATALOG.tobaccos
           .filter(t => (!q || `${t.brand} ${t.flavor} ${t.note} ${t.tags.join(' ')}`.toLowerCase().includes(q)) && t.strength >= lo && t.strength <= hi && (!cat.tag || t.tags.includes(cat.tag)))
@@ -689,12 +897,12 @@
             strong: (a, b) => b.strength - a.strength, light: (a, b) => a.strength - b.strength
           }[cat.sort]);
         html = list.map(t => tobaccoCard(t, u)).join('');
-      } else if (cat.tab === 'mixes') {
+      } else if (tab.cat === 'mixes') {
         html = [...db.mixes].filter(m => !q || (m.name + ' ' + m.parts.map(p => tobaccoName(p.id)).join(' ')).toLowerCase().includes(q))
           .sort((a, b) => b.likes.length - a.likes.length).map(m => mixCard(m, u)).join('');
       } else {
-        html = CATALOG[cat.tab].filter(x => !q || `${x.name} ${x.type} ${x.note}`.toLowerCase().includes(q)).map(x => `
-          <article class="cat-card"><div class="art-tile">${cat.tab === 'bowls' ? bowlArt(x.type) : `<span class="art-word">${esc(x.type)}</span>`}</div>
+        html = CATALOG[tab.cat].filter(x => !q || `${x.name} ${x.type} ${x.note}`.toLowerCase().includes(q)).map(x => `
+          <article class="cat-card"><div class="art-tile">${tab.cat === 'bowls' ? bowlArt(x.type) : `<span class="art-word">${esc(x.type)}</span>`}</div>
             <span class="cat-brand">${esc(x.type)}</span><h3>${esc(x.name)}</h3><p>${esc(x.note)}</p></article>`).join('');
       }
       grid.innerHTML = html || `<div class="empty" style="grid-column:1/-1"><p>Ничего не нашлось. Измените поиск или фильтры.</p></div>`;
@@ -750,7 +958,7 @@
       <button class="btn btn-sm ${friend ? 'btn-on' : 'btn-primary'}" data-action="toggleFriend" data-id="${p.id}" aria-pressed="${friend}">${friend ? `${ICON.check}В друзьях` : '+ В друзья'}</button>
     </article>`;
   }
-  let peopleTab = 'friends', peopleQ = '';
+  let peopleQ = '';
   function pagePeople() {
     const u = me();
     if (!u) return go('login');
@@ -759,18 +967,14 @@
     view.innerHTML = `
       <section class="section"><span class="eyebrow">Люди</span><h1>Друзья и знакомые</h1>
         <p class="muted">Друзья первыми появляются в списке приглашений и видят ваш номер целиком.</p></section>
-      <div class="toolbar">
-        <div class="tabs" role="tablist">
-          <button role="tab" class="${peopleTab === 'friends' ? 'active' : ''}" data-action="peopleTab" data-tab="friends">Друзья · ${friends.length}</button>
-          <button role="tab" class="${peopleTab === 'all' ? 'active' : ''}" data-action="peopleTab" data-tab="all">Все люди</button></div>
-        <input class="input" id="pp-q" type="search" placeholder="Имя или номер" value="${esc(peopleQ)}" style="max-width:300px" aria-label="Поиск людей">
-      </div>
-      <div class="people-grid" id="pp-grid"></div>`;
+      ${uTabs('people', [{ key: 'friends', label: 'Друзья', count: friends.length }, { key: 'all', label: 'Все люди', count: others.length }])}
+      ${tabPanel('people', `<div class="panel-tools"><input class="input" id="pp-q" type="search" placeholder="Имя или номер" value="${esc(peopleQ)}" aria-label="Поиск людей"></div>
+      <div class="people-grid" id="pp-grid"></div>`)}`;
     const draw = () => {
       const q = peopleQ.trim().toLowerCase(), qd = digits(q);
-      const list = (peopleTab === 'friends' ? friends : others).filter(p => !q || p.name.toLowerCase().includes(q) || (qd.length >= 4 && p.phone.includes(qd)));
+      const list = (tab.people === 'friends' ? friends : others).filter(p => !q || p.name.toLowerCase().includes(q) || (qd.length >= 4 && p.phone.includes(qd)));
       $('#pp-grid').innerHTML = list.map(p => personCard(p, u)).join('') ||
-        `<div class="empty" style="grid-column:1/-1"><p>${peopleTab === 'friends' && !q ? 'Друзей пока нет. Откройте «Все люди» и добавьте тех, с кем ходите на кальян.' : 'Никого не нашли.'}</p></div>`;
+        `<div style="grid-column:1/-1">${tab.people === 'friends' && !q ? emptyState('Друзей пока нет', 'Откройте вкладку «Все люди» и добавьте тех, с кем ходите на кальян.', '<button class="btn btn-primary btn-sm" data-action="switchTab" data-tabs="people" data-tab="all">Все люди</button>') : '<p class="muted">Никого не нашли.</p>'}</div>`;
     };
     draw();
     $('#pp-q').addEventListener('input', ev => { peopleQ = ev.target.value; draw(); });
@@ -833,7 +1037,9 @@
           <button class="btn btn-ghost btn-sm" data-action="logout">Выйти из аккаунта</button>
         </section>
         <div class="ev-main">
-          <section class="panel">
+          ${uTabs('profile', [{ key: 'about', label: 'Обо мне' }, { key: 'friends', label: 'Друзья', count: friends.length }, { key: 'history', label: 'История', count: history.length }, { key: 'settings', label: 'Настройки' }])}
+          ${tabPanel('profile', ({
+            about: `          <section class="panel">
             <div class="panel-head"><h2>Личные данные</h2></div>
             <form class="form" id="profile-form">
               <div class="field"><label for="pf-name">Имя</label><input id="pf-name" required minlength="2" maxlength="40" value="${esc(u.name)}"></div>
@@ -845,22 +1051,17 @@
             </form>
           </section>
           <section class="panel">
-            <div class="panel-head"><h2>Оформление</h2></div>
-            <div class="form">
-              <div class="field"><span class="label">Тема</span><div class="segmented" role="radiogroup" aria-label="Тема">${Object.entries(THEMES).map(([k, [label, ic]]) => `<button role="radio" aria-checked="${theme === k}" class="${theme === k ? 'on' : ''}" data-action="setTheme" data-theme="${k}">${ic}${label}</button>`).join('')}</div></div>
-              <div class="field"><span class="label">Цвет акцента</span><div class="swatches" role="radiogroup" aria-label="Цвет акцента">${Object.entries(ACCENTS).map(([k, label]) => `<button role="radio" aria-checked="${accent === k}" class="sw sw-${k} ${accent === k ? 'on' : ''}" data-action="setAccent" data-accent="${k}"><i></i>${label}</button>`).join('')}</div></div>
-            </div>
-          </section>
-          <section class="panel">
-            <div class="panel-head"><h2>Друзья</h2><a class="btn btn-sm" href="#/people">Найти друзей</a></div>
-            ${friends.length ? `<div class="friend-row">${friends.map(f => `<a href="#/user/${f.id}" class="friend">${avatar(f)}<span>${esc(f.name)}</span></a>`).join('')}</div>` : '<p class="muted">Добавьте друзей, чтобы быстрее звать их на сборы.</p>'}
-          </section>
-          <section class="panel">
             <div class="panel-head"><h2>Любимые табаки</h2><a class="btn btn-sm" href="#/catalog">Открыть каталог</a></div>
             ${favs.length ? `<div class="cat-tags">${favs.map(t => `<button class="chip chip-accent" data-action="tobacco" data-id="${t.id}">${esc(t.brand)} ${esc(t.flavor)}</button>`).join('')}</div>`
               : '<p class="muted">Отмечайте вкусы сердечком в каталоге, и они появятся здесь.</p>'}
           </section>
-          <section class="panel">
+`,
+            friends: `          <section class="panel">
+            <div class="panel-head"><h2>Друзья</h2><a class="btn btn-sm" href="#/people">Найти друзей</a></div>
+            ${friends.length ? `<div class="friend-row">${friends.map(f => `<a href="#/user/${f.id}" class="friend">${avatar(f)}<span>${esc(f.name)}</span></a>`).join('')}</div>` : '<p class="muted">Добавьте друзей, чтобы быстрее звать их на сборы.</p>'}
+          </section>
+`,
+            history: `          <section class="panel">
             <div class="panel-head"><h2>История</h2></div>
             ${history.length ? `<ul class="history">${history.map(e => {
               const mine = (e.picks[u.id] || []).map(tobaccoName), top = ranking(e.picks, tobaccoName).slice(0, 2).map(r => tobaccoName(r.id));
@@ -868,14 +1069,24 @@
                 <span class="history-t">${mine.length ? `Мой выбор: ${esc(mine.join(', '))}` : top.length ? `Курили: ${esc(top.join(', '))}` : ''}</span></a></li>`;
             }).join('')}</ul>` : '<p class="muted">Здесь появятся прошедшие сборы: где были и что курили.</p>'}
           </section>
+`,
+            settings: `          <section class="panel">
+            <div class="panel-head"><h2>Оформление</h2></div>
+            <div class="form">
+              <div class="field"><span class="label">Тема</span><div class="segmented" role="radiogroup" aria-label="Тема">${Object.entries(THEMES).map(([k, [label, ic]]) => `<button role="radio" aria-checked="${theme === k}" class="${theme === k ? 'on' : ''}" data-action="setTheme" data-theme="${k}">${ic}${label}</button>`).join('')}</div></div>
+              <div class="field"><span class="label">Цвет акцента</span><div class="swatches" role="radiogroup" aria-label="Цвет акцента">${Object.entries(ACCENTS).map(([k, label]) => `<button role="radio" aria-checked="${accent === k}" class="sw sw-${k} ${accent === k ? 'on' : ''}" data-action="setAccent" data-accent="${k}"><i></i>${label}</button>`).join('')}</div></div>
+            </div>
+          </section>
           <section class="panel">
             <div class="panel-head"><h2>Демо-данные</h2></div>
             <p class="muted" style="margin-bottom:14px">Все данные этого шаблона хранятся в вашем браузере. Сброс вернёт тестовых пользователей, сборы, отзывы и миксы.</p>
             <button class="btn btn-danger btn-sm" data-action="reset">Сбросить демо-данные</button>
           </section>
+`
+          })[tab.profile])}
         </div>
       </div>`;
-    $('#profile-form').addEventListener('submit', ev => {
+    $('#profile-form')?.addEventListener('submit', ev => {
       ev.preventDefault();
       const name = $('#pf-name').value.trim();
       if (name.length < 2) { $('#pf-err').textContent = 'Имя должно быть не короче двух букв.'; return; }
@@ -1095,7 +1306,7 @@
     });
   }
   function createEvent(fields, invites) {
-    const e = { id: uid('e'), hostId: me().id, ...fields, invites, picks: {}, bowls: {}, comments: [], paid: {}, remind: {}, notified: {} };
+    const e = { id: uid('e'), hostId: me().id, createdAt: new Date().toISOString(), ...fields, invites, picks: {}, bowls: {}, comments: [], paid: {}, remind: {}, notified: {} };
     db.events.push(e); save(); closeModal();
     toast(invites.length ? `Сбор создан, приглашения отправлены: ${invites.length}` : 'Сбор создан');
     go('event/' + e.id);
@@ -1218,7 +1429,7 @@
     },
     rsvp({ id, status }) {
       const e = eventById(id), u = me(), inv = e && u && myInvite(e, u); if (!inv) return;
-      inv.status = status;
+      inv.status = status; inv.at = new Date().toISOString();
       if (status !== 'going') { delete e.picks[u.id]; delete e.bowls[u.id]; delete e.paid[u.id]; }
       save(); toast(status === 'going' ? 'Отлично, ждём вас! Выберите табаки.' : 'Организатор узнает, что вы не придёте'); render();
     },
@@ -1308,7 +1519,7 @@
           if (new Set(p.map(x => x.id)).size !== p.length) return void (err.textContent = 'Табаки в миксе не должны повторяться.');
           if (p.reduce((s, x) => s + x.pct, 0) !== 100) return void (err.textContent = 'Доли должны давать в сумме 100%.');
           db.mixes.push({ id: uid('m'), name, authorId: me().id, parts: p.sort((a, b) => b.pct - a.pct), likes: [], at: new Date().toISOString() });
-          save(); closeModal(); toast('Микс опубликован'); cat.tab = 'mixes'; render();
+          save(); closeModal(); toast('Микс опубликован'); tab.cat = 'mixes'; prefs.set('tab.cat', 'mixes'); render();
         });
       });
     },
@@ -1318,13 +1529,16 @@
       m.likes = m.likes.includes(u.id) ? m.likes.filter(x => x !== u.id) : [...m.likes, u.id];
       save(); render();
     },
-    catTab({ tab }) { cat.tab = tab; cat.q = ''; if (location.hash !== '#/catalog') go('catalog'); else render(); },
+    catTab({ tab: t }) { tab.cat = t; prefs.set('tab.cat', t); cat.q = ''; if (location.hash !== '#/catalog') go('catalog'); else { closeModal(); render(); } },
     catFilter(ds) {
       if ('strength' in ds) cat.strength = ds.strength;
       if ('tag' in ds) cat.tag = ds.tag;
       render();
     },
-    peopleTab({ tab }) { peopleTab = tab; render(); },
+    switchTab({ tabs, tab: t }) { switchTo(tabs, t); },
+    homeView({ view: v }) { prefs.set('homeView', v); render(); },
+    calNav({ step }) { cal.m += +step; if (cal.m < 0) { cal.m = 11; cal.y--; } if (cal.m > 11) { cal.m = 0; cal.y++; } cal.day = null; render(); },
+    calDay({ day }) { cal.day = cal.day === day ? null : day; render(); },
     toggleFriend({ id }) {
       const u = me(), p = userById(id); if (!u || !p) return;
       // В демо дружба взаимная сразу; на сервере здесь будет заявка в друзья.
@@ -1379,6 +1593,7 @@
       case 'register': pageAuth('register'); break;
       default: pageHome();
     }
+    inkAll();
   }
   function route() { closeModal(); render(); window.scrollTo(0, 0); checkReminders(); }
   window.addEventListener('hashchange', route);
