@@ -1,0 +1,30 @@
+# Проверки безопасности GitLab (SAST и поиск секретов) + публикация сайта на GitLab Pages.
+# SAST customization: https://docs.gitlab.com/user/application_security/sast/#available-cicd-variables
+# Secret Detection customization: https://docs.gitlab.com/user/application_security/secret_detection/pipeline/configure/
+stages:
+- test
+- secret-detection
+- deploy
+
+include:
+- template: Security/SAST.gitlab-ci.yml
+- template: Security/Secret-Detection.gitlab-ci.yml
+
+variables:
+  SECRET_DETECTION_ENABLED: 'true'
+
+secret_detection:
+  stage: secret-detection
+
+# Сайт статический: копируем файлы в public/, GitLab Pages раздаёт эту папку.
+pages:
+  stage: deploy
+  image: alpine:3.20
+  script:
+    - mkdir -p public
+    - cp index.html styles.css app.js public/
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
