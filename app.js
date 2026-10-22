@@ -595,21 +595,22 @@
     const lay = MAP.layers, g = (c, k) => `<g class="${c}">${(lay[k] || []).map(d => `<path d="${d}"/>`).join('')}</g>`;
     return `<div class="map ${cls}" id="${id}" data-map>
       <svg class="map-svg" viewBox="0 0 ${MAP.w} ${MAP.h}" role="img" aria-label="${L('Карта кальянных Бишкека', 'Map of Bishkek hookah lounges')}">
+        <defs>${['main', 'dim', 'sel'].map(k => `<linearGradient id="pg-${k}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="pg-${k}-a"/><stop offset="1" class="pg-${k}-b"/></linearGradient>`).join('')}</defs>
         <rect class="m-bg" x="-3000" y="-3000" width="${MAP.w + 6000}" height="${MAP.h + 6000}"/>
         ${g('m-park', 'park')}${g('m-water', 'water')}${g('m-tert', 'tertiary')}${g('m-sec', 'secondary')}${g('m-pri', 'primary')}
         <g class="m-labels">${MAP.labels.map(l => `<text data-x="${l.x}" data-y="${l.y}" data-a="${l.a}" text-anchor="middle">${esc(l.t)}</text>`).join('')}</g>
         <g class="m-pins">${VENUES.map(v => {
           const st = venueStatus(v);
           return `<g class="m-pin ${st.known ? (st.open ? 'is-open' : 'is-closed') : 'is-unknown'}" data-vid="${v.id}" data-x="${v.x}" data-y="${v.y}" tabindex="0" role="button" aria-label="${esc(venueName(v))}. ${esc(st.text)}">
-            <circle class="m-pin-hit" cy="-18" r="20"/>
-            <ellipse class="m-pin-shadow" rx="7" ry="2.6"/>
-            ${st.open ? '<circle class="m-pin-pulse" cy="-21" r="14"/>' : ''}
+            <circle class="m-pin-hit" cy="-24" r="22"/>
+            <ellipse class="m-pin-shadow" rx="8" ry="3"/>
+            ${st.open ? '<circle class="m-pin-pulse" cy="-27" r="17"/>' : ''}
             <g class="m-pin-shape">
-              <path class="m-pin-body" d="M0 0C-2-5.5-14-12.5-14-22a14 14 0 0 1 28 0C14-12.5 2-5.5 0 0z"/>
-              <circle class="m-pin-ring" cy="-22" r="8.2"/>
-              <circle class="m-pin-dot" cy="-22" r="4"/>
+              <path class="m-pin-body" d="M0 0C-2.5-6.5-17-15-17-27a17 17 0 0 1 34 0C17-15 2.5-6.5 0 0z"/>
+              <circle class="m-pin-ring" cy="-27" r="11.5"/>
+              <path class="m-pin-glyph" transform="translate(-8.64 -35.64) scale(.72)" d="M9 4h6l-1.2 3h-3.6zM12 7v6M9.5 9.5h5M12 13c-3.2 0-5 2.2-5 4.4C7 19.4 9 20.5 12 20.5s5-1.1 5-3.1c0-2.2-1.8-4.4-5-4.4zM14.5 11c3 0 5.5 1.4 6 4.5"/>
+              <circle class="m-pin-status" cx="12" cy="-39" r="4.8"/>
             </g>
-            <text class="m-pin-name" x="17" y="-17">${esc(venueName(v))}</text>
           </g>`;
         }).join('')}</g>
       </svg>
@@ -618,6 +619,10 @@
         <button type="button" data-mz="out" aria-label="${L('Отдалить', 'Zoom out')}">−</button>
         <button type="button" data-mz="fit" aria-label="${L('Показать все места', 'Show all places')}" title="${L('Показать все места', 'Show all places')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
       </div>
+      <div class="map-names" aria-hidden="true">${VENUES.map(v => {
+        const st = venueStatus(v);
+        return `<span class="map-name" data-vid="${v.id}"><i class="${st.known ? (st.open ? 'v-open' : 'v-closed') : ''}"></i>${esc(venueName(v))}</span>`;
+      }).join('')}</div>
       <div class="map-tip" hidden></div>
       <div class="map-card" hidden></div>
       <div class="map-hint" hidden>${L('Чтобы приблизить, зажмите Ctrl (⌘) и крутите колесо', 'Hold Ctrl (⌘) and scroll to zoom')}</div>
@@ -653,9 +658,10 @@
     const aspect = () => el.clientHeight / Math.max(el.clientWidth, 1);
     const unit = () => st.vb.w / Math.max(el.clientWidth, 1); // единиц карты на пиксель
     function clamp() {
-      const v = st.vb, a = aspect();
-      v.w = Math.max(60, Math.min(v.w, MAP.w * 1.4)); v.h = v.w * a;
-      const mx = MAP.w * .25, my = MAP.h * .25;
+      const v = st.vb, a = aspect(), cx = v.x + v.w / 2, cy = v.y + v.h / 2;
+      v.w = Math.max(60, Math.min(v.w, MAP.w * 2.2)); v.h = v.w * a;
+      v.x = cx - v.w / 2; v.y = cy - v.h / 2;
+      const mx = MAP.w * .6, my = MAP.h * .6;
       v.x = Math.max(-mx, Math.min(v.x, MAP.w + mx - v.w)); v.y = Math.max(-my, Math.min(v.y, MAP.h + my - v.h));
     }
     function apply() {
@@ -665,17 +671,42 @@
       pins.forEach(p => p.setAttribute('transform', `translate(${p.dataset.x} ${p.dataset.y}) scale(${s})`));
       labels.forEach(t => t.setAttribute('transform', `translate(${t.dataset.x} ${t.dataset.y}) rotate(${t.dataset.a}) scale(${s})`));
       el.classList.toggle('show-labels', s < 1.1);
-      el.classList.toggle('show-names', s < .55);
+      layoutNames();
       place();
     }
+    // Подписи у меток: справа или слева от точки, без наложений друг на друга и на метки.
+    const names = $$('.map-name', el);
+    function layoutNames() {
+      const W = el.clientWidth, H = el.clientHeight, taken = [];
+      const pts = VENUES.map(v => ({ v, p: toScreen(v.x, v.y) })).filter(o => o.p[0] > -20 && o.p[0] < W + 20 && o.p[1] > -10 && o.p[1] < H + 50);
+      pts.forEach(o => taken.push([o.p[0] - 17, o.p[1] - 46, 34, 46]));
+      const hit = r => taken.some(t => r[0] < t[0] + t[2] && r[0] + r[2] > t[0] && r[1] < t[1] + t[3] && r[1] + r[3] > t[1]);
+      const order = [...pts].sort((a, b) => (b.v.id === st.sel) - (a.v.id === st.sel) || (venueStatus(b.v).open ? 1 : 0) - (venueStatus(a.v).open ? 1 : 0));
+      const shown = new Set();
+      for (const o of order) {
+        const n = names.find(x => x.dataset.vid === o.v.id);
+        const nw = n.offsetWidth || 100, nh = n.offsetHeight || 24, [x, y] = o.p;
+        const cands = [[x + 20, y - 38], [x - 20 - nw, y - 38], [x - nw / 2, y + 6], [x - nw / 2, y - 76]];
+        const spot = cands.find(([cx, cy]) => cx > 4 && cy > 4 && cx + nw < W - 52 && cy + nh < H - 40 && !hit([cx - 3, cy - 3, nw + 6, nh + 6]));
+        if (spot && o.v.id !== st.sel) { n.style.transform = `translate(${spot[0]}px, ${spot[1]}px)`; taken.push([spot[0] - 3, spot[1] - 3, nw + 6, nh + 6]); shown.add(o.v.id); }
+      }
+      names.forEach(n => n.classList.toggle('on', shown.has(n.dataset.vid)));
+    }
+    el.addEventListener('click', e => { const n = e.target.closest('.map-name'); if (n) select(n.dataset.vid); });
     function fit() {
-      const padX = 70, w = Math.max(box.x1 - box.x0 + padX * 2, 280);
-      st.vb.w = Math.max(w, (box.y1 - box.y0 + padX * 2) / aspect());
-      st.vb.x = (box.x0 + box.x1) / 2 - st.vb.w / 2; st.vb.h = st.vb.w * aspect(); st.vb.y = (box.y0 + box.y1) / 2 - st.vb.h / 2 - 10 * unit();
+      // Сначала примерный масштаб, затем запас под высоту меток и подписи справа.
+      const a = aspect(), cw = Math.max(el.clientWidth, 1);
+      let w = Math.max(box.x1 - box.x0, (box.y1 - box.y0) / a, 200) * 1.25;
+      for (let i = 0; i < 2; i++) {
+        const u = w / cw, x0 = box.x0 - 40 * u, x1 = box.x1 + 150 * u, y0 = box.y0 - 70 * u, y1 = box.y1 + 46 * u;
+        w = Math.max(x1 - x0, (y1 - y0) / a);
+        st.vb.w = w; st.vb.h = w * a; st.vb.x = (x0 + x1) / 2 - w / 2; st.vb.y = (y0 + y1) / 2 - st.vb.h / 2;
+      }
       apply();
     }
     const toScreen = (x, y) => [(x - st.vb.x) / st.vb.w * el.clientWidth, (y - st.vb.y) / st.vb.h * el.clientHeight];
     function zoomAt(f, sx = el.clientWidth / 2, sy = el.clientHeight / 2) {
+      st.touched = true;
       const v = st.vb, mx = v.x + sx / el.clientWidth * v.w, my = v.y + sy / el.clientHeight * v.h;
       v.w /= f; v.h = v.w * aspect();
       v.x = mx - sx / el.clientWidth * v.w; v.y = my - sy / el.clientHeight * v.h;
@@ -733,7 +764,7 @@
       if (!drag) return;
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       moved = Math.max(moved, Math.hypot(dx, dy));
-      if (moved > 4) { el.classList.add('dragging'); tip.hidden = true; }
+      if (moved > 4) { el.classList.add('dragging'); tip.hidden = true; st.touched = true; }
       st.vb.x = drag.vx - dx * unit(); st.vb.y = drag.vy - dy * unit(); apply();
     });
     const up = e => {
@@ -757,7 +788,7 @@
     }, { passive: false });
     el.addEventListener('click', e => {
       const b = e.target.closest('[data-mz]');
-      if (b) { b.dataset.mz === 'fit' ? fit() : zoomAt(b.dataset.mz === 'in' ? 1.6 : 1 / 1.6); return; }
+      if (b) { if (b.dataset.mz === 'fit') { st.touched = false; fit(); } else zoomAt(b.dataset.mz === 'in' ? 1.6 : 1 / 1.6); return; }
       if (e.target.closest('[data-mclose]')) select(null);
     });
     el.addEventListener('keydown', e => {
@@ -774,7 +805,8 @@
       tip.style.left = Math.max(8, Math.min(x - tip.offsetWidth / 2, el.clientWidth - tip.offsetWidth - 8)) + 'px';
       tip.style.top = Math.max(8, y - 34 - tip.offsetHeight - 6) + 'px';
     }
-    const onResize = () => { st.vb.h = st.vb.w * aspect(); apply(); };
+    // Пока карту не двигали, при смене размера вписываем все места заново.
+    const onResize = () => { if (!st.touched) fit(); else { const cy = st.vb.y + st.vb.h / 2; st.vb.h = st.vb.w * aspect(); st.vb.y = cy - st.vb.h / 2; apply(); } };
     if (window.ResizeObserver) new ResizeObserver(onResize).observe(el); else window.addEventListener('resize', onResize);
     fit();
     maps[id] = { select, fit };

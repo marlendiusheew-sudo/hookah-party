@@ -56,6 +56,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
@@ -770,36 +771,50 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 .map.show-labels .m-labels text { opacity: .9; }
 .m-pin { cursor: pointer; outline: none; }
 .m-pin-hit { fill: transparent; }
-.m-pin-shadow { fill: rgba(0, 0, 0, .28); }
-.m-pin-shape { transform-box: fill-box; transform-origin: 50% 100%; transition: transform .25s cubic-bezier(.3, 1.6, .5, 1); }
-.m-pin-body {
-  fill: var(--accent); stroke: color-mix(in srgb, var(--accent) 55%, #1a0d10); stroke-width: 1.2;
-  filter: drop-shadow(0 4px 5px rgba(0, 0, 0, .28)); transition: fill .2s;
-}
-.m-pin-ring { fill: var(--surface); }
-.m-pin-dot { fill: var(--muted); transition: fill .2s; }
-.m-pin.is-open .m-pin-dot { fill: var(--ok); }
-.m-pin.is-closed .m-pin-dot { fill: var(--danger); }
-.m-pin.is-closed .m-pin-body { fill: color-mix(in srgb, var(--accent) 55%, var(--muted)); }
-.m-pin-pulse { fill: color-mix(in srgb, var(--accent) 35%, transparent); transform-box: fill-box; transform-origin: center; animation: pinPulse 2.4s ease-out infinite; }
-@keyframes pinPulse { 0% { transform: scale(.4); opacity: .9; } 100% { transform: scale(1.7); opacity: 0; } }
-.m-pin:hover .m-pin-shape, .m-pin:focus-visible .m-pin-shape { transform: translateY(-3px) scale(1.12); }
-.m-pin.sel .m-pin-shape { transform: translateY(-4px) scale(1.25); }
-.m-pin.sel .m-pin-body { fill: var(--ember); stroke: color-mix(in srgb, var(--ember) 55%, #1a0d10); }
+.m-pin-shadow { fill: rgba(20, 10, 12, .32); }
+.pg-main-a { stop-color: var(--accent-strong); }
+.pg-main-b { stop-color: color-mix(in srgb, var(--accent) 80%, #2a0f12); }
+.pg-dim-a { stop-color: color-mix(in srgb, var(--accent-strong) 55%, #9a8c90); }
+.pg-dim-b { stop-color: color-mix(in srgb, var(--accent) 50%, #5d5054); }
+.pg-sel-a { stop-color: color-mix(in srgb, var(--ember) 75%, #fff); }
+.pg-sel-b { stop-color: color-mix(in srgb, var(--ember) 85%, #2a0f12); }
+.m-pin-shape { transform-box: fill-box; transform-origin: 50% 100%; transition: transform .28s cubic-bezier(.3, 1.6, .5, 1); animation: pinDrop .5s cubic-bezier(.3, 1.5, .5, 1) backwards; }
+@keyframes pinDrop { from { transform: translateY(-18px) scale(.6); opacity: 0; } }
+.m-pin-body { fill: url(#pg-main); stroke: color-mix(in srgb, var(--accent) 40%, #1a0d10); stroke-width: 1; filter: drop-shadow(0 5px 6px rgba(0, 0, 0, .3)); }
+.m-pin-ring { fill: #fff; }
+.m-pin-glyph { fill: none; stroke: var(--accent); stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+.m-pin-status { fill: var(--muted); stroke: #fff; stroke-width: 2.2; }
+.m-pin.is-open .m-pin-status { fill: #2fa36b; }
+.m-pin.is-closed .m-pin-status { fill: #d9503f; }
+.m-pin-pulse { fill: color-mix(in srgb, #2fa36b 35%, transparent); transform-box: fill-box; transform-origin: center; animation: pinPulse 2.4s ease-out infinite; }
+@keyframes pinPulse { 0% { transform: scale(.5); opacity: .9; } 100% { transform: scale(1.8); opacity: 0; } }
+.m-pin:hover .m-pin-shape, .m-pin:focus-visible .m-pin-shape { transform: translateY(-4px) scale(1.12); }
+.m-pin.sel .m-pin-shape { transform: translateY(-5px) scale(1.22); }
+.m-pin.is-closed .m-pin-body, .m-pin.is-unknown .m-pin-body { fill: url(#pg-dim); }
+.m-pin.sel .m-pin-body { fill: url(#pg-sel); }
+.m-pin.sel .m-pin-glyph { stroke: var(--ember); }
 .m-pin:focus-visible .m-pin-ring { stroke: var(--fg); stroke-width: 2; }
-.m-pin-name {
-  font: 600 12px var(--f-body); fill: var(--fg); paint-order: stroke; stroke: var(--map-bg); stroke-width: 4px; stroke-linejoin: round;
-  opacity: 0; transition: opacity .2s; pointer-events: none;
+.map-names { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.map-name {
+  position: absolute; left: 0; top: 0; display: inline-flex; align-items: center; gap: 6px; max-width: 190px;
+  padding: 4px 10px 4px 8px; border-radius: 999px; background: var(--surface); color: var(--fg); border: 1px solid var(--line);
+  font: 600 12px/1.25 var(--f-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .12); opacity: 0; transition: opacity .2s; cursor: pointer;
 }
-.map.show-names .m-pin-name, .m-pin.sel .m-pin-name, .m-pin:hover .m-pin-name { opacity: 1; }
+.map-name.on { opacity: 1; pointer-events: auto; }
+.map-name:hover { border-color: var(--accent); color: var(--accent); }
+.map-name i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.map-name i.v-open { background: #2fa36b; }
+.map-name i.v-closed { background: #d9503f; }
+.map.dragging .map-name { transition: none; }
 .map-legend {
   position: absolute; left: 10px; bottom: 10px; z-index: 2; display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted);
   background: color-mix(in srgb, var(--surface) 88%, transparent); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px;
 }
 .map-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .map-legend i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-.map-legend .lg-open { background: var(--ok); }
-.map-legend .lg-closed { background: var(--danger); }
+.map-legend .lg-open { background: #2fa36b; }
+.map-legend .lg-closed { background: #d9503f; }
 @media (prefers-reduced-motion: reduce) { .m-pin-pulse { display: none; } }
 .map-ctl { position: absolute; right: 12px; top: 12px; display: grid; gap: 6px; z-index: 2; }
 .map-ctl button {
@@ -937,7 +952,7 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 .quote-mark { position: absolute; right: 14px; top: -10px; font: 700 90px/1 var(--f-display); color: color-mix(in srgb, var(--accent) 22%, transparent); pointer-events: none; }
 .quote blockquote { margin: 0; font-size: 15px; line-height: 1.55; position: relative; }
 .quote figcaption { display: flex; align-items: center; gap: 10px; }
-.quote figcaption span { display: grid; gap: 2px; min-width: 0; }
+.quote figcaption > span { display: grid; gap: 2px; min-width: 0; }
 .quote figcaption small { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .quote .stars { font-size: 11px; }
 
