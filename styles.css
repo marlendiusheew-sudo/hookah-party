@@ -1203,3 +1203,15 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 @media (prefers-reduced-motion: reduce) {
   .amb { animation: none; translate: none; }
 }
+
+/* ---------- Иллюстрации вкусов ---------- */
+.pack { isolation: isolate; }
+.pack-art { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
+.pack::after { z-index: 0; background: linear-gradient(180deg, transparent 45%, rgba(10, 5, 8, .55)); }
+.t-card .pack-art { transition: transform .5s cubic-bezier(.2, .8, .2, 1); }
+.t-card:hover .pack-art { transform: scale(1.05); }
+.flavor-thumb { width: 34px; height: 34px; border-radius: 10px; overflow: hidden; flex: none; display: inline-block; vertical-align: middle; margin-right: 10px; box-shadow: 0 2px 6px rgba(0, 0, 0, .15); }
+.flavor-thumb svg { display: block; width: 100%; height: 100%; }
+.rank-name .flavor-thumb { width: 28px; height: 28px; border-radius: 8px; vertical-align: -9px; }
+.pick-item .flavor-thumb { margin-right: 0; }
+.pick-item .flavor-thumb { flex: none; width: 40px; height: 40px; }

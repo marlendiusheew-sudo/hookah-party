@@ -146,23 +146,23 @@
   const tagName = t => L(t, TAGS[t] || t);
   const CATALOG = {
     tobaccos: [
-      { id: 'ds-supernova', brand: 'Darkside', flavor: 'Supernova', note: ['Ледяной холодок', 'Icy cooling'], strength: 7, tags: ['холодок'], color: '#4fa9cf' },
-      { id: 'ds-bananapapa', brand: 'Darkside', flavor: 'Bananapapa', note: ['Спелый банан', 'Ripe banana'], strength: 7, tags: ['фрукты'], color: '#d8a92a' },
-      { id: 'ds-fallingstar', brand: 'Darkside', flavor: 'Falling Star', note: ['Манго и маракуйя', 'Mango and passion fruit'], strength: 7, tags: ['тропики', 'фрукты'], color: '#e8892c' },
-      { id: 'mh-pinkman', brand: 'MustHave', flavor: 'Pinkman', note: ['Грейпфрут и малина', 'Grapefruit and raspberry'], strength: 6, tags: ['ягоды', 'цитрус'], color: '#d84a74' },
-      { id: 'mh-raspberry', brand: 'MustHave', flavor: 'Raspberry', note: ['Малина', 'Raspberry'], strength: 6, tags: ['ягоды'], color: '#b52a52' },
-      { id: 'bb-cherry', brand: 'Black Burn', flavor: 'Cherry Shock', note: ['Кислая вишня', 'Sour cherry'], strength: 8, tags: ['ягоды', 'кислое'], color: '#8a1d30' },
-      { id: 'el-grapefruit', brand: 'Element', flavor: 'Water · Grapefruit', note: ['Свежий грейпфрут', 'Fresh grapefruit'], strength: 5, tags: ['цитрус'], color: '#e4694b' },
-      { id: 'tg-canemint', brand: 'Tangiers', flavor: 'Cane Mint', note: ['Сладкая мята', 'Sweet mint'], strength: 9, tags: ['мята'], color: '#2f8f68' },
-      { id: 'af-twoapples', brand: 'Al Fakher', flavor: 'Two Apples', note: ['Двойное яблоко с анисом', 'Double apple with anise'], strength: 3, tags: ['классика', 'фрукты'], color: '#78a832' },
-      { id: 'af-mint', brand: 'Al Fakher', flavor: 'Mint', note: ['Мята', 'Mint'], strength: 3, tags: ['мята', 'классика'], color: '#3ea87b' },
-      { id: 'ad-love66', brand: 'Adalya', flavor: 'Love 66', note: ['Арбуз, дыня, маракуйя и мята', 'Watermelon, melon, passion fruit and mint'], strength: 4, tags: ['микс', 'фрукты'], color: '#c43e62' },
-      { id: 'fu-gummi', brand: 'Fumari', flavor: 'White Gummi Bear', note: ['Мармеладные мишки', 'Gummy bears'], strength: 4, tags: ['сладкое'], color: '#9d82cf' },
-      { id: 'sb-bluemist', brand: 'Starbuzz', flavor: 'Blue Mist', note: ['Черника с мятой', 'Blueberry with mint'], strength: 4, tags: ['ягоды', 'мята'], color: '#4560c4' },
-      { id: 'se-watermelon', brand: 'Sebero', flavor: 'Watermelon', note: ['Сочный арбуз', 'Juicy watermelon'], strength: 6, tags: ['фрукты'], color: '#d63c4f' },
-      { id: 'du-pear', brand: 'Duft', flavor: 'Pear', note: ['Спелая груша', 'Ripe pear'], strength: 5, tags: ['фрукты'], color: '#9fae38' },
-      { id: 'od-cola', brand: 'Overdose', flavor: 'Cola', note: ['Кола', 'Cola'], strength: 7, tags: ['напитки'], color: '#6b3420' },
-      { id: 'ch-icemint', brand: 'Chabacco', flavor: 'Ice Mint', note: ['Бестабачная смесь: мята со льдом', 'Tobacco-free blend: iced mint'], strength: 1, tags: ['бестабачное', 'мята'], color: '#4bb8b0' }
+      { id: 'ds-supernova', brand: 'Darkside', flavor: 'Supernova', note: ['Ледяной холодок', 'Icy cooling'], strength: 7, tags: ['холодок'], color: '#4fa9cf', art: ['ice'] },
+      { id: 'ds-bananapapa', brand: 'Darkside', flavor: 'Bananapapa', note: ['Спелый банан', 'Ripe banana'], strength: 7, tags: ['фрукты'], color: '#d8a92a', art: ['banana'] },
+      { id: 'ds-fallingstar', brand: 'Darkside', flavor: 'Falling Star', note: ['Манго и маракуйя', 'Mango and passion fruit'], strength: 7, tags: ['тропики', 'фрукты'], color: '#e8892c', art: ['mango', 'passion'] },
+      { id: 'mh-pinkman', brand: 'MustHave', flavor: 'Pinkman', note: ['Грейпфрут и малина', 'Grapefruit and raspberry'], strength: 6, tags: ['ягоды', 'цитрус'], color: '#d84a74', art: ['citrus', 'raspberry'] },
+      { id: 'mh-raspberry', brand: 'MustHave', flavor: 'Raspberry', note: ['Малина', 'Raspberry'], strength: 6, tags: ['ягоды'], color: '#b52a52', art: ['raspberry'] },
+      { id: 'bb-cherry', brand: 'Black Burn', flavor: 'Cherry Shock', note: ['Кислая вишня', 'Sour cherry'], strength: 8, tags: ['ягоды', 'кислое'], color: '#8a1d30', art: ['cherry'] },
+      { id: 'el-grapefruit', brand: 'Element', flavor: 'Water · Grapefruit', note: ['Свежий грейпфрут', 'Fresh grapefruit'], strength: 5, tags: ['цитрус'], color: '#e4694b', art: ['citrus'] },
+      { id: 'tg-canemint', brand: 'Tangiers', flavor: 'Cane Mint', note: ['Сладкая мята', 'Sweet mint'], strength: 9, tags: ['мята'], color: '#2f8f68', art: ['mint'] },
+      { id: 'af-twoapples', brand: 'Al Fakher', flavor: 'Two Apples', note: ['Двойное яблоко с анисом', 'Double apple with anise'], strength: 3, tags: ['классика', 'фрукты'], color: '#78a832', art: ['apple', 'apple:green'] },
+      { id: 'af-mint', brand: 'Al Fakher', flavor: 'Mint', note: ['Мята', 'Mint'], strength: 3, tags: ['мята', 'классика'], color: '#3ea87b', art: ['mint:2'] },
+      { id: 'ad-love66', brand: 'Adalya', flavor: 'Love 66', note: ['Арбуз, дыня, маракуйя и мята', 'Watermelon, melon, passion fruit and mint'], strength: 4, tags: ['микс', 'фрукты'], color: '#c43e62', art: ['watermelon', 'mint:2'] },
+      { id: 'fu-gummi', brand: 'Fumari', flavor: 'White Gummi Bear', note: ['Мармеладные мишки', 'Gummy bears'], strength: 4, tags: ['сладкое'], color: '#9d82cf', art: ['gummy', 'gummy:pink'] },
+      { id: 'sb-bluemist', brand: 'Starbuzz', flavor: 'Blue Mist', note: ['Черника с мятой', 'Blueberry with mint'], strength: 4, tags: ['ягоды', 'мята'], color: '#4560c4', art: ['blueberry', 'mint:2'] },
+      { id: 'se-watermelon', brand: 'Sebero', flavor: 'Watermelon', note: ['Сочный арбуз', 'Juicy watermelon'], strength: 6, tags: ['фрукты'], color: '#d63c4f', art: ['watermelon'] },
+      { id: 'du-pear', brand: 'Duft', flavor: 'Pear', note: ['Спелая груша', 'Ripe pear'], strength: 5, tags: ['фрукты'], color: '#9fae38', art: ['pear'] },
+      { id: 'od-cola', brand: 'Overdose', flavor: 'Cola', note: ['Кола', 'Cola'], strength: 7, tags: ['напитки'], color: '#6b3420', art: ['cola'] },
+      { id: 'ch-icemint', brand: 'Chabacco', flavor: 'Ice Mint', note: ['Бестабачная смесь: мята со льдом', 'Tobacco-free blend: iced mint'], strength: 1, tags: ['бестабачное', 'мята'], color: '#4bb8b0', art: ['mint', 'ice'] }
     ],
     bowls: [
       { id: 'b-phunnel', name: 'Oblako Phunnel M', type: 'phunnel', note: ['Табак не проваливается в шахту, жар держится ровно', 'Tobacco stays out of the stem, heat stays even'] },
@@ -375,9 +375,11 @@
   function packArt(t, size = '') {
     if (t.img) return `<img class="pack ${size}" src="${esc(t.img)}" alt="${esc(t.brand + ' ' + t.flavor)}">`;
     return `<div class="pack ${size}" style="--pc:${t.color}" aria-hidden="true">
-      <span class="pack-smoke">${ICON.smoke}</span>
+      ${window.HP_ART ? HP_ART.flavor(t) : `<span class="pack-smoke">${ICON.smoke}</span>`}
       <span class="pack-brand">${esc(t.brand)}</span><span class="pack-flavor">${esc(t.flavor)}</span></div>`;
   }
+  // Миниатюра вкуса для списков: тот же рисунок, крупным планом.
+  const flavorThumb = t => window.HP_ART && t ? `<span class="flavor-thumb" aria-hidden="true">${HP_ART.flavor(t, { thumb: true })}</span>` : `<span class="swatch" style="--pc:${t?.color}"></span>`;
   function bowlArt(type) {
     const shapes = {
       phunnel: '<path d="M14 26h36l-6 16H20z"/><path d="M28 26v-6h8v6" class="a2"/><rect x="29" y="42" width="6" height="10"/>',
@@ -1321,7 +1323,7 @@
         const n = r.users.length;
         const lead = i === 0 && (rank.length === 1 || rank[1].users.length < n);
         let name, sub, art = '';
-        if (kind === 't') { const t = tobacco(r.id); art = `<span class="swatch" style="--pc:${t?.color}"></span>`; name = `<b>${esc(t?.brand)}</b> ${esc(t?.flavor)}`; sub = `${esc(tr(t?.note))} · ${L('крепость', 'strength')} ${t?.strength}/10`; }
+        if (kind === 't') { const t = tobacco(r.id); art = flavorThumb(t); name = `<b>${esc(t?.brand)}</b> ${esc(t?.flavor)}`; sub = `${esc(tr(t?.note))} · ${L('крепость', 'strength')} ${t?.strength}/10`; }
         else { const bw = bowl(r.id); name = `<b>${esc(tr(bw?.name))}</b><small>${tr(BOWL_TYPE[bw?.type] || ['', ''])}</small>`; sub = esc(tr(bw?.note)); }
         return `<li class="rank-row ${lead ? 'is-top' : ''}">
           <div class="rank-pos">${i + 1}</div>
@@ -2051,7 +2053,7 @@
         <p class="muted">${L(`Отметьте до ${MAX} вкусов. Избранные стоят первыми.`, `Mark up to ${MAX} flavours. Favourites come first.`)}</p>
         <input class="input" id="pk-q" type="search" placeholder="${L('Поиск по бренду или вкусу', 'Search by brand or flavour')}" aria-label="${L('Поиск табака', 'Search tobacco')}">
         <div class="pick-list" id="pk-list">${list.map(t => `<label class="pick-item" data-s="${esc((t.brand + ' ' + t.flavor + ' ' + t.note.join(' ')).toLowerCase())}">
-          <input type="checkbox" value="${t.id}" ${cur.has(t.id) ? 'checked' : ''}><span class="swatch" style="--pc:${t.color}"></span><span><b>${esc(t.brand)}</b> ${esc(t.flavor)}${u.favs.includes(t.id) ? ` <em class="tag-friend">${L('избранное', 'favourite')}</em>` : ''}<small>${esc(tr(t.note))}</small></span><em>${t.strength}/10</em></label>`).join('')}</div>
+          <input type="checkbox" value="${t.id}" ${cur.has(t.id) ? 'checked' : ''}>${flavorThumb(t)}<span><b>${esc(t.brand)}</b> ${esc(t.flavor)}${u.favs.includes(t.id) ? ` <em class="tag-friend">${L('избранное', 'favourite')}</em>` : ''}<small>${esc(tr(t.note))}</small></span><em>${t.strength}/10</em></label>`).join('')}</div>
         <div class="modal-foot"><span class="muted" id="pk-count" style="margin-right:auto;align-self:center"></span>
           <button class="btn btn-ghost" type="button" data-action="closeModal">${L('Отмена', 'Cancel')}</button><button class="btn btn-primary" type="button" id="pk-save">${L('Сохранить', 'Save')}</button></div>`, m => {
         const boxes = $$('input[type=checkbox]', m);
