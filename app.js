@@ -600,8 +600,17 @@
         <g class="m-labels">${MAP.labels.map(l => `<text data-x="${l.x}" data-y="${l.y}" data-a="${l.a}" text-anchor="middle">${esc(l.t)}</text>`).join('')}</g>
         <g class="m-pins">${VENUES.map(v => {
           const st = venueStatus(v);
-          return `<g class="m-pin ${st.known ? (st.open ? 'is-open' : 'is-closed') : ''}" data-vid="${v.id}" data-x="${v.x}" data-y="${v.y}" tabindex="0" role="button" aria-label="${esc(venueName(v))}. ${esc(st.text)}">
-            <circle class="m-pin-hit" cy="-14" r="18"/><path class="m-pin-body" d="M0 0C-7-8-11-12-11-18a11 11 0 0 1 22 0C11-12 7-8 0 0z"/><circle class="m-pin-dot" cy="-18" r="4.2"/></g>`;
+          return `<g class="m-pin ${st.known ? (st.open ? 'is-open' : 'is-closed') : 'is-unknown'}" data-vid="${v.id}" data-x="${v.x}" data-y="${v.y}" tabindex="0" role="button" aria-label="${esc(venueName(v))}. ${esc(st.text)}">
+            <circle class="m-pin-hit" cy="-18" r="20"/>
+            <ellipse class="m-pin-shadow" rx="7" ry="2.6"/>
+            ${st.open ? '<circle class="m-pin-pulse" cy="-21" r="14"/>' : ''}
+            <g class="m-pin-shape">
+              <path class="m-pin-body" d="M0 0C-2-5.5-14-12.5-14-22a14 14 0 0 1 28 0C14-12.5 2-5.5 0 0z"/>
+              <circle class="m-pin-ring" cy="-22" r="8.2"/>
+              <circle class="m-pin-dot" cy="-22" r="4"/>
+            </g>
+            <text class="m-pin-name" x="17" y="-17">${esc(venueName(v))}</text>
+          </g>`;
         }).join('')}</g>
       </svg>
       <div class="map-ctl">
@@ -612,6 +621,7 @@
       <div class="map-tip" hidden></div>
       <div class="map-card" hidden></div>
       <div class="map-hint" hidden>${L('Чтобы приблизить, зажмите Ctrl (⌘) и крутите колесо', 'Hold Ctrl (⌘) and scroll to zoom')}</div>
+      <div class="map-legend" aria-hidden="true"><span><i class="lg-open"></i>${L('Открыто', 'Open')}</span><span><i class="lg-closed"></i>${L('Закрыто', 'Closed')}</span><span><i class="lg-unknown"></i>${L('Часы не указаны', 'Hours unknown')}</span></div>
       <a class="map-attr" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>
     </div>`;
   }
@@ -655,6 +665,7 @@
       pins.forEach(p => p.setAttribute('transform', `translate(${p.dataset.x} ${p.dataset.y}) scale(${s})`));
       labels.forEach(t => t.setAttribute('transform', `translate(${t.dataset.x} ${t.dataset.y}) rotate(${t.dataset.a}) scale(${s})`));
       el.classList.toggle('show-labels', s < 1.1);
+      el.classList.toggle('show-names', s < .55);
       place();
     }
     function fit() {
@@ -798,6 +809,99 @@
     </nav>`;
   }
 
+  // Нижняя часть главной: цифры, куда пойти, бренды, табак недели, шаги, отзывы, вопросы.
+  function homeExtras(u) {
+    const openNow = VENUES.filter(v => venueStatus(v).open);
+    const ranked = [...VENUES].sort((a, b) => {
+      const sa = venueStatus(a), sb = venueStatus(b);
+      return (sb.open ? 2 : sb.known ? 1 : 0) - (sa.open ? 2 : sa.known ? 1 : 0) || venueName(a).localeCompare(venueName(b));
+    });
+    const top = [...CATALOG.tobaccos].sort((a, b) => ratingOf(b.id).avg - ratingOf(a.id).avg || ratingOf(b.id).n - ratingOf(a.id).n)[0];
+    const topR = ratingOf(top.id), topQuote = reviewsFor(top.id).find(r => r.text);
+    const mixes = [...db.mixes].sort((a, b) => b.likes.length - a.likes.length).slice(0, 3);
+    const quotes = [...db.reviews].filter(r => r.text && r.rating >= 4).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 3);
+    const brands = [...new Set(CATALOG.tobaccos.map(t => t.brand))];
+    const stat = (n, label) => `<div class="stat-big"><b>${n}</b><span>${label}</span></div>`;
+    const faq = [
+      [['Это платно?', 'Is it free?'], ['Нет. Создавать сборы, приглашать друзей и пользоваться картой можно бесплатно.', 'Yes. Creating events, inviting friends and using the map are free.']],
+      [['Нужно ли скачивать приложение?', 'Do I need to install an app?'], ['Нет, сайт работает в браузере телефона. Мобильное приложение сейчас в разработке.', 'No, the site works in your phone’s browser. A mobile app is in development.']],
+      [['Как позвать друга, которого нет в сервисе?', 'How do I invite a friend who is not on the service?'], ['Введите его номер в поле приглашения. Сбор появится у него сразу после регистрации с этим номером.', 'Enter their number in the invite field. The event appears for them as soon as they sign up with that number.']],
+      [['Откуда данные о заведениях?', 'Where does the venue data come from?'], ['Из OpenStreetMap, открытой карты, которую заполняют сами пользователи. Часы работы могут устареть, поэтому перед походом проверьте их в 2ГИС или Google Картах.', 'From OpenStreetMap, an open map filled in by its users. Opening hours may be out of date, so check them in 2GIS or Google Maps before you go.']],
+      [['Есть ли что-то без никотина?', 'Is there anything nicotine-free?'], ['Да, в каталоге есть бестабачные смеси. Включите фильтр «бестабачное».', 'Yes, the catalogue has tobacco-free blends. Use the “tobacco-free” filter.']],
+      [['Кто видит мой номер телефона?', 'Who can see my phone number?'], ['Полностью — только друзья и участники общих сборов. Остальные видят последние три цифры.', 'Only friends and people from shared events see it in full. Everyone else sees the last three digits.']]
+    ];
+    return `
+      <section class="stats-band" aria-label="${L('Hookah Party в цифрах', 'Hookah Party in numbers')}">
+        ${stat(VENUES.length, L('заведений на карте', 'venues on the map'))}
+        ${stat(openNow.length, L('открыто прямо сейчас', 'open right now'))}
+        ${stat(CATALOG.tobaccos.length, L('табаков в каталоге', 'tobaccos in the catalogue'))}
+        ${stat(db.mixes.length, L('миксов от сообщества', 'community mixes'))}
+      </section>
+
+      <section class="section">
+        <div class="section-head"><div><h2>${L('Куда пойти сегодня', 'Where to go tonight')}</h2><p class="muted">${L('Сначала открытые, затем остальные', 'Open places first, then the rest')}</p></div>
+          <div class="scroller-ctl"><button class="icon-btn" type="button" data-scroll="-1" aria-label="${L('Назад', 'Back')}">‹</button><button class="icon-btn" type="button" data-scroll="1" aria-label="${L('Вперёд', 'Forward')}">›</button></div></div>
+        <div class="scroller" id="venue-scroller">${ranked.map(v => {
+          const st = venueStatus(v);
+          return `<button type="button" class="vcard" data-action="showVenue" data-vid="${v.id}">
+            <span class="vcard-top"><span class="vcard-ic">${ICON.pin}</span><span class="pill ${st.known ? (st.open ? 'pill-going' : 'pill-declined') : 'pill-pending'}">${st.known ? (st.open ? L('Открыто', 'Open') : L('Закрыто', 'Closed')) : L('Нет часов', 'No hours')}</span></span>
+            <b>${esc(venueName(v))}</b>
+            <small>${tr(VTYPE[v.type] || VTYPE.bar)}</small>
+            <small class="vcard-addr">${v.addr ? esc(v.addr) : L('Адрес не указан', 'Address not listed')}</small>
+            <small class="vcard-hours">${esc(st.hours || st.text)}</small>
+          </button>`;
+        }).join('')}</div>
+      </section>
+
+      <section class="marquee" aria-label="${L('Бренды в каталоге', 'Brands in the catalogue')}"><div class="marquee-track">
+        ${[...brands, ...brands].map((b, i) => `<span ${i >= brands.length ? 'aria-hidden="true"' : ''}>${esc(b)}</span>`).join('')}
+      </div></section>
+
+      <section class="duo">
+        <article class="spot">
+          <span class="eyebrow">${L('Табак недели', 'Tobacco of the week')}</span>
+          <div class="spot-body">${packArt(top, 'lg')}
+            <div class="spot-text"><h2>${esc(top.brand)} ${esc(top.flavor)}</h2><p class="muted">${esc(tr(top.note))}</p>
+              <div class="rating-line">${stars(topR.avg, 'lg')}<small>${topR.avg.toFixed(1)} · ${topR.n} ${pl(topR.n, ['отзыв', 'отзыва', 'отзывов'], ['review', 'reviews'])}</small></div>
+              ${topQuote ? `<blockquote>«${esc(topQuote.text)}»<cite>${esc(userById(topQuote.userId)?.name || '')}</cite></blockquote>` : ''}
+              <div><button class="btn btn-sm" type="button" data-action="tobacco" data-id="${top.id}">${L('Подробнее и отзывы', 'Details and reviews')}</button></div></div></div>
+        </article>
+        <article class="spot">
+          <div class="section-head"><span class="eyebrow">${L('Популярные миксы', 'Popular mixes')}</span><a class="link-btn" href="#/catalog" data-action="catTab" data-tab="mixes">${L('Все миксы', 'All mixes')} →</a></div>
+          <ul class="mix-list">${mixes.map((m, i) => `<li>
+            <span class="mix-rank mono">${i + 1}</span>
+            <div><b>${esc(m.name)}</b><div class="mix-bar">${m.parts.map(p => `<span style="flex:${p.pct};--pc:${tobacco(p.id)?.color || 'gray'}"></span>`).join('')}</div>
+              <small class="muted">${m.parts.map(p => `${esc(tobacco(p.id)?.flavor || '')} ${p.pct}%`).join(' · ')}</small></div>
+            <span class="mix-likes">${ICON.heart}${m.likes.length}</span></li>`).join('')}</ul>
+        </article>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><h2>${L('Как это работает', 'How it works')}</h2></div>
+        ${stepsHtml()}
+      </section>
+
+      ${quotes.length ? `<section class="section">
+        <div class="section-head"><h2>${L('Что говорят о табаках', 'What people say about tobacco')}</h2><a class="link-btn" href="#/catalog">${L('Каталог', 'Catalogue')} →</a></div>
+        <div class="quotes">${quotes.map(r => {
+          const p = userById(r.userId), t = tobacco(r.tobaccoId);
+          return `<figure class="quote"><span class="quote-mark" aria-hidden="true">“</span><blockquote>${esc(r.text)}</blockquote>
+            <figcaption>${avatar(p, 'sm')}<span><b>${esc(p?.name || '—')}</b><small>${esc(t.brand)} ${esc(t.flavor)} · ${stars(r.rating)}</small></span></figcaption></figure>`;
+        }).join('')}</div>
+      </section>` : ''}
+
+      <section class="faq-wrap">
+        <div><span class="eyebrow">FAQ</span><h2>${L('Частые вопросы', 'Frequently asked questions')}</h2>
+          <p class="muted">${L('Не нашли ответ? Напишите нам в Telegram', 'Didn’t find an answer? Message us on Telegram')} <span class="mono">@hookahparty</span>.</p></div>
+        <div class="faq">${faq.map(([q, a]) => `<details><summary>${tr(q)}<span class="faq-ic" aria-hidden="true"></span></summary><p>${tr(a)}</p></details>`).join('')}</div>
+      </section>
+
+      <section class="cta-band"><div><h2>${u ? L('Пятница уже скоро', 'Friday is coming') : L('Готовы к первому сбору?', 'Ready for your first meet-up?')}</h2>
+        <p>${u ? L('Выберите место на карте и позовите друзей за минуту.', 'Pick a place on the map and invite friends in a minute.') : L('Регистрация занимает минуту: имя, номер и код из SMS.', 'Signing up takes a minute: name, number and an SMS code.')}</p></div>
+        ${u ? `<button class="btn btn-primary" type="button" data-action="newEvent">${ICON.plus}${L('Создать сбор', 'Create event')}</button>` : `<a class="btn btn-primary" href="#/register">${L('Создать аккаунт', 'Create account')}</a>`}
+      </section>`;
+  }
+
   function pageHome() {
     const u = me();
     const next = u && db.events.filter(e => !isPast(e) && goingIds(e).includes(u.id)).sort((a, b) => new Date(a.at) - new Date(b.at))[0];
@@ -830,8 +934,11 @@
           <a class="btn btn-sm" href="#/venues">${ICON.list}${L('Все заведения списком', 'All venues as a list')}</a></div>
         ${mapHtml('home-map')}
         <p class="map-note">${L('Данные о заведениях взяты из OpenStreetMap и могут устареть. Перед походом проверьте часы работы в 2ГИС или Google Картах.', 'Venue data comes from OpenStreetMap and may be out of date. Check opening hours in 2GIS or Google Maps before you go.')}</p>
-      </section>`;
+      </section>
+      ${homeExtras(u)}`;
     initMap('home-map');
+    const sc = $('#venue-scroller');
+    $$('[data-scroll]').forEach(b => b.addEventListener('click', () => sc.scrollBy({ left: +b.dataset.scroll * sc.clientWidth * .8, behavior: 'smooth' })));
   }
 
   function pageVenues() {
@@ -1966,6 +2073,13 @@
     inkAll();
   }
   function route() { closeModal(); render(); window.scrollTo(0, 0); checkReminders(); }
+  // Кнопка «Наверх» появляется после прокрутки.
+  const toTop = document.createElement('button');
+  toTop.className = 'to-top'; toTop.type = 'button'; toTop.hidden = true;
+  toTop.innerHTML = svg('<path d="M12 19V5M5 12l7-7 7 7"/>');
+  toTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  document.body.append(toTop);
+  window.addEventListener('scroll', () => { toTop.hidden = window.scrollY < 700; toTop.setAttribute('aria-label', L('Наверх', 'Back to top')); }, { passive: true });
   window.addEventListener('hashchange', route);
   route();
 })();
