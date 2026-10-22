@@ -1,7 +1,8 @@
 /* Hookah Party — клиентский шаблон.
    Все данные хранятся в localStorage (демо). При переходе на приложение
    функции load/save заменяются запросами к серверу, а отправка SMS — реальным
-   провайдером (Firebase Phone Auth, Twilio, SMS.ru и т.п.). */
+   провайдером (Firebase Phone Auth, Twilio, Nikita SMS и т.п.).
+   Тексты интерфейса на двух языках: L('русский', 'English'). */
 (() => {
   'use strict';
 
@@ -17,8 +18,17 @@
   const pad = n => String(n).padStart(2, '0');
   const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const money = n => new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
 
+  // Настройки вида и языка живут только в этом браузере.
+  const prefs = {
+    get(k, d) { try { return localStorage.getItem('hp.' + k) ?? d; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('hp.' + k, v); } catch (e) { /* хранилище недоступно */ } }
+  };
+
+  // ---------- Язык ----------
+  let lang = prefs.get('lang', 'ru') === 'en' ? 'en' : 'ru';
+  const L = (ru, en) => lang === 'en' ? en : ru;
+  const locale = () => lang === 'en' ? 'en-GB' : 'ru-RU';
   function plural(n, one, few, many) {
     const a = Math.abs(n) % 100, b = a % 10;
     if (a > 10 && a < 20) return many;
@@ -26,25 +36,47 @@
     if (b === 1) return one;
     return many;
   }
+  // pl(3, ['сбор', 'сбора', 'сборов'], ['event', 'events'])
+  const pl = (n, ru, en) => lang === 'en' ? (n === 1 ? en[0] : en[1]) : plural(n, ...ru);
+  const DF = {};
+  const df = (key, opts) => (DF[lang + key] ||= new Intl.DateTimeFormat(locale(), opts));
+  const fDay = d => df('d', { day: 'numeric' }).format(d);
+  const fMon = d => df('m', { month: 'short' }).format(d).replace('.', '');
+  const fFull = d => df('f', { weekday: 'long', day: 'numeric', month: 'long' }).format(d);
+  const fShort = d => df('s', { day: 'numeric', month: 'long' }).format(d);
+  const fTime = d => df('t', { hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+  const fMonthYear = d => { const s = df('my', { month: 'long', year: 'numeric' }).format(d).replace(' г.', ''); return s[0].toUpperCase() + s.slice(1); };
+  const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+  const money = n => new Intl.NumberFormat(locale()).format(Math.round(n)) + L(' сом', ' KGS');
+
+  // ---------- Телефоны: Кыргызстан (+996) и Россия/Казахстан (+7) ----------
   function normPhone(s) {
     let d = digits(s);
-    if (d.length === 11 && d[0] === '8') d = '7' + d.slice(1);
-    if (d.length === 10) d = '7' + d;
+    if (d.length === 10 && d[0] === '0') d = '996' + d.slice(1);
+    else if (d.length === 9) d = '996' + d;
+    else if (d.length === 11 && d[0] === '8') d = '7' + d.slice(1);
     return d;
   }
   const validPhone = d => d.length >= 11 && d.length <= 15;
   function fmtPhone(s) {
     const d = normPhone(s);
+    if (d.length === 12 && d.startsWith('996')) return `+996 ${d.slice(3, 6)} ${d.slice(6, 9)} ${d.slice(9)}`;
     if (d.length === 11 && d[0] === '7') return `+7 (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7, 9)}-${d.slice(9)}`;
     return '+' + d;
   }
   // Номер целиком видят только друзья и участники общих сборов.
-  const maskedPhone = s => { const f = fmtPhone(s); return f.slice(0, -9) + '•••-••-' + f.slice(-2); };
+  const maskedPhone = s => { const d = normPhone(s); return `+${d.startsWith('996') ? '996' : d[0]} ••• ••• ${d.slice(-3)}`; };
   function maskPhone(el) {
     el.addEventListener('input', () => {
       let d = digits(el.value);
       if (!d) { el.value = ''; return; }
-      if (d[0] === '8') d = '7' + d.slice(1);
+      if (d[0] === '0') d = '996' + d.slice(1);
+      if (d[0] === '8' && d.length > 1) d = '7' + d.slice(1);
+      if (d.startsWith('996')) {
+        const r = d.slice(3, 12);
+        el.value = '+996' + (r ? ' ' + [r.slice(0, 3), r.slice(3, 6), r.slice(6, 9)].filter(Boolean).join(' ') : '');
+        return;
+      }
       if (d[0] !== '7') { el.value = '+' + d.slice(0, 15); return; }
       d = d.slice(0, 11);
       let o = '+7';
@@ -55,135 +87,191 @@
       el.value = o;
     });
   }
-  const dtDay = new Intl.DateTimeFormat('ru-RU', { day: 'numeric' });
-  const dtMon = new Intl.DateTimeFormat('ru-RU', { month: 'short' });
-  const dtFull = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
-  const dtShort = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' });
-  const dtTime = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
   const isPast = e => new Date(e.at).getTime() < Date.now() - 4 * 3600e3;
   function timeAgo(iso) {
     const m = (Date.now() - new Date(iso)) / 60000;
-    if (m < 1) return 'только что';
-    if (m < 60) return `${Math.floor(m)} мин назад`;
-    if (m < 1440) return `${Math.floor(m / 60)} ч назад`;
+    if (m < 1) return L('только что', 'just now');
+    if (m < 60) return L(`${Math.floor(m)} мин назад`, `${Math.floor(m)} min ago`);
+    if (m < 1440) return L(`${Math.floor(m / 60)} ч назад`, `${Math.floor(m / 60)} h ago`);
     const d = Math.floor(m / 1440);
-    return d < 7 ? `${d} ${plural(d, 'день', 'дня', 'дней')} назад` : dtShort.format(new Date(iso));
+    return d < 7 ? L(`${d} ${plural(d, 'день', 'дня', 'дней')} назад`, `${d} ${d === 1 ? 'day' : 'days'} ago`) : fShort(new Date(iso));
   }
   function whenLabel(e) {
     const d = new Date(e.at), today = new Date(); today.setHours(0, 0, 0, 0);
     const diff = Math.round((new Date(d).setHours(0, 0, 0, 0) - today) / 864e5);
-    const day = diff === 0 ? 'Сегодня' : diff === 1 ? 'Завтра' : dtFull.format(d);
-    return `${day}, ${dtTime.format(d)}`;
+    const day = diff === 0 ? L('Сегодня', 'Today') : diff === 1 ? L('Завтра', 'Tomorrow') : cap(fFull(d));
+    return `${day}, ${fTime(d)}`;
   }
-
-  // Настройки вида живут только в этом браузере.
-  const prefs = {
-    get(k, d) { try { return localStorage.getItem('hp.' + k) ?? d; } catch (e) { return d; } },
-    set(k, v) { try { localStorage.setItem('hp.' + k, v); } catch (e) { /* хранилище недоступно */ } }
-  };
+  function countdown(iso) {
+    const ms = new Date(iso) - Date.now();
+    if (ms <= 0) return ms > -4 * 3600e3 ? L('идёт сейчас', 'happening now') : L('прошёл', 'finished');
+    const m = Math.floor(ms / 60000), d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mm = m % 60;
+    const H = n => pl(n, ['час', 'часа', 'часов'], ['hour', 'hours']), D = n => pl(n, ['день', 'дня', 'дней'], ['day', 'days']);
+    if (d) return L('через ', 'in ') + `${d} ${D(d)}${h ? ` ${h} ${H(h)}` : ''}`;
+    if (h) return L('через ', 'in ') + `${h} ${H(h)}${mm ? ` ${mm} ${L('мин', 'min')}` : ''}`;
+    return L('через ', 'in ') + `${mm || 1} ${L('мин', 'min')}`;
+  }
 
   const svg = (d, extra = '') => `<svg viewBox="0 0 24 24" aria-hidden="true" ${extra}>${d}</svg>`;
   const ICON = {
     pin: svg('<path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>'),
     plus: svg('<path d="M12 5v14M5 12h14"/>'),
     check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>'),
+    x: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
     heart: svg('<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>'),
     chat: svg('<path d="M5 5h14v10H10l-4 4v-4H5z"/>'),
     bell: svg('<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5h4"/>'),
     cal: svg('<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>'),
+    clock: svg('<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>'),
+    phone: svg('<path d="M6 3.5h3l1.5 4.5-2 1.5a11 11 0 0 0 6 6l1.5-2 4.5 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 4 5.5a2 2 0 0 1 2-2z"/>'),
     repeat: svg('<path d="M17 3l3 3-3 3M4 12V9a3 3 0 0 1 3-3h13M7 21l-3-3 3-3M20 12v3a3 3 0 0 1-3 3H4"/>'),
     edit: svg('<path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/>'),
     wallet: svg('<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12.5h2M3 9h18"/>'),
-    trash: svg('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>'),
     users: svg('<circle cx="9" cy="9" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5 6.5-5s5.7 1.5 6.5 5M16 5.5a3.5 3.5 0 0 1 0 7M18 15c2 .6 3.2 2.2 3.5 5"/>'),
     sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
     moon: svg('<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'),
     auto: svg('<circle cx="12" cy="12" r="8"/><path d="M12 4v16a8 8 0 0 0 0-16z" fill="currentColor"/>'),
     smoke: svg('<path d="M8 20c-3-3 2-5-1-8s2-5 0-8M14 20c-3-3 2-5-1-8s2-5 0-8"/>'),
     star: svg('<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/>'),
-    ext: svg('<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>')
+    ext: svg('<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>'),
+    home: svg('<path d="M4 11l8-7 8 7M6 9.5V20h12V9.5M10 20v-5h4v5"/>'),
+    hookah: svg('<path d="M9 4h6l-1.2 3h-3.6zM12 7v6M9.5 9.5h5M12 13c-3.2 0-5 2.2-5 4.4C7 19.4 9 20.5 12 20.5s5-1.1 5-3.1c0-2.2-1.8-4.4-5-4.4zM14.5 11c3 0 5.5 1.4 6 4.5"/>'),
+    mail: svg('<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 8l9 6 9-6"/>'),
+    list: svg('<path d="M4 6h16M4 12h16M4 18h10"/>')
   };
 
   // ---------- Каталог ----------
+  const TAGS = { холодок: 'cooling', фрукты: 'fruit', тропики: 'tropical', ягоды: 'berries', цитрус: 'citrus', кислое: 'sour', мята: 'mint', классика: 'classic', микс: 'mix', сладкое: 'sweet', напитки: 'drinks', бестабачное: 'tobacco-free' };
+  const tagName = t => L(t, TAGS[t] || t);
   const CATALOG = {
     tobaccos: [
-      { id: 'ds-supernova', brand: 'Darkside', flavor: 'Supernova', note: 'Ледяной холодок', strength: 7, tags: ['холодок'], color: '#4fa9cf' },
-      { id: 'ds-bananapapa', brand: 'Darkside', flavor: 'Bananapapa', note: 'Спелый банан', strength: 7, tags: ['фрукты'], color: '#d8a92a' },
-      { id: 'ds-fallingstar', brand: 'Darkside', flavor: 'Falling Star', note: 'Манго и маракуйя', strength: 7, tags: ['тропики', 'фрукты'], color: '#e8892c' },
-      { id: 'mh-pinkman', brand: 'MustHave', flavor: 'Pinkman', note: 'Грейпфрут и малина', strength: 6, tags: ['ягоды', 'цитрус'], color: '#d84a74' },
-      { id: 'mh-raspberry', brand: 'MustHave', flavor: 'Raspberry', note: 'Малина', strength: 6, tags: ['ягоды'], color: '#b52a52' },
-      { id: 'bb-cherry', brand: 'Black Burn', flavor: 'Cherry Shock', note: 'Кислая вишня', strength: 8, tags: ['ягоды', 'кислое'], color: '#8a1d30' },
-      { id: 'el-grapefruit', brand: 'Element', flavor: 'Вода · Грейпфрут', note: 'Свежий грейпфрут', strength: 5, tags: ['цитрус'], color: '#e4694b' },
-      { id: 'tg-canemint', brand: 'Tangiers', flavor: 'Cane Mint', note: 'Сладкая мята', strength: 9, tags: ['мята'], color: '#2f8f68' },
-      { id: 'af-twoapples', brand: 'Al Fakher', flavor: 'Two Apples', note: 'Двойное яблоко с анисом', strength: 3, tags: ['классика', 'фрукты'], color: '#78a832' },
-      { id: 'af-mint', brand: 'Al Fakher', flavor: 'Mint', note: 'Мята', strength: 3, tags: ['мята', 'классика'], color: '#3ea87b' },
-      { id: 'ad-love66', brand: 'Adalya', flavor: 'Love 66', note: 'Арбуз, дыня, маракуйя и мята', strength: 4, tags: ['микс', 'фрукты'], color: '#c43e62' },
-      { id: 'fu-gummi', brand: 'Fumari', flavor: 'White Gummi Bear', note: 'Мармеладные мишки', strength: 4, tags: ['сладкое'], color: '#9d82cf' },
-      { id: 'sb-bluemist', brand: 'Starbuzz', flavor: 'Blue Mist', note: 'Черника с мятой', strength: 4, tags: ['ягоды', 'мята'], color: '#4560c4' },
-      { id: 'se-watermelon', brand: 'Sebero', flavor: 'Арбуз', note: 'Сочный арбуз', strength: 6, tags: ['фрукты'], color: '#d63c4f' },
-      { id: 'du-pear', brand: 'Duft', flavor: 'Pear', note: 'Спелая груша', strength: 5, tags: ['фрукты'], color: '#9fae38' },
-      { id: 'od-cola', brand: 'Overdose', flavor: 'Cola', note: 'Кола', strength: 7, tags: ['напитки'], color: '#6b3420' },
-      { id: 'ch-icemint', brand: 'Chabacco', flavor: 'Ice Mint', note: 'Бестабачная смесь: мята со льдом', strength: 1, tags: ['бестабачное', 'мята'], color: '#4bb8b0' }
+      { id: 'ds-supernova', brand: 'Darkside', flavor: 'Supernova', note: ['Ледяной холодок', 'Icy cooling'], strength: 7, tags: ['холодок'], color: '#4fa9cf' },
+      { id: 'ds-bananapapa', brand: 'Darkside', flavor: 'Bananapapa', note: ['Спелый банан', 'Ripe banana'], strength: 7, tags: ['фрукты'], color: '#d8a92a' },
+      { id: 'ds-fallingstar', brand: 'Darkside', flavor: 'Falling Star', note: ['Манго и маракуйя', 'Mango and passion fruit'], strength: 7, tags: ['тропики', 'фрукты'], color: '#e8892c' },
+      { id: 'mh-pinkman', brand: 'MustHave', flavor: 'Pinkman', note: ['Грейпфрут и малина', 'Grapefruit and raspberry'], strength: 6, tags: ['ягоды', 'цитрус'], color: '#d84a74' },
+      { id: 'mh-raspberry', brand: 'MustHave', flavor: 'Raspberry', note: ['Малина', 'Raspberry'], strength: 6, tags: ['ягоды'], color: '#b52a52' },
+      { id: 'bb-cherry', brand: 'Black Burn', flavor: 'Cherry Shock', note: ['Кислая вишня', 'Sour cherry'], strength: 8, tags: ['ягоды', 'кислое'], color: '#8a1d30' },
+      { id: 'el-grapefruit', brand: 'Element', flavor: 'Water · Grapefruit', note: ['Свежий грейпфрут', 'Fresh grapefruit'], strength: 5, tags: ['цитрус'], color: '#e4694b' },
+      { id: 'tg-canemint', brand: 'Tangiers', flavor: 'Cane Mint', note: ['Сладкая мята', 'Sweet mint'], strength: 9, tags: ['мята'], color: '#2f8f68' },
+      { id: 'af-twoapples', brand: 'Al Fakher', flavor: 'Two Apples', note: ['Двойное яблоко с анисом', 'Double apple with anise'], strength: 3, tags: ['классика', 'фрукты'], color: '#78a832' },
+      { id: 'af-mint', brand: 'Al Fakher', flavor: 'Mint', note: ['Мята', 'Mint'], strength: 3, tags: ['мята', 'классика'], color: '#3ea87b' },
+      { id: 'ad-love66', brand: 'Adalya', flavor: 'Love 66', note: ['Арбуз, дыня, маракуйя и мята', 'Watermelon, melon, passion fruit and mint'], strength: 4, tags: ['микс', 'фрукты'], color: '#c43e62' },
+      { id: 'fu-gummi', brand: 'Fumari', flavor: 'White Gummi Bear', note: ['Мармеладные мишки', 'Gummy bears'], strength: 4, tags: ['сладкое'], color: '#9d82cf' },
+      { id: 'sb-bluemist', brand: 'Starbuzz', flavor: 'Blue Mist', note: ['Черника с мятой', 'Blueberry with mint'], strength: 4, tags: ['ягоды', 'мята'], color: '#4560c4' },
+      { id: 'se-watermelon', brand: 'Sebero', flavor: 'Watermelon', note: ['Сочный арбуз', 'Juicy watermelon'], strength: 6, tags: ['фрукты'], color: '#d63c4f' },
+      { id: 'du-pear', brand: 'Duft', flavor: 'Pear', note: ['Спелая груша', 'Ripe pear'], strength: 5, tags: ['фрукты'], color: '#9fae38' },
+      { id: 'od-cola', brand: 'Overdose', flavor: 'Cola', note: ['Кола', 'Cola'], strength: 7, tags: ['напитки'], color: '#6b3420' },
+      { id: 'ch-icemint', brand: 'Chabacco', flavor: 'Ice Mint', note: ['Бестабачная смесь: мята со льдом', 'Tobacco-free blend: iced mint'], strength: 1, tags: ['бестабачное', 'мята'], color: '#4bb8b0' }
     ],
     bowls: [
-      { id: 'b-phunnel', name: 'Oblako Phunnel M', type: 'Фанел', note: 'Табак не проваливается в шахту, жар держится ровно' },
-      { id: 'b-turka', name: 'Kong Turkish', type: 'Турка', note: 'Классика с отверстиями на дне' },
-      { id: 'b-killer', name: 'Cosmo Bowl Killer', type: 'Киллер', note: 'Глубокая чаша для плотной забивки' },
-      { id: 'b-harmony', name: 'HookahJohn Harmony', type: 'Фанел', note: 'Глина, мягкий прогрев' },
-      { id: 'b-fruit', name: 'Чаша на грейпфруте', type: 'На фрукте', note: 'Половинка грейпфрута вместо чаши' }
+      { id: 'b-phunnel', name: 'Oblako Phunnel M', type: 'phunnel', note: ['Табак не проваливается в шахту, жар держится ровно', 'Tobacco stays out of the stem, heat stays even'] },
+      { id: 'b-turka', name: 'Kong Turkish', type: 'turka', note: ['Классика с отверстиями на дне', 'Classic bowl with holes in the base'] },
+      { id: 'b-killer', name: 'Cosmo Bowl Killer', type: 'killer', note: ['Глубокая чаша для плотной забивки', 'Deep bowl for dense packing'] },
+      { id: 'b-harmony', name: 'HookahJohn Harmony', type: 'phunnel', note: ['Глина, мягкий прогрев', 'Clay, gentle heat-up'] },
+      { id: 'b-fruit', name: ['Чаша на грейпфруте', 'Grapefruit bowl'], type: 'fruit', note: ['Половинка грейпфрута вместо чаши', 'Half a grapefruit instead of a bowl'] }
     ],
     gear: [
-      { id: 'g-lotus', name: 'Kaloud Lotus I+', type: 'Калауд', note: 'Контроль жара без фольги' },
-      { id: 'g-coal', name: 'Кокосовый уголь 25 мм', type: 'Уголь', note: '72 кубика, разжиг 8–10 минут на плитке' },
-      { id: 'g-hose', name: 'Силиконовый шланг', type: 'Шланг', note: 'Моется и не впитывает вкус' },
-      { id: 'g-mouth', name: 'Личный мундштук', type: 'Мундштук', note: 'Гигиена на общих сборах' },
-      { id: 'g-tongs', name: 'Щипцы для угля', type: 'Инструмент', note: 'Длина 20 см' },
-      { id: 'g-stove', name: 'Плитка для угля', type: 'Розжиг', note: 'Электрическая, 800 Вт' }
+      { id: 'g-lotus', name: 'Kaloud Lotus I+', type: ['Калауд', 'Heat manager'], note: ['Контроль жара без фольги', 'Heat control without foil'] },
+      { id: 'g-coal', name: ['Кокосовый уголь 25 мм', 'Coconut coals 25 mm'], type: ['Уголь', 'Coals'], note: ['72 кубика, разжиг 8–10 минут на плитке', '72 cubes, 8–10 minutes on a heater'] },
+      { id: 'g-hose', name: ['Силиконовый шланг', 'Silicone hose'], type: ['Шланг', 'Hose'], note: ['Моется и не впитывает вкус', 'Washable, keeps no flavour'] },
+      { id: 'g-mouth', name: ['Личный мундштук', 'Personal mouthpiece'], type: ['Мундштук', 'Mouthpiece'], note: ['Гигиена на общих сборах', 'Hygiene at group sessions'] },
+      { id: 'g-tongs', name: ['Щипцы для угля', 'Coal tongs'], type: ['Инструмент', 'Tool'], note: ['Длина 20 см', '20 cm long'] },
+      { id: 'g-stove', name: ['Плитка для угля', 'Coal heater'], type: ['Розжиг', 'Heater'], note: ['Электрическая, 800 Вт', 'Electric, 800 W'] }
     ]
   };
+  const tr = v => Array.isArray(v) ? L(v[0], v[1]) : v;
+  const BOWL_TYPE = { phunnel: ['Фанел', 'Phunnel'], turka: ['Турка', 'Turkish'], killer: ['Киллер', 'Killer'], fruit: ['На фрукте', 'Fruit bowl'] };
   const tobacco = id => CATALOG.tobaccos.find(t => t.id === id);
   const bowl = id => CATALOG.bowls.find(b => b.id === id);
   const ALL_TAGS = [...new Set(CATALOG.tobaccos.flatMap(t => t.tags))];
-  const STRENGTH = { all: ['Любая', 0, 10], light: ['Лёгкие · 1–4', 1, 4], mid: ['Средние · 5–6', 5, 6], strong: ['Крепкие · 7–10', 7, 10] };
+  const STRENGTH = { all: [['Любая', 'Any'], 0, 10], light: [['Лёгкие · 1–4', 'Light · 1–4'], 1, 4], mid: [['Средние · 5–6', 'Medium · 5–6'], 5, 6], strong: [['Крепкие · 7–10', 'Strong · 7–10'], 7, 10] };
+
+  // ---------- Заведения на карте (данные OpenStreetMap, файл map-data.js) ----------
+  const MAP = window.HP_MAP || { w: 1000, h: 600, layers: {}, labels: [], venues: [] };
+  const VENUES = MAP.venues;
+  const venueById = id => VENUES.find(v => v.id === id);
+  const venueName = v => (lang === 'en' && v.nameEn) || v.name;
+  const VTYPE = { lounge: ['Кальянная', 'Hookah lounge'], bar: ['Бар', 'Bar'], cafe: ['Кафе', 'Café'], restaurant: ['Ресторан', 'Restaurant'], shop: ['Магазин и прокат', 'Shop & rental'] };
+  const DAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+  const DAY_NAMES = { ru: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'], en: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] };
+  // Разбор часов работы из OpenStreetMap: «Mo-Su 12:00-02:00», «Tu-Su 17:00-02:00», «17:00-06:00», «24/7».
+  function parseHours(s) {
+    s = String(s || '').trim();
+    if (!s) return null;
+    if (s === '24/7') return { always: true };
+    const m = s.match(/^(?:([A-Z][a-z](?:-[A-Z][a-z])?(?:,[A-Z][a-z](?:-[A-Z][a-z])?)*)\s+)?(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$/);
+    if (!m) return { raw: s };
+    let days = [0, 1, 2, 3, 4, 5, 6];
+    if (m[1]) {
+      days = [];
+      for (const part of m[1].split(',')) {
+        const [a, b] = part.split('-').map(x => DAYS.indexOf(x));
+        if (b === undefined) days.push(a); else for (let i = a; ; i = (i + 1) % 7) { days.push(i); if (i === b) break; }
+      }
+    }
+    return { days, from: +m[2] * 60 + +m[3], to: +m[4] * 60 + +m[5], daysGiven: !!m[1] };
+  }
+  function venueStatus(v, now = new Date()) {
+    const h = parseHours(v.hours);
+    if (!h) return { known: false, text: L('Часы работы не указаны', 'Opening hours unknown') };
+    if (h.always) return { known: true, open: true, text: L('Круглосуточно', 'Open 24/7'), hours: L('Круглосуточно', '24/7') };
+    if (h.raw) return { known: false, text: h.raw, hours: h.raw };
+    const t = x => `${pad(Math.floor(x / 60) % 24)}:${pad(x % 60)}`;
+    const dn = DAY_NAMES[lang];
+    let daysText = L('Ежедневно', 'Daily');
+    if (h.days.length < 7) daysText = h.days.length > 2 && h.days.every((d, i) => i === 0 || d === (h.days[i - 1] + 1) % 7) ? `${dn[h.days[0]]}–${dn[h.days[h.days.length - 1]]}` : h.days.map(d => dn[d]).join(', ');
+    const hours = `${daysText}, ${t(h.from)}–${t(h.to)}`;
+    const d = (now.getDay() + 6) % 7, prev = (d + 6) % 7, mins = now.getHours() * 60 + now.getMinutes();
+    const overnight = h.to <= h.from;
+    const open = overnight ? (h.days.includes(d) && mins >= h.from) || (h.days.includes(prev) && mins < h.to)
+      : h.days.includes(d) && mins >= h.from && mins < h.to;
+    return { known: true, open, hours, text: open ? L(`Открыто до ${t(h.to)}`, `Open until ${t(h.to)}`) : (h.days.includes(d) && mins < h.from ? L(`Закрыто, откроется в ${t(h.from)}`, `Closed, opens at ${t(h.from)}`) : L('Сейчас закрыто', 'Closed now')) };
+  }
+  const gmapsUrl = v => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${v.name}, ${v.addr ? v.addr + ', ' : ''}Бишкек`)}`;
+  const gisUrl = v => `https://2gis.kg/bishkek/search/${encodeURIComponent(v.name)}?m=${v.lon},${v.lat}/18`;
+  const placeQuery = (venue, address) => [venue, address, 'Бишкек'].filter(Boolean).join(', ');
 
   // ---------- Хранилище (демо) ----------
-  const KEY = 'hookahparty.v1';
+  const KEY = 'hookahparty.v2';
   function seed() {
     const day = 864e5, at = (d, h, m = 0) => { const x = new Date(Date.now() + d * day); x.setHours(h, m, 0, 0); return x.toISOString(); };
     const ago = mins => new Date(Date.now() - mins * 60000).toISOString();
     const u = (id, name, phone, extra = {}) => ({ id, name, phone, pass: hashPass('hookah'), verified: true, avatar: null, favs: [], friends: [], favVenue: '', createdAt: ago(60 * 24 * 40), ...extra });
+    const V = id => venueById(id) || { name: 'Hookah', addr: '' };
+    const savor = V('n4270648990'), holy = V('n6360868686'), hydra = V('n12870025414');
     return {
       session: 'u1',
       users: [
-        u('u1', 'Алекс', '79000000001', { favs: ['ds-supernova', 'mh-pinkman'], friends: ['u2', 'u3', 'u5'], favVenue: 'Smoke Lab Lounge' }),
-        u('u2', 'Дина', '79000000002', { friends: ['u1', 'u3', 'u6'], favVenue: 'Чайхана «Восток»', favs: ['ad-love66'] }),
-        u('u3', 'Тимур', '79000000003', { friends: ['u1', 'u2', 'u4'], favVenue: 'Северный дым', favs: ['tg-canemint', 'af-twoapples'] }),
-        u('u4', 'Сабина', '79000000004', { friends: ['u3'], favs: ['fu-gummi'] }),
-        u('u5', 'Руслан', '79000000005', { friends: ['u1'], favVenue: 'Smoke Lab Lounge', favs: ['od-cola'] }),
-        u('u6', 'Карина', '79000000006', { friends: ['u2'], favs: ['sb-bluemist'] })
+        u('u1', 'Алекс', '996700000001', { favs: ['ds-supernova', 'mh-pinkman'], friends: ['u2', 'u3', 'u5'], favVenue: savor.name }),
+        u('u2', 'Дина', '996700000002', { friends: ['u1', 'u3', 'u6'], favVenue: hydra.name, favs: ['ad-love66'] }),
+        u('u3', 'Тимур', '996700000003', { friends: ['u1', 'u2', 'u4'], favVenue: holy.name, favs: ['tg-canemint', 'af-twoapples'] }),
+        u('u4', 'Сабина', '996700000004', { friends: ['u3'], favs: ['fu-gummi'] }),
+        u('u5', 'Руслан', '996700000005', { friends: ['u1'], favVenue: savor.name, favs: ['od-cola'] }),
+        u('u6', 'Карина', '996700000006', { friends: ['u2'], favs: ['sb-bluemist'] })
       ],
       events: [
         {
-          id: 'e1', title: 'Пятничный сбор', venue: 'Smoke Lab Lounge', address: 'ул. Пушкина, 12, 2 этаж', mapUrl: '',
-          at: at(2, 20, 30), hostId: 'u1', desc: 'Забронирован диван у окна на 6 человек. Берём два кальяна, второй — на фанеле.',
-          hookahs: 2, price: 1800, paid: { u1: true, u2: true },
+          id: 'e1', title: 'Пятничный сбор', venue: savor.name, address: savor.addr, venueId: 'n4270648990', mapUrl: '',
+          at: at(2, 20, 30), hostId: 'u1', createdAt: ago(60 * 26), desc: 'Забронирован диван у окна на 6 человек. Берём два кальяна, второй — на фанеле.',
+          hookahs: 2, price: 1200, paid: { u1: true, u2: true },
           invites: [
             { userId: 'u2', status: 'going', at: ago(600) }, { userId: 'u3', status: 'going', at: ago(420) }, { userId: 'u4', status: 'pending' },
-            { userId: 'u5', status: 'going', at: ago(95) }, { phone: '79001234567', status: 'pending' }
+            { userId: 'u5', status: 'going', at: ago(95) }, { phone: '996555123456', status: 'pending' }
           ],
           picks: { u1: ['ds-supernova', 'mh-pinkman'], u2: ['ds-supernova', 'ad-love66'], u3: ['ds-supernova', 'mh-pinkman', 'tg-canemint'], u5: ['ds-bananapapa'] },
           bowls: { u1: 'b-phunnel', u2: 'b-phunnel', u3: 'b-killer' },
           comments: [
             { id: 'c1', userId: 'u3', text: 'Бронь на 20:30 подтвердили?', at: ago(180) },
-            { id: 'c2', userId: 'u1', text: 'Да, диван у окна наш до часу ночи.', at: ago(150) },
+            { id: 'c2', userId: 'u1', text: 'Да, диван у окна наш до двух ночи.', at: ago(150) },
             { id: 'c3', userId: 'u2', text: 'Возьму свой мундштук и калауд.', at: ago(40) }
           ],
           remind: {}, notified: {}
         },
         {
-          id: 'e2', title: 'День рождения Тимура', venue: 'Северный дым', address: 'пр. Мира, 48', mapUrl: '',
+          id: 'e2', title: 'День рождения Тимура', venue: holy.name, address: holy.addr, venueId: 'n6360868686', mapUrl: '',
           at: at(6, 19), hostId: 'u3', createdAt: ago(60 * 20), desc: 'Отмечаем 25 лет. Подарок собираем вскладчину, детали у Сабины.',
-          hookahs: 3, price: 2200, paid: { u3: true },
+          hookahs: 3, price: 1500, paid: { u3: true },
           invites: [{ userId: 'u1', status: 'pending' }, { userId: 'u4', status: 'going', at: ago(500) }, { userId: 'u6', status: 'going', at: ago(210) }],
           picks: { u3: ['af-twoapples', 'sb-bluemist'], u4: ['af-twoapples'], u6: ['fu-gummi', 'sb-bluemist', 'af-twoapples'] },
           bowls: { u3: 'b-turka' },
@@ -191,9 +279,9 @@
           remind: {}, notified: {}
         },
         {
-          id: 'e3', title: 'После работы', venue: 'Чайхана «Восток»', address: 'ул. Гоголя, 7', mapUrl: '',
-          at: at(-9, 21), hostId: 'u2', desc: '',
-          hookahs: 1, price: 1500, paid: { u1: true, u2: true, u6: true },
+          id: 'e3', title: 'После работы', venue: hydra.name, address: hydra.addr, venueId: 'n12870025414', mapUrl: '',
+          at: at(-9, 21), hostId: 'u2', createdAt: ago(60 * 24 * 11), desc: '',
+          hookahs: 1, price: 900, paid: { u1: true, u2: true, u6: true },
           invites: [{ userId: 'u1', status: 'going' }, { userId: 'u6', status: 'going' }],
           picks: { u1: ['bb-cherry'], u2: ['bb-cherry', 'el-grapefruit'], u6: ['el-grapefruit'] },
           bowls: { u2: 'b-fruit' }, comments: [], remind: {}, notified: {}
@@ -206,7 +294,7 @@
         { id: 'r4', tobaccoId: 'af-twoapples', userId: 'u3', rating: 4, text: 'Классика. Лёгкий, подходит новичкам.', at: ago(60 * 24 * 12) },
         { id: 'r5', tobaccoId: 'tg-canemint', userId: 'u5', rating: 5, text: 'Крепкий, на любителя. Мята честная.', at: ago(60 * 24 * 2) },
         { id: 'r6', tobaccoId: 'od-cola', userId: 'u5', rating: 4, text: 'Похоже на колу, хорошо с мятой.', at: ago(60 * 24 * 6) },
-        { id: 'r7', tobaccoId: 'fu-gummi', userId: 'u4', rating: 5, text: 'Сладкий, как мармелад. Девушкам заходит.', at: ago(60 * 24 * 9) },
+        { id: 'r7', tobaccoId: 'fu-gummi', userId: 'u4', rating: 5, text: 'Сладкий, как мармелад.', at: ago(60 * 24 * 9) },
         { id: 'r8', tobaccoId: 'bb-cherry', userId: 'u2', rating: 3, text: 'Слишком кислый в чистом виде.', at: ago(60 * 24 * 10) }
       ],
       mixes: [
@@ -217,7 +305,7 @@
       ]
     };
   }
-  // Дополняет данные старой версии шаблона новыми полями.
+  // Дополняет сохранённые данные полями, которых не было в прошлых версиях.
   function migrate(d) {
     const s = seed();
     d.users.forEach(u => { u.favs ||= []; u.friends ||= []; u.favVenue ??= ''; });
@@ -244,6 +332,7 @@
   const isFriend = (a, b) => !!a && !!b && a.friends.includes(b.id);
   const sharedEvents = (a, b) => db.events.filter(e => isMember(e, a) && isMember(e, b));
   const canSeePhone = (viewer, u) => viewer && (viewer.id === u.id || isFriend(viewer, u) || sharedEvents(viewer, u).length > 0);
+  const eventVenue = e => (e.venueId && venueById(e.venueId)) || VENUES.find(v => v.name === e.venue);
 
   // Подсчёт голосов: чем больше участников выбрали позицию, тем выше она в списке.
   function ranking(map, nameOf) {
@@ -253,7 +342,7 @@
       .sort((a, b) => b.users.length - a.users.length || nameOf(a.id).localeCompare(nameOf(b.id), 'ru'));
   }
   const tobaccoName = id => { const t = tobacco(id); return t ? `${t.brand} ${t.flavor}` : id; };
-  const bowlName = id => bowl(id)?.name || id;
+  const bowlName = id => tr(bowl(id)?.name) || id;
   const reviewsFor = id => db.reviews.filter(r => r.tobaccoId === id).sort((a, b) => new Date(b.at) - new Date(a.at));
   function ratingOf(id) {
     const r = reviewsFor(id);
@@ -265,8 +354,6 @@
     const paidCount = going.filter(id => e.paid[id]).length;
     return { going, total, per, paidCount, collected: paidCount * per };
   }
-
-  // Привязать приглашения «по номеру» к только что зарегистрированному пользователю.
   function claimPhoneInvites(user) {
     for (const e of db.events) for (const i of e.invites) if (!i.userId && i.phone === user.phone) { i.userId = user.id; delete i.phone; }
   }
@@ -293,25 +380,25 @@
   }
   function bowlArt(type) {
     const shapes = {
-      'Фанел': '<path d="M14 26h36l-6 16H20z"/><path d="M28 26v-6h8v6" class="a2"/><rect x="29" y="42" width="6" height="10"/>',
-      'Турка': '<path d="M12 24h40l-8 18H20z"/><circle cx="26" cy="33" r="1.6" class="a2"/><circle cx="32" cy="33" r="1.6" class="a2"/><circle cx="38" cy="33" r="1.6" class="a2"/><rect x="29" y="42" width="6" height="10"/>',
-      'Киллер': '<path d="M16 14h32l-5 30H21z"/><rect x="29" y="44" width="6" height="8"/>',
-      'На фрукте': '<path d="M10 28h44a22 18 0 0 1-44 0z"/><path d="M14 28h36" class="a2" stroke-width="3"/><rect x="29" y="44" width="6" height="8"/>'
+      phunnel: '<path d="M14 26h36l-6 16H20z"/><path d="M28 26v-6h8v6" class="a2"/><rect x="29" y="42" width="6" height="10"/>',
+      turka: '<path d="M12 24h40l-8 18H20z"/><circle cx="26" cy="33" r="1.6" class="a2"/><circle cx="32" cy="33" r="1.6" class="a2"/><circle cx="38" cy="33" r="1.6" class="a2"/><rect x="29" y="42" width="6" height="10"/>',
+      killer: '<path d="M16 14h32l-5 30H21z"/><rect x="29" y="44" width="6" height="8"/>',
+      fruit: '<path d="M10 28h44a22 18 0 0 1-44 0z"/><path d="M14 28h36" class="a2" stroke-width="3"/><rect x="29" y="44" width="6" height="8"/>'
     };
-    return `<svg class="art-svg" viewBox="0 0 64 60" aria-hidden="true">${shapes[type] || shapes['Турка']}</svg>`;
+    return `<svg class="art-svg" viewBox="0 0 64 60" aria-hidden="true">${shapes[type] || shapes.turka}</svg>`;
   }
   function stars(v, cls = '') {
     const full = Math.round(v);
-    return `<span class="stars ${cls}" aria-label="Оценка ${v ? v.toFixed(1) : 'нет'} из 5">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= full ? 'on' : ''}">★</i>`).join('')}</span>`;
+    return `<span class="stars ${cls}" aria-label="${L('Оценка', 'Rating')} ${v ? v.toFixed(1) : '—'} / 5">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= full ? 'on' : ''}">★</i>`).join('')}</span>`;
   }
   function readAvatar(file) {
     return new Promise((resolve, reject) => {
-      if (!file || !file.type.startsWith('image/')) return reject(new Error('Выберите файл изображения: JPG, PNG или WebP.'));
+      if (!file || !file.type.startsWith('image/')) return reject(new Error(L('Выберите файл изображения: JPG, PNG или WebP.', 'Choose an image file: JPG, PNG or WebP.')));
       const r = new FileReader();
-      r.onerror = () => reject(new Error('Не удалось прочитать файл.'));
+      r.onerror = () => reject(new Error(L('Не удалось прочитать файл.', 'Could not read the file.')));
       r.onload = () => {
         const img = new Image();
-        img.onerror = () => reject(new Error('Файл повреждён или это не изображение.'));
+        img.onerror = () => reject(new Error(L('Файл повреждён или это не изображение.', 'The file is damaged or not an image.')));
         img.onload = () => {
           const s = 256, c = document.createElement('canvas'), k = Math.min(img.width, img.height);
           c.width = c.height = s;
@@ -336,7 +423,7 @@
   const modalRoot = $('#modal-root');
   function openModal(title, body, onMount) {
     modalRoot.innerHTML = `<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
-      <div class="modal-head"><h2>${esc(title)}</h2><button class="modal-x" type="button" data-action="closeModal" aria-label="Закрыть">×</button></div>
+      <div class="modal-head"><h2>${esc(title)}</h2><button class="modal-x" type="button" data-action="closeModal" aria-label="${L('Закрыть', 'Close')}">×</button></div>
       ${body}</div></div>`;
     modalRoot.hidden = false;
     document.body.classList.add('locked');
@@ -349,9 +436,8 @@
   modalRoot.addEventListener('mousedown', e => { if (e.target.classList.contains('modal-backdrop')) closeModal(); });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && !modalRoot.hidden) closeModal();
-    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role=button][data-action]')) { e.preventDefault(); e.target.click(); }
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[role=button][data-action]')) { e.preventDefault(); e.target.click(); }
   });
-
   function toast(msg, kind = '') {
     const t = document.createElement('div');
     t.className = 'toast ' + kind; t.textContent = msg;
@@ -361,58 +447,66 @@
   }
 
   // ---------- Оформление ----------
-  const THEMES = { auto: ['Как в системе', ICON.auto], light: ['Светлая', ICON.sun], dark: ['Тёмная', ICON.moon] };
-  const ACCENTS = { copper: 'Медь', mint: 'Мята', plum: 'Слива', ember: 'Уголь' };
+  const THEMES = { auto: [['Как в системе', 'System'], ICON.auto], light: [['Светлая', 'Light'], ICON.sun], dark: [['Тёмная', 'Dark'], ICON.moon] };
+  const ACCENTS = { copper: ['Медь', 'Copper'], mint: ['Мята', 'Mint'], plum: ['Слива', 'Plum'], ember: ['Уголь', 'Ember'] };
   function applyLook() {
     const root = document.documentElement, theme = prefs.get('theme', 'auto'), accent = prefs.get('accent', 'copper');
     if (theme === 'auto') delete root.dataset.theme; else root.dataset.theme = theme;
     root.dataset.accent = ACCENTS[accent] ? accent : 'copper';
+    root.lang = lang;
   }
   applyLook();
 
-  // ---------- Шапка ----------
+  // ---------- Шапка, меню и подвал ----------
   function renderChrome(page) {
-    const u = me(), theme = prefs.get('theme', 'auto');
-    const themeBtn = `<button class="icon-btn" type="button" data-action="cycleTheme" title="Тема: ${THEMES[theme][0]}" aria-label="Тема: ${THEMES[theme][0]}">${THEMES[theme][1]}</button>`;
-    $('#topbar-actions').innerHTML = themeBtn + (u
-      ? `<button class="plus-btn" type="button" data-action="newEvent" title="Создать сбор и пригласить друзей" aria-label="Создать сбор">${ICON.plus}</button>
-         <a class="me-link" href="#/profile" title="Профиль">${avatar(u, 'sm')}</a>`
-      : `<a class="btn btn-ghost btn-sm hide-sm" href="#/register">Регистрация</a><a class="btn btn-primary btn-sm" href="#/login">Войти</a>`);
+    const u = me(), theme = prefs.get('theme', 'auto'), themeName = tr(THEMES[theme][0]);
+    const navItems = [['venues', L('Заведения', 'Venues')], ['catalog', L('Кальян', 'Hookah')], ['events', L('События', 'Events')], ['people', L('Люди', 'People')]];
+    $('#nav').innerHTML = navItems.map(([k, t]) => `<a href="#/${k}" data-nav="${k}">${t}</a>`).join('');
+    $('#nav').setAttribute('aria-label', L('Основное меню', 'Main menu'));
+    $('#topbar-actions').innerHTML = `
+      <div class="lang-switch" role="radiogroup" aria-label="${L('Язык', 'Language')}">
+        <button role="radio" aria-checked="${lang === 'ru'}" class="${lang === 'ru' ? 'on' : ''}" data-action="setLang" data-lang="ru">RU</button>
+        <button role="radio" aria-checked="${lang === 'en'}" class="${lang === 'en' ? 'on' : ''}" data-action="setLang" data-lang="en">EN</button></div>
+      <button class="icon-btn" type="button" data-action="cycleTheme" title="${L('Тема', 'Theme')}: ${themeName}" aria-label="${L('Тема', 'Theme')}: ${themeName}">${THEMES[theme][1]}</button>
+      ${u ? `<button class="plus-btn" type="button" data-action="newEvent" title="${L('Создать сбор и пригласить друзей', 'Create an event and invite friends')}" aria-label="${L('Создать сбор', 'Create event')}">${ICON.plus}</button>
+         <a class="me-link" href="#/profile" title="${L('Профиль', 'Profile')}">${avatar(u, 'sm')}</a>`
+        : `<a class="btn btn-primary btn-sm" href="#/login">${L('Войти', 'Sign in')}</a>`}`;
+    const tab = (k, icon, t) => `<a href="#/${k}" data-nav="${k}">${icon}${t}</a>`;
+    $('#tabbar').innerHTML = tab('venues', ICON.home, L('Места', 'Places')) + tab('catalog', ICON.hookah, L('Кальян', 'Hookah'))
+      + `<button type="button" class="tab-plus" data-action="newEvent" aria-label="${L('Создать сбор', 'Create event')}">${ICON.plus}</button>`
+      + tab('events', ICON.mail, L('События', 'Events')) + tab('profile', svg('<circle cx="12" cy="9" r="4"/><path d="M5 20c1-4 4-5 7-5s6 1 7 5"/>'), L('Профиль', 'Profile'));
+    $('#tabbar').setAttribute('aria-label', L('Нижнее меню', 'Bottom menu'));
+    $('#footer').innerHTML = `
+      <div class="wrap footer-in">
+        <div class="footer-brand">
+          <a class="brand" href="#/"><span class="brand-word">HOOKAH<span>PARTY</span></span></a>
+          <p>${L('Кальянные Бишкека на одной карте, приглашения друзьям и общий выбор табака.', 'Bishkek hookah lounges on one map, invitations for friends and a shared tobacco pick.')}</p>
+        </div>
+        <div class="footer-col"><h4>${L('Сервис', 'Service')}</h4>
+          <a href="#/venues">${L('Заведения', 'Venues')}</a><a href="#/catalog">${L('Каталог табаков', 'Tobacco catalogue')}</a>
+          <a href="#/catalog" data-action="catTab" data-tab="mixes">${L('Миксы', 'Mixes')}</a><a href="#/events">${L('События', 'Events')}</a>
+          <a href="#/people">${L('Люди', 'People')}</a><a href="#/how">${L('Как это работает', 'How it works')}</a></div>
+        <div class="footer-col"><h4>${L('Помощь', 'Help')}</h4>
+          <a href="#/" data-action="info" data-key="rules">${L('Правила сервиса', 'Terms of use')}</a>
+          <a href="#/" data-action="info" data-key="privacy">${L('Конфиденциальность', 'Privacy')}</a>
+          <a href="#/" data-action="info" data-key="venues">${L('Заведениям', 'For venues')}</a>
+          <a href="#/" data-action="info" data-key="faq">${L('Вопросы и ответы', 'FAQ')}</a></div>
+        <div class="footer-col"><h4>${L('Контакты', 'Contacts')}</h4>
+          <span class="mono">hello@hookahparty.app</span><span class="mono">+996 700 000 000</span>
+          <span>Telegram: <span class="mono">@hookahparty</span></span><span class="muted">${L('Ежедневно 12:00–02:00', 'Daily 12:00–02:00')}</span></div>
+      </div>
+      <div class="wrap footer-bottom">
+        <span>© 2026 Hookah Party</span><span class="age">18+</span>
+        <span>${L('Курение вредит вашему здоровью. Сервис предназначен только для совершеннолетних.', 'Smoking harms your health. This service is for adults only.')}</span>
+        <span>${L('Карта', 'Map')}: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a></span>
+      </div>`;
     $$('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === page));
   }
 
-  // ---------- Страницы ----------
-  const view = $('#view');
-
-  function dateBlock(e) {
-    const d = new Date(e.at);
-    return `<div class="ev-date"><b>${dtDay.format(d)}</b><span>${dtMon.format(d).replace('.', '')}</span><span class="mono">${dtTime.format(d)}</span></div>`;
-  }
-  function eventCard(e, u, href = `#/event/${e.id}`) {
-    const ids = goingIds(e), b = bill(e);
-    const top = ranking(e.picks, tobaccoName)[0];
-    const inv = u && myInvite(e, u);
-    const status = e.hostId === u?.id ? '<span class="pill pill-host">Организатор</span>'
-      : inv ? `<span class="pill pill-${inv.status}">${{ going: 'Иду', pending: 'Ждёт ответа', declined: 'Не иду' }[inv.status]}</span>` : '';
-    return `<a class="ev-card ${isPast(e) ? 'ev-past' : ''}" href="${href}">
-      ${dateBlock(e)}
-      <div class="ev-body">
-        <h3>${esc(e.title)}</h3>
-        <div class="ev-venue">${ICON.pin}<span>${esc(e.venue)}</span></div>
-        ${top ? `<div><span class="chip chip-accent">Лидирует: ${esc(tobaccoName(top.id))} · ${top.users.length}</span></div>` : ''}
-        <div class="ev-meta">
-          ${b.total ? `<span>${ICON.wallet}${money(b.per)} с человека</span>` : ''}
-          ${e.comments.length ? `<span>${ICON.chat}${e.comments.length}</span>` : ''}
-        </div>
-        <div class="ev-foot">${avatarStack(ids)}${status}</div>
-      </div>
-    </a>`;
-  }
-
   // ---------- Вкладки ----------
-  // Одни и те же вкладки на главной, в каталоге, у людей и в профиле. Последняя открытая запоминается.
+  // Одни и те же вкладки в событиях, каталоге, у людей и в профиле. Последняя открытая запоминается.
   const tab = {
-    home: prefs.get('tab.home', 'upcoming'), guest: prefs.get('tab.guest', 'how'), cat: prefs.get('tab.cat', 'tobaccos'),
+    home: prefs.get('tab.home', 'upcoming'), cat: prefs.get('tab.cat', 'tobaccos'),
     people: prefs.get('tab.people', 'friends'), profile: prefs.get('tab.profile', 'about')
   };
   const tabKeys = {};
@@ -447,7 +541,7 @@
   document.fonts?.ready.then(inkAll);
   function switchTo(name, key) {
     if (!key || tab[name] === key) return;
-    const keys = tabKeys[name] || [], bar = $(`.utabs[data-tabs="${name}"]`), ink = bar?.querySelector('.utabs-ink');
+    const keys = tabKeys[name] || [], ink = $(`.utabs[data-tabs="${name}"] .utabs-ink`);
     const from = ink ? { l: +ink.dataset.l || 0, w: ink.offsetWidth } : null;
     tabDir = { name, dir: keys.indexOf(key) > keys.indexOf(tab[name]) ? 'next' : 'prev' };
     tab[name] = key; prefs.set('tab.' + name, key);
@@ -459,15 +553,15 @@
     // Если вкладки прилипли к шапке, показываем новую вкладку с начала.
     const wrap = nb?.parentElement;
     if (wrap) {
-      const head = $('.topbar').offsetHeight, top = wrap.getBoundingClientRect().top + window.scrollY - head - 1;
+      const top = wrap.getBoundingClientRect().top + window.scrollY - $('.topbar').offsetHeight - 1;
       if (window.scrollY > top) window.scrollTo(0, top);
     }
   }
   // Свайп влево-вправо по содержимому переключает вкладки на телефоне.
   let swipe = null;
   document.addEventListener('touchstart', e => {
-    const p = e.target.closest('[data-swipe]');
-    if (!p || e.touches.length > 1 || e.target.closest('input, textarea, select, .utabs, .cal')) { swipe = null; return; }
+    const p = e.target.closest?.('[data-swipe]');
+    if (!p || e.touches.length > 1 || e.target.closest('input, textarea, select, .utabs, .cal, .map')) { swipe = null; return; }
     swipe = { name: p.dataset.swipe, x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
   }, { passive: true });
   document.addEventListener('touchend', e => {
@@ -478,7 +572,6 @@
     const keys = tabKeys[s.name] || [], i = keys.indexOf(tab[s.name]);
     switchTo(s.name, keys[i + (dx < 0 ? 1 : -1)]);
   }, { passive: true });
-  // Стрелки влево-вправо на вкладках, как в обычных вкладках браузера.
   document.addEventListener('keydown', e => {
     const b = e.target.closest?.('.utabs [role=tab]');
     if (!b || !['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
@@ -490,50 +583,346 @@
   function emptyState(title, text, action = '') {
     return `<div class="empty-state">
       <svg class="empty-art" viewBox="0 0 120 96" aria-hidden="true">
-        <path class="es-smoke" d="M66 6c6 4-3 9 3 13s-3 9 2 13" />
-        <path class="es-smoke" d="M54 10c5 3-2 7 2 10" />
+        <path class="es-smoke" d="M66 6c6 4-3 9 3 13s-3 9 2 13" /><path class="es-smoke" d="M54 10c5 3-2 7 2 10" />
         <path d="M44 34h32l-5 10H49z" /><path d="M58 44h4v18h-4z" /><path d="M50 50h20" />
-        <path d="M60 62c-14 0-21 8-21 15 0 6 6 10 21 10s21-4 21-10c0-7-7-15-21-15z" />
-        <path d="M64 54c10 0 18 3 22 10l6 4" />
-      </svg>
-      <h3>${title}</h3><p>${text}</p>${action}</div>`;
+        <path d="M60 62c-14 0-21 8-21 15 0 6 6 10 21 10s21-4 21-10c0-7-7-15-21-15z" /><path d="M64 54c10 0 18 3 22 10l6 4" />
+      </svg><h3>${title}</h3><p>${text}</p>${action}</div>`;
   }
 
-  function countdown(iso) {
-    const ms = new Date(iso) - Date.now();
-    if (ms <= 0) return ms > -4 * 3600e3 ? 'идёт сейчас' : 'прошёл';
-    const m = Math.floor(ms / 60000), d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mm = m % 60;
-    if (d) return `через ${d} ${plural(d, 'день', 'дня', 'дней')}${h ? ` ${h} ${plural(h, 'час', 'часа', 'часов')}` : ''}`;
-    if (h) return `через ${h} ${plural(h, 'час', 'часа', 'часов')}${mm ? ` ${mm} мин` : ''}`;
-    return `через ${mm || 1} мин`;
+  // ---------- Карта ----------
+  // Своя минималистичная карта: подложка из OpenStreetMap в SVG, точки заведений, масштаб и перетаскивание.
+  function mapHtml(id, cls = '') {
+    const lay = MAP.layers, g = (c, k) => `<g class="${c}">${(lay[k] || []).map(d => `<path d="${d}"/>`).join('')}</g>`;
+    return `<div class="map ${cls}" id="${id}" data-map>
+      <svg class="map-svg" viewBox="0 0 ${MAP.w} ${MAP.h}" role="img" aria-label="${L('Карта кальянных Бишкека', 'Map of Bishkek hookah lounges')}">
+        <rect class="m-bg" x="-3000" y="-3000" width="${MAP.w + 6000}" height="${MAP.h + 6000}"/>
+        ${g('m-park', 'park')}${g('m-water', 'water')}${g('m-tert', 'tertiary')}${g('m-sec', 'secondary')}${g('m-pri', 'primary')}
+        <g class="m-labels">${MAP.labels.map(l => `<text data-x="${l.x}" data-y="${l.y}" data-a="${l.a}" text-anchor="middle">${esc(l.t)}</text>`).join('')}</g>
+        <g class="m-pins">${VENUES.map(v => {
+          const st = venueStatus(v);
+          return `<g class="m-pin ${st.known ? (st.open ? 'is-open' : 'is-closed') : ''}" data-vid="${v.id}" data-x="${v.x}" data-y="${v.y}" tabindex="0" role="button" aria-label="${esc(venueName(v))}. ${esc(st.text)}">
+            <circle class="m-pin-hit" cy="-14" r="18"/><path class="m-pin-body" d="M0 0C-7-8-11-12-11-18a11 11 0 0 1 22 0C11-12 7-8 0 0z"/><circle class="m-pin-dot" cy="-18" r="4.2"/></g>`;
+        }).join('')}</g>
+      </svg>
+      <div class="map-ctl">
+        <button type="button" data-mz="in" aria-label="${L('Приблизить', 'Zoom in')}">+</button>
+        <button type="button" data-mz="out" aria-label="${L('Отдалить', 'Zoom out')}">−</button>
+        <button type="button" data-mz="fit" aria-label="${L('Показать все места', 'Show all places')}" title="${L('Показать все места', 'Show all places')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      </div>
+      <div class="map-tip" hidden></div>
+      <div class="map-card" hidden></div>
+      <div class="map-hint" hidden>${L('Чтобы приблизить, зажмите Ctrl (⌘) и крутите колесо', 'Hold Ctrl (⌘) and scroll to zoom')}</div>
+      <a class="map-attr" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>
+    </div>`;
   }
-  setInterval(() => $$('[data-countdown]').forEach(el => { el.textContent = countdown(el.dataset.countdown); }), 30000);
+  const maps = {};
+  let mapSel = null;
+  function venueCardHtml(v) {
+    const st = venueStatus(v);
+    return `<button class="map-card-x" type="button" data-mclose aria-label="${L('Закрыть', 'Close')}">×</button>
+      <span class="cat-brand">${tr(VTYPE[v.type] || VTYPE.bar)}</span>
+      <h3>${esc(venueName(v))}</h3>
+      <ul class="vinfo">
+        <li class="${st.known ? (st.open ? 'v-open' : 'v-closed') : ''}">${ICON.clock}<span><b>${esc(st.text)}</b>${st.hours && st.hours !== st.text ? `<small>${esc(st.hours)}</small>` : ''}</span></li>
+        <li>${ICON.pin}<span>${v.addr ? esc(v.addr) : L('Адрес не указан', 'Address not listed')}</span></li>
+        ${v.phone ? `<li>${ICON.phone}<span class="mono">${esc(fmtPhone(v.phone))}</span></li>` : ''}
+      </ul>
+      <div class="map-links">
+        <a class="maplink ml-google" href="${gmapsUrl(v)}" target="_blank" rel="noopener"><span class="ml-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 22s-7-6.6-7-12a7 7 0 0 1 14 0c0 5.4-7 12-7 12z"/><circle cx="12" cy="10" r="2.6"/></svg></span>Google ${L('Карты', 'Maps')}</a>
+        <a class="maplink ml-2gis" href="${gisUrl(v)}" target="_blank" rel="noopener"><span class="ml-ic" aria-hidden="true">2</span>2ГИС</a>
+      </div>
+      <button class="btn btn-primary btn-sm" type="button" data-action="gatherHere" data-vid="${v.id}">${ICON.plus}${L('Собрать друзей здесь', 'Gather friends here')}</button>`;
+  }
+  function initMap(id, { onSelect } = {}) {
+    const el = $('#' + id); if (!el) return;
+    const sv = $('svg', el), tip = $('.map-tip', el), card = $('.map-card', el), hint = $('.map-hint', el);
+    const pins = $$('.m-pin', el), labels = $$('.m-labels text', el);
+    const xs = VENUES.map(v => v.x), ys = VENUES.map(v => v.y);
+    const box = VENUES.length ? { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) } : { x0: 0, x1: MAP.w, y0: 0, y1: MAP.h };
+    const st = { vb: { x: 0, y: 0, w: MAP.w, h: MAP.h }, sel: null };
+    const aspect = () => el.clientHeight / Math.max(el.clientWidth, 1);
+    const unit = () => st.vb.w / Math.max(el.clientWidth, 1); // единиц карты на пиксель
+    function clamp() {
+      const v = st.vb, a = aspect();
+      v.w = Math.max(60, Math.min(v.w, MAP.w * 1.4)); v.h = v.w * a;
+      const mx = MAP.w * .25, my = MAP.h * .25;
+      v.x = Math.max(-mx, Math.min(v.x, MAP.w + mx - v.w)); v.y = Math.max(-my, Math.min(v.y, MAP.h + my - v.h));
+    }
+    function apply() {
+      clamp();
+      const v = st.vb, s = unit();
+      sv.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
+      pins.forEach(p => p.setAttribute('transform', `translate(${p.dataset.x} ${p.dataset.y}) scale(${s})`));
+      labels.forEach(t => t.setAttribute('transform', `translate(${t.dataset.x} ${t.dataset.y}) rotate(${t.dataset.a}) scale(${s})`));
+      el.classList.toggle('show-labels', s < 1.1);
+      place();
+    }
+    function fit() {
+      const padX = 70, w = Math.max(box.x1 - box.x0 + padX * 2, 280);
+      st.vb.w = Math.max(w, (box.y1 - box.y0 + padX * 2) / aspect());
+      st.vb.x = (box.x0 + box.x1) / 2 - st.vb.w / 2; st.vb.h = st.vb.w * aspect(); st.vb.y = (box.y0 + box.y1) / 2 - st.vb.h / 2 - 10 * unit();
+      apply();
+    }
+    const toScreen = (x, y) => [(x - st.vb.x) / st.vb.w * el.clientWidth, (y - st.vb.y) / st.vb.h * el.clientHeight];
+    function zoomAt(f, sx = el.clientWidth / 2, sy = el.clientHeight / 2) {
+      const v = st.vb, mx = v.x + sx / el.clientWidth * v.w, my = v.y + sy / el.clientHeight * v.h;
+      v.w /= f; v.h = v.w * aspect();
+      v.x = mx - sx / el.clientWidth * v.w; v.y = my - sy / el.clientHeight * v.h;
+      apply();
+    }
+    function place() {
+      if (!st.sel) return;
+      const v = venueById(st.sel); if (!v) return;
+      const [x, y] = toScreen(v.x, v.y);
+      if (el.clientWidth < 560) { card.style.left = card.style.top = ''; return; }
+      const cw = card.offsetWidth, ch = card.offsetHeight;
+      let left = x - cw / 2, top = y - ch - 34;
+      if (top < 10) top = y + 14;
+      left = Math.max(10, Math.min(left, el.clientWidth - cw - 10)); top = Math.max(10, Math.min(top, el.clientHeight - ch - 10));
+      card.style.left = left + 'px'; card.style.top = top + 'px';
+    }
+    function select(vid, { center = false } = {}) {
+      st.sel = vid; mapSel = vid;
+      pins.forEach(p => p.classList.toggle('sel', p.dataset.vid === vid));
+      if (!vid) { card.hidden = true; onSelect && onSelect(null); return; }
+      const v = venueById(vid);
+      card.innerHTML = venueCardHtml(v); card.hidden = false;
+      $(`.m-pin[data-vid="${vid}"]`, el)?.parentNode.appendChild($(`.m-pin[data-vid="${vid}"]`, el));
+      if (center) {
+        if (st.vb.w > 320) st.vb.w = 320;
+        st.vb.h = st.vb.w * aspect(); st.vb.x = v.x - st.vb.w / 2; st.vb.y = v.y - st.vb.h * .62;
+      }
+      apply();
+      onSelect && onSelect(vid);
+    }
+    // Мышь и пальцы: перетаскивание одним указателем, масштаб двумя.
+    const ptrs = new Map();
+    let drag = null, moved = 0, pinch = null;
+    el.addEventListener('pointerdown', e => {
+      if (e.target.closest('.map-card, .map-ctl, .map-attr')) return;
+      el.setPointerCapture?.(e.pointerId);
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      moved = 0;
+      if (ptrs.size === 1) drag = { x: e.clientX, y: e.clientY, vx: st.vb.x, vy: st.vb.y, target: e.target };
+      if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), w: st.vb.w }; drag = null; }
+    });
+    el.addEventListener('pointermove', e => {
+      if (!ptrs.has(e.pointerId)) {
+        const pin = e.target.closest?.('.m-pin');
+        if (pin && e.pointerType === 'mouse') showTip(pin); else tip.hidden = true;
+        return;
+      }
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch && ptrs.size === 2) {
+        const [a, b] = [...ptrs.values()], r = el.getBoundingClientRect();
+        const f = Math.hypot(a.x - b.x, a.y - b.y) / pinch.d, target = pinch.w / f;
+        zoomAt(st.vb.w / target, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
+        moved = 99; return;
+      }
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      moved = Math.max(moved, Math.hypot(dx, dy));
+      if (moved > 4) { el.classList.add('dragging'); tip.hidden = true; }
+      st.vb.x = drag.vx - dx * unit(); st.vb.y = drag.vy - dy * unit(); apply();
+    });
+    const up = e => {
+      if (!ptrs.has(e.pointerId)) return;
+      ptrs.delete(e.pointerId);
+      if (ptrs.size < 2) pinch = null;
+      if (drag && moved <= 4 && e.type === 'pointerup') {
+        const pin = drag.target.closest?.('.m-pin');
+        if (pin) select(pin.dataset.vid); else if (st.sel) select(null);
+      }
+      if (!ptrs.size) { drag = null; el.classList.remove('dragging'); }
+    };
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    el.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !ptrs.size) tip.hidden = true; });
+    let hintT;
+    el.addEventListener('wheel', e => {
+      if (!(e.ctrlKey || e.metaKey)) { hint.hidden = false; clearTimeout(hintT); hintT = setTimeout(() => { hint.hidden = true; }, 1400); return; }
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      zoomAt(Math.exp(-e.deltaY * .0025), e.clientX - r.left, e.clientY - r.top);
+    }, { passive: false });
+    el.addEventListener('click', e => {
+      const b = e.target.closest('[data-mz]');
+      if (b) { b.dataset.mz === 'fit' ? fit() : zoomAt(b.dataset.mz === 'in' ? 1.6 : 1 / 1.6); return; }
+      if (e.target.closest('[data-mclose]')) select(null);
+    });
+    el.addEventListener('keydown', e => {
+      const pin = e.target.closest?.('.m-pin');
+      if (pin && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); select(pin.dataset.vid, { center: true }); }
+      if (e.key === 'Escape' && st.sel) select(null);
+    });
+    el.addEventListener('focusin', e => { const pin = e.target.closest?.('.m-pin'); if (pin) showTip(pin); });
+    function showTip(pin) {
+      const v = venueById(pin.dataset.vid), s = venueStatus(v);
+      tip.innerHTML = `<b>${esc(venueName(v))}</b><span class="${s.known ? (s.open ? 'v-open' : 'v-closed') : ''}">${esc(s.text)}</span>`;
+      tip.hidden = false;
+      const [x, y] = toScreen(v.x, v.y);
+      tip.style.left = Math.max(8, Math.min(x - tip.offsetWidth / 2, el.clientWidth - tip.offsetWidth - 8)) + 'px';
+      tip.style.top = Math.max(8, y - 34 - tip.offsetHeight - 6) + 'px';
+    }
+    const onResize = () => { st.vb.h = st.vb.w * aspect(); apply(); };
+    if (window.ResizeObserver) new ResizeObserver(onResize).observe(el); else window.addEventListener('resize', onResize);
+    fit();
+    maps[id] = { select, fit };
+    return maps[id];
+  }
+
+  // ---------- Плитки и главная ----------
+  const tileArt = {
+    venues: `<svg class="tile-art art-house" viewBox="0 0 64 64" aria-hidden="true">
+      <path class="t-smoke" d="M45 9c2 1.5-1 3 1 4.5s-1 3 .5 4.5"/><path d="M42 21v-7h5v11"/>
+      <path d="M9 31 32 12l23 19"/><path d="M15 26.5V54h34V26.5"/>
+      <rect class="t-win" x="20" y="32" width="8" height="7" rx="1.5"/><rect class="t-win" x="36" y="32" width="8" height="7" rx="1.5"/>
+      <path d="M28 54V44h8v10"/></svg>`,
+    hookah: `<svg class="tile-art art-hookah" viewBox="0 0 64 64" aria-hidden="true">
+      <path class="t-smoke" d="M34 3c3 2-1 4 1 6s-1 4 1 6"/><path class="t-smoke t-smoke2" d="M29 6c2 1.5-1 3 .8 4.5"/>
+      <circle class="t-coal" cx="32" cy="16.5" r="2"/>
+      <path d="M24 19h16l-3 6H27z"/><path d="M32 25v14"/><path d="M26 30h12"/>
+      <path d="M32 39c-8.5 0-13 6-13 11.5C19 55 24 58 32 58s13-3 13-7.5C45 45 40.5 39 32 39z"/>
+      <path d="M38 34c7 0 12.5 3 15 10l1.5 6"/><path d="M53 50.5l3 1.5"/></svg>`,
+    events: `<svg class="tile-art art-mail" viewBox="0 0 64 64" aria-hidden="true">
+      <g class="t-letter"><rect x="16" y="14" width="32" height="30" rx="2"/><path d="M22 22h20M22 28h14"/></g>
+      <path class="t-env" d="M8 26l24 15 24-15v26a3 3 0 0 1-3 3H11a3 3 0 0 1-3-3z"/>
+      <path d="M8 26l24 15 24-15"/><path d="M8 52l18-13M56 52 38 39"/></svg>`
+  };
+  function tilesHtml() {
+    const t = (k, href, label, sub) => `<a class="tile" href="${href}" aria-label="${label}. ${sub}">
+      <span class="tile-box">${tileArt[k]}</span><span class="tile-label">${label}</span><span class="tile-sub">${sub}</span></a>`;
+    return `<nav class="tiles" aria-label="${L('Разделы', 'Sections')}">
+      ${t('venues', '#/venues', L('Заведения', 'Venues'), L(`${VENUES.length} мест в Бишкеке`, `${VENUES.length} places in Bishkek`))}
+      ${t('hookah', '#/catalog', L('Кальян', 'Hookah'), L('Табаки, миксы, чаши', 'Tobacco, mixes, bowls'))}
+      ${t('events', '#/events', L('События', 'Events'), L('Сборы и приглашения', 'Meet-ups and invitations'))}
+    </nav>`;
+  }
+
+  function pageHome() {
+    const u = me();
+    const next = u && db.events.filter(e => !isPast(e) && goingIds(e).includes(u.id)).sort((a, b) => new Date(a.at) - new Date(b.at))[0];
+    const invites = u ? db.events.filter(e => !isPast(e) && myInvite(e, u)?.status === 'pending').length : 0;
+    const openNow = VENUES.filter(v => venueStatus(v).open).length;
+    const point = (icon, h, p) => `<li><span class="intro-ic">${icon}</span><div><b>${h}</b><p>${p}</p></div></li>`;
+    view.innerHTML = `
+      ${tilesHtml()}
+      ${next ? `<a class="next-strip" href="#/event/${next.id}"><span class="soon-dot"></span><span><b>${esc(next.title)}</b> · <span data-countdown="${next.at}">${countdown(next.at)}</span> · ${esc(next.venue)}</span><span class="next-go">${L('Открыть', 'Open')} →</span></a>`
+        : invites ? `<a class="next-strip" href="#/events" data-action="openInvites"><span class="soon-dot"></span><span>${L(`Вас зовут на ${invites} ${plural(invites, 'сбор', 'сбора', 'сборов')}`, `You have ${invites} new ${invites === 1 ? 'invitation' : 'invitations'}`)}</span><span class="next-go">${L('Посмотреть', 'View')} →</span></a>` : ''}
+      <section class="intro">
+        <div class="intro-text">
+          <span class="eyebrow">Hookah Party</span>
+          <h1>${u ? L(`Рады видеть вас снова, ${esc(u.name)}!`, `Good to see you again, ${esc(u.name)}!`) : L('Добро пожаловать в Hookah Party!', 'Welcome to Hookah Party!')}</h1>
+          <p class="lead">${L('Здесь собираются те, кто любит кальян и хорошую компанию. Найдите место в Бишкеке, позовите друзей и решите вместе, что курить, без переписки в десяти чатах.',
+            'A place for people who love hookah and good company. Find a lounge in Bishkek, invite your friends and decide together what to smoke, without juggling ten group chats.')}</p>
+          ${u ? `<div class="hero-cta"><button class="btn btn-primary" type="button" data-action="newEvent">${ICON.plus}${L('Собрать друзей', 'Gather friends')}</button><a class="btn" href="#/venues">${L('Выбрать место', 'Pick a place')}</a></div>`
+            : `<div class="hero-cta"><a class="btn btn-primary" href="#/register">${L('Зарегистрироваться', 'Sign up')}</a><a class="btn" href="#/login">${L('У меня есть аккаунт', 'I have an account')}</a></div>`}
+        </div>
+        <ul class="intro-points">
+          ${point(ICON.home, L('Кальянные на карте', 'Lounges on the map'), L('Адреса, часы работы и что открыто прямо сейчас. Один клик, и место открыто в Google Картах или 2ГИС.', 'Addresses, opening hours and what is open right now. One click opens the place in Google Maps or 2GIS.'))}
+          ${point(ICON.mail, L('Приглашения по номеру', 'Invitations by phone'), L('Позовите друзей по номеру телефона. Они ответят «Иду» или «Не смогу» в одно касание.', 'Invite friends by phone number. They reply “Going” or “Can’t make it” in one tap.'))}
+          ${point(ICON.hookah, L('Общий выбор табака', 'A shared tobacco pick'), L('Каждый отмечает любимые вкусы и чашу. Популярное поднимается наверх, кальянщик получает готовый список.', 'Everyone marks their favourite flavours and bowl. Popular picks rise to the top, and the hookah master gets a ready list.'))}
+          ${point(ICON.wallet, L('Счёт поровну', 'Split the bill'), L('Сервис сам посчитает, сколько с каждого, и напомнит о встрече за час.', 'The service works out each person’s share and reminds you an hour before.'))}
+        </ul>
+      </section>
+      <section class="section map-section">
+        <div class="section-head"><div><h2>${L('Кальянные Бишкека', 'Hookah lounges in Bishkek')}</h2>
+          <p class="muted">${L(`${VENUES.length} ${plural(VENUES.length, 'место', 'места', 'мест')} на карте · сейчас открыто ${openNow}`, `${VENUES.length} places on the map · ${openNow} open now`)}</p></div>
+          <a class="btn btn-sm" href="#/venues">${ICON.list}${L('Все заведения списком', 'All venues as a list')}</a></div>
+        ${mapHtml('home-map')}
+        <p class="map-note">${L('Данные о заведениях взяты из OpenStreetMap и могут устареть. Перед походом проверьте часы работы в 2ГИС или Google Картах.', 'Venue data comes from OpenStreetMap and may be out of date. Check opening hours in 2GIS or Google Maps before you go.')}</p>
+      </section>`;
+    initMap('home-map');
+  }
+
+  function pageVenues() {
+    view.innerHTML = `
+      <section class="section"><span class="eyebrow">${L('Заведения', 'Venues')}</span><h1>${L('Кальянные Бишкека', 'Hookah lounges in Bishkek')}</h1>
+        <p class="muted">${L('Нажмите на точку или на место в списке, чтобы увидеть адрес, часы работы и ссылки на карты.', 'Tap a pin or a place in the list to see its address, opening hours and map links.')}</p></section>
+      <div class="venues-layout">
+        ${mapHtml('venues-map', 'map-tall')}
+        <aside class="venue-side">
+          <div class="panel-tools"><input class="input" id="v-q" type="search" placeholder="${L('Название или улица', 'Name or street')}" aria-label="${L('Поиск заведений', 'Search venues')}" value="${esc(venueQ)}">
+            <button class="chip-btn ${venueOpenOnly ? 'on' : ''}" type="button" data-action="venueOpen" aria-pressed="${venueOpenOnly}">${L('Открыто сейчас', 'Open now')}</button></div>
+          <ul class="venue-list" id="v-list"></ul>
+          <p class="map-note">${L('Данные: OpenStreetMap. Нашли ошибку или нет вашего заведения? Напишите нам, добавим.', 'Data: OpenStreetMap. Spotted a mistake or missing a venue? Write to us and we will add it.')}</p>
+        </aside>
+      </div>`;
+    const drawList = () => {
+      const q = venueQ.trim().toLowerCase();
+      const list = VENUES.filter(v => (!q || `${v.name} ${v.nameEn || ''} ${v.addr}`.toLowerCase().includes(q)) && (!venueOpenOnly || venueStatus(v).open));
+      $('#v-list').innerHTML = list.map(v => {
+        const s = venueStatus(v);
+        return `<li><button type="button" class="venue-item ${mapSel === v.id ? 'sel' : ''}" data-vid="${v.id}">
+          <span class="vi-top"><b>${esc(venueName(v))}</b><span class="vi-dot ${s.known ? (s.open ? 'v-open' : 'v-closed') : ''}"></span></span>
+          <small>${tr(VTYPE[v.type] || VTYPE.bar)} · ${v.addr ? esc(v.addr) : L('адрес не указан', 'no address')}</small>
+          <small class="${s.known ? (s.open ? 'v-open' : 'v-closed') : ''}">${esc(s.text)}</small></button></li>`;
+      }).join('') || `<li class="muted">${L('Ничего не нашлось.', 'Nothing found.')}</li>`;
+    };
+    drawList();
+    const m = initMap('venues-map', { onSelect: vid => { $$('.venue-item').forEach(b => b.classList.toggle('sel', b.dataset.vid === vid)); } });
+    $('#v-q').addEventListener('input', e => { venueQ = e.target.value; drawList(); });
+    $('#v-list').addEventListener('click', e => {
+      const b = e.target.closest('.venue-item'); if (!b) return;
+      m.select(b.dataset.vid, { center: true });
+      if (window.innerWidth < 900) $('#venues-map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    if (pendingVenue) { const vid = pendingVenue; pendingVenue = null; m.select(vid, { center: true }); }
+  }
+  let venueQ = '', venueOpenOnly = false, pendingVenue = null;
+
+  // ---------- События ----------
+  function dateBlock(e) {
+    const d = new Date(e.at);
+    return `<div class="ev-date"><b>${fDay(d)}</b><span>${fMon(d)}</span><span class="mono">${fTime(d)}</span></div>`;
+  }
+  function statusPill(e, u) {
+    const inv = u && myInvite(e, u);
+    if (e.hostId === u?.id) return `<span class="pill pill-host">${L('Организатор', 'Host')}</span>`;
+    if (!inv) return '';
+    return `<span class="pill pill-${inv.status}">${{ going: L('Иду', 'Going'), pending: L('Ждёт ответа', 'Awaiting reply'), declined: L('Не иду', 'Not going') }[inv.status]}</span>`;
+  }
+  function eventCard(e, u, href = `#/event/${e.id}`) {
+    const ids = goingIds(e), b = bill(e);
+    const top = ranking(e.picks, tobaccoName)[0];
+    return `<a class="ev-card ${isPast(e) ? 'ev-past' : ''}" href="${href}">
+      ${dateBlock(e)}
+      <div class="ev-body">
+        <h3>${esc(e.title)}</h3>
+        <div class="ev-venue">${ICON.pin}<span>${esc(e.venue)}</span></div>
+        ${top ? `<div><span class="chip chip-accent">${L('Лидирует', 'Leading')}: ${esc(tobaccoName(top.id))} · ${top.users.length}</span></div>` : ''}
+        <div class="ev-meta">
+          ${b.total ? `<span>${ICON.wallet}${money(b.per)} ${L('с человека', 'per person')}</span>` : ''}
+          ${e.comments.length ? `<span>${ICON.chat}${e.comments.length}</span>` : ''}
+        </div>
+        <div class="ev-foot">${avatarStack(ids)}${statusPill(e, u)}</div>
+      </div>
+    </a>`;
+  }
 
   // Лента: что происходит у друзей и в ваших сборах.
   function feedItems(u) {
-    const items = [], friends = new Set(u.friends), nm = id => `<a href="#/user/${id}"><b>${esc(userById(id)?.name || 'Кто-то')}</b></a>`;
+    const items = [], friends = new Set(u.friends), nm = id => `<a href="#/user/${id}"><b>${esc(userById(id)?.name || '—')}</b></a>`;
     const ev = e => `«<a href="#/event/${e.id}">${esc(e.title)}</a>»`;
     for (const e of db.events) {
       if (!isMember(e, u)) continue;
-      for (const c of e.comments) if (c.userId !== u.id) items.push({ at: c.at, who: c.userId, icon: 'chat', html: `${nm(c.userId)} в ${ev(e)}: ${esc(c.text.length > 90 ? c.text.slice(0, 90) + '…' : c.text)}` });
-      for (const i of e.invites) if (i.at && i.userId && i.userId !== u.id && i.status !== 'pending') items.push({ at: i.at, who: i.userId, icon: i.status === 'going' ? 'check' : 'x', html: `${nm(i.userId)} ${i.status === 'going' ? 'идёт на' : 'не сможет прийти на'} ${ev(e)}` });
-      if (e.createdAt && e.hostId !== u.id && myInvite(e, u)) items.push({ at: e.createdAt, who: e.hostId, icon: 'plus', html: `${nm(e.hostId)} зовёт вас на ${ev(e)}` });
+      for (const c of e.comments) if (c.userId !== u.id) items.push({ at: c.at, who: c.userId, icon: 'chat', html: `${nm(c.userId)} ${L('в', 'in')} ${ev(e)}: ${esc(c.text.length > 90 ? c.text.slice(0, 90) + '…' : c.text)}` });
+      for (const i of e.invites) if (i.at && i.userId && i.userId !== u.id && i.status !== 'pending') items.push({ at: i.at, who: i.userId, icon: i.status === 'going' ? 'check' : 'x', html: `${nm(i.userId)} ${i.status === 'going' ? L('идёт на', 'is going to') : L('не сможет прийти на', 'can’t make it to')} ${ev(e)}` });
+      if (e.createdAt && e.hostId !== u.id && myInvite(e, u)) items.push({ at: e.createdAt, who: e.hostId, icon: 'plus', html: `${nm(e.hostId)} ${L('зовёт вас на', 'invites you to')} ${ev(e)}` });
     }
-    for (const m of db.mixes) if (friends.has(m.authorId)) items.push({ at: m.at, who: m.authorId, icon: 'smoke', html: `${nm(m.authorId)} делится миксом <button class="link-btn" data-action="catTab" data-tab="mixes">«${esc(m.name)}»</button>` });
-    for (const r of db.reviews) if (friends.has(r.userId)) items.push({ at: r.at, who: r.userId, icon: 'star', html: `${nm(r.userId)} оценивает <button class="link-btn" data-action="tobacco" data-id="${r.tobaccoId}">${esc(tobaccoName(r.tobaccoId))}</button> на ${r.rating} из 5` });
+    for (const m of db.mixes) if (friends.has(m.authorId)) items.push({ at: m.at, who: m.authorId, icon: 'smoke', html: `${nm(m.authorId)} ${L('делится миксом', 'shares a mix')} <button class="link-btn" data-action="catTab" data-tab="mixes">«${esc(m.name)}»</button>` });
+    for (const r of db.reviews) if (friends.has(r.userId)) items.push({ at: r.at, who: r.userId, icon: 'star', html: `${nm(r.userId)} ${L('оценивает', 'rates')} <button class="link-btn" data-action="tobacco" data-id="${r.tobaccoId}">${esc(tobaccoName(r.tobaccoId))}</button> ${L('на', '')} ${r.rating} ${L('из 5', 'out of 5')}` });
     return items.filter(x => x.at).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 40);
   }
   function feedHtml(items) {
-    if (!items.length) return emptyState('В ленте пока тихо', 'Здесь появятся новые сообщения в ваших сборах, ответы на приглашения и миксы друзей.', '<a class="btn btn-primary btn-sm" href="#/people">Найти друзей</a>');
+    if (!items.length) return emptyState(L('В ленте пока тихо', 'Nothing in the feed yet'), L('Здесь появятся новые сообщения в ваших сборах, ответы на приглашения и миксы друзей.', 'New messages in your events, replies to invitations and friends’ mixes will show up here.'), `<a class="btn btn-primary btn-sm" href="#/people">${L('Найти друзей', 'Find friends')}</a>`);
     const dayKey = iso => { const d = new Date(iso); d.setHours(0, 0, 0, 0); return d.getTime(); };
-    const today = dayKey(Date.now()), label = k => k === today ? 'Сегодня' : k === today - 864e5 ? 'Вчера' : dtShort.format(new Date(k));
-    const xIcon = svg('<path d="M6 6l12 12M18 6L6 18"/>');
+    const today = dayKey(Date.now()), label = k => k === today ? L('Сегодня', 'Today') : k === today - 864e5 ? L('Вчера', 'Yesterday') : fShort(new Date(k));
     let out = '', last = null;
     for (const it of items) {
       const k = dayKey(it.at);
       if (k !== last) { out += `${last === null ? '' : '</ul>'}<h4 class="feed-day">${label(k)}</h4><ul class="feed">`; last = k; }
-      out += `<li class="feed-item"><span class="feed-av">${avatar(userById(it.who), 'sm')}<span class="feed-ic ic-${it.icon}">${it.icon === 'x' ? xIcon : ICON[it.icon]}</span></span>
-        <p>${it.html}</p><time class="mono">${dtTime.format(new Date(it.at))}</time></li>`;
+      out += `<li class="feed-item"><span class="feed-av">${avatar(userById(it.who), 'sm')}<span class="feed-ic ic-${it.icon}">${ICON[it.icon]}</span></span>
+        <p>${it.html}</p><time class="mono">${fTime(new Date(it.at))}</time></li>`;
     }
     return out + '</ul>';
   }
@@ -542,31 +931,34 @@
   const cal = { y: new Date().getFullYear(), m: new Date().getMonth(), day: null };
   function calendarHtml(list, u) {
     const first = new Date(cal.y, cal.m, 1), startPad = (first.getDay() + 6) % 7, days = new Date(cal.y, cal.m + 1, 0).getDate();
-    const title = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(first).replace(' г.', '');
-    const todayYmd = ymd(new Date());
-    const byDay = {};
+    const todayYmd = ymd(new Date()), byDay = {};
     for (const e of list) { const k = ymd(new Date(e.at)); (byDay[k] ||= []).push(e); }
     let cells = '';
     for (let i = 0; i < startPad; i++) cells += '<span class="cal-cell pad"></span>';
     for (let d = 1; d <= days; d++) {
       const k = ymd(new Date(cal.y, cal.m, d)), evs = byDay[k] || [];
-      cells += `<button type="button" class="cal-cell ${k === todayYmd ? 'today' : ''} ${cal.day === k ? 'sel' : ''} ${evs.length ? 'has' : ''}" data-action="calDay" data-day="${k}" aria-label="${d}${evs.length ? `, ${evs.length} ${plural(evs.length, 'сбор', 'сбора', 'сборов')}` : ''}">
+      cells += `<button type="button" class="cal-cell ${k === todayYmd ? 'today' : ''} ${cal.day === k ? 'sel' : ''} ${evs.length ? 'has' : ''}" data-action="calDay" data-day="${k}" aria-label="${d}${evs.length ? `, ${evs.length} ${pl(evs.length, ['сбор', 'сбора', 'сборов'], ['event', 'events'])}` : ''}">
         <span class="cal-n">${d}</span>${evs.slice(0, 3).map(e => `<i class="cal-dot ${isPast(e) ? 'past' : e.hostId === u.id ? 'host' : ''}"></i>`).join('')}</button>`;
     }
     const sel = cal.day ? (byDay[cal.day] || []) : [];
     return `<div class="cal">
-      <div class="cal-head"><button class="icon-btn" type="button" data-action="calNav" data-step="-1" aria-label="Предыдущий месяц">‹</button>
-        <b>${title[0].toUpperCase() + title.slice(1)}</b><button class="icon-btn" type="button" data-action="calNav" data-step="1" aria-label="Следующий месяц">›</button></div>
-      <div class="cal-grid">${['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map(w => `<span class="cal-w">${w}</span>`).join('')}${cells}</div>
-      <div class="cal-legend"><span><i class="cal-dot"></i>Иду</span><span><i class="cal-dot host"></i>Организую</span><span><i class="cal-dot past"></i>Прошёл</span></div>
+      <div class="cal-head"><button class="icon-btn" type="button" data-action="calNav" data-step="-1" aria-label="${L('Предыдущий месяц', 'Previous month')}">‹</button>
+        <b>${fMonthYear(first)}</b><button class="icon-btn" type="button" data-action="calNav" data-step="1" aria-label="${L('Следующий месяц', 'Next month')}">›</button></div>
+      <div class="cal-grid">${DAY_NAMES[lang].map(w => `<span class="cal-w">${w}</span>`).join('')}${cells}</div>
+      <div class="cal-legend"><span><i class="cal-dot"></i>${L('Иду', 'Going')}</span><span><i class="cal-dot host"></i>${L('Организую', 'Hosting')}</span><span><i class="cal-dot past"></i>${L('Прошёл', 'Past')}</span></div>
     </div>
-    ${cal.day ? `<h4 class="feed-day">${dtFull.format(new Date(cal.day + 'T12:00'))}</h4>${sel.length ? `<div class="ev-grid">${sel.map(e => eventCard(e, u)).join('')}</div>` : '<p class="muted">В этот день сборов нет.</p>'}` : '<p class="muted">Нажмите на день, чтобы увидеть сборы.</p>'}`;
+    ${cal.day ? `<h4 class="feed-day">${cap(fFull(new Date(cal.day + 'T12:00')))}</h4>${sel.length ? `<div class="ev-grid">${sel.map(e => eventCard(e, u)).join('')}</div>` : `<p class="muted">${L('В этот день сборов нет.', 'No events on this day.')}</p>`}` : `<p class="muted">${L('Нажмите на день, чтобы увидеть сборы.', 'Tap a day to see its events.')}</p>`}`;
   }
 
   let homeQ = '';
-  function pageHome() {
+  function pageEvents() {
     const u = me();
-    if (!u) return pageLanding();
+    if (!u) {
+      view.innerHTML = `<section class="section"><span class="eyebrow">${L('События', 'Events')}</span><h1>${L('Сборы и приглашения', 'Meet-ups and invitations')}</h1></section>
+        ${emptyState(L('Войдите, чтобы видеть свои сборы', 'Sign in to see your events'), L('Создавайте сборы, принимайте приглашения друзей и выбирайте табак вместе.', 'Create events, accept invitations from friends and pick tobacco together.'),
+          `<div class="btn-row"><a class="btn btn-primary btn-sm" href="#/register">${L('Зарегистрироваться', 'Sign up')}</a><a class="btn btn-sm" href="#/login">${L('Войти', 'Sign in')}</a></div>`)}`;
+      return;
+    }
     const mine = db.events.filter(e => isMember(e, u)).sort((a, b) => new Date(a.at) - new Date(b.at));
     const invites = mine.filter(e => !isPast(e) && myInvite(e, u)?.status === 'pending');
     const upcoming = mine.filter(e => !isPast(e) && !invites.includes(e));
@@ -583,25 +975,23 @@
         <div class="next-main">
           <span class="next-when"><span class="soon-dot"></span><span data-countdown="${next.at}">${countdown(next.at)}</span></span>
           <h2><a href="#/event/${next.id}">${esc(next.title)}</a></h2>
-          <div class="next-facts"><span>${ICON.pin}${esc(next.venue)}</span><span>${ICON.cal}${whenLabel(next)}</span>${b.total ? `<span>${ICON.wallet}${money(b.per)} с человека</span>` : ''}</div>
+          <div class="next-facts"><span>${ICON.pin}${esc(next.venue)}</span><span>${ICON.cal}${whenLabel(next)}</span>${b.total ? `<span>${ICON.wallet}${money(b.per)} ${L('с человека', 'per person')}</span>` : ''}</div>
         </div>
         <div class="next-side">${avatarStack(goingIds(next), 5)}
-          <div class="btn-row">${canVote(next, u) && !picked ? `<button class="btn btn-sm" data-action="pickTobacco" data-id="${next.id}">Выбрать табаки</button>` : ''}<a class="btn btn-primary btn-sm" href="#/event/${next.id}">Открыть</a></div></div>
+          <div class="btn-row">${canVote(next, u) && !picked ? `<button class="btn btn-sm" data-action="pickTobacco" data-id="${next.id}">${L('Выбрать табаки', 'Pick tobacco')}</button>` : ''}<a class="btn btn-primary btn-sm" href="#/event/${next.id}">${L('Открыть', 'Open')}</a></div></div>
       </section>`;
-    })() : invites.length ? `<a class="next-card next-invite" href="#" data-action="switchTab" data-tabs="home" data-tab="invites"><div class="next-main"><span class="next-when"><span class="soon-dot"></span>Новые приглашения</span>
-        <h2>Вас зовут на ${invites.length} ${plural(invites.length, 'сбор', 'сбора', 'сборов')}</h2></div><span class="btn btn-primary btn-sm">Посмотреть</span></a>` : '';
+    })() : '';
 
-    const qa = (icon, label, attrs) => `<${attrs.startsWith('href') ? 'a' : 'button type="button"'} class="qa" ${attrs}><span class="qa-ic">${icon}</span>${label}</${attrs.startsWith('href') ? 'a' : 'button'}>`;
     const grid = list => list.length ? `<div class="ev-grid">${list.map(e => eventCard(e, u)).join('')}</div>` : '';
     const filterQ = list => { const q = homeQ.trim().toLowerCase(); return q ? list.filter(e => `${e.title} ${e.venue} ${e.address}`.toLowerCase().includes(q)) : list; };
-    const search = (extra = '') => `<div class="panel-tools"><input class="input" id="home-q" type="search" placeholder="Поиск по названию или заведению" value="${esc(homeQ)}" aria-label="Поиск сборов">${extra}</div>`;
-    const newBtn = '<button class="btn btn-primary btn-sm" data-action="newEvent">Создать сбор</button>';
-
+    const nothing = `<p class="muted">${L('Ничего не нашлось.', 'Nothing found.')}</p>`;
+    const search = (extra = '') => `<div class="panel-tools"><input class="input" id="home-q" type="search" placeholder="${L('Поиск по названию или заведению', 'Search by name or venue')}" value="${esc(homeQ)}" aria-label="${L('Поиск сборов', 'Search events')}">${extra}</div>`;
+    const newBtn = `<button class="btn btn-primary btn-sm" data-action="newEvent">${L('Создать сбор', 'Create event')}</button>`;
     const lists = { upcoming, hosting, past };
     const empties = {
-      upcoming: emptyState('Ближайших сборов нет', 'Создайте сбор, выберите заведение и позовите друзей по номеру телефона.', newBtn),
-      hosting: emptyState('Вы пока ничего не организуете', 'Соберите друзей сами: это займёт меньше минуты.', newBtn),
-      past: emptyState('Здесь будет история', 'После первого сбора тут появится, где вы были и что курили.')
+      upcoming: emptyState(L('Ближайших сборов нет', 'No upcoming events'), L('Создайте сбор, выберите заведение и позовите друзей по номеру телефона.', 'Create an event, pick a venue and invite friends by phone number.'), newBtn),
+      hosting: emptyState(L('Вы пока ничего не организуете', 'You are not hosting anything yet'), L('Соберите друзей сами: это займёт меньше минуты.', 'Gather your friends yourself: it takes under a minute.'), newBtn),
+      past: emptyState(L('Здесь будет история', 'Your history will appear here'), L('После первого сбора тут появится, где вы были и что курили.', 'After your first event you will see where you went and what you smoked.'))
     };
     let body;
     if (tab.home === 'invites') {
@@ -610,224 +1000,180 @@
         return `<div class="ev-card invite-card">${dateBlock(e)}
           <div class="ev-body"><h3><a href="#/event/${e.id}">${esc(e.title)}</a></h3>
             <div class="ev-venue">${ICON.pin}<span>${esc(e.venue)}</span></div>
-            <div class="ev-venue">${avatar(host, 'xs')}<span>Зовёт ${esc(host?.name)}</span></div>
-            <div class="invite-actions"><button class="btn btn-primary btn-sm" data-action="rsvp" data-id="${e.id}" data-status="going">Иду</button>
-            <button class="btn btn-sm" data-action="rsvp" data-id="${e.id}" data-status="declined">Не смогу</button></div></div></div>`;
-      }).join('')}</div>` : emptyState('Новых приглашений нет', 'Когда друзья позовут вас на сбор, приглашение появится здесь.', '<a class="btn btn-sm" href="#/people">Найти друзей</a>');
+            <div class="ev-venue">${avatar(host, 'xs')}<span>${L('Зовёт', 'Invited by')} ${esc(host?.name)}</span></div>
+            <div class="invite-actions"><button class="btn btn-primary btn-sm" data-action="rsvp" data-id="${e.id}" data-status="going">${L('Иду', 'Going')}</button>
+            <button class="btn btn-sm" data-action="rsvp" data-id="${e.id}" data-status="declined">${L('Не смогу', 'Can’t make it')}</button></div></div></div>`;
+      }).join('')}</div>` : emptyState(L('Новых приглашений нет', 'No new invitations'), L('Когда друзья позовут вас на сбор, приглашение появится здесь.', 'When friends invite you, the invitation will appear here.'), `<a class="btn btn-sm" href="#/people">${L('Найти друзей', 'Find friends')}</a>`);
     } else if (tab.home === 'feed') {
       body = feedHtml(feed);
     } else {
-      const k = tab.home, toggle = k === 'upcoming' ? `<div class="segmented sm" role="radiogroup" aria-label="Вид">
-          <button role="radio" aria-checked="${homeView === 'list'}" class="${homeView === 'list' ? 'on' : ''}" data-action="homeView" data-view="list">Список</button>
-          <button role="radio" aria-checked="${homeView === 'cal'}" class="${homeView === 'cal' ? 'on' : ''}" data-action="homeView" data-view="cal">Календарь</button></div>` : '';
+      const k = tab.home, toggle = k === 'upcoming' ? `<div class="segmented sm" role="radiogroup" aria-label="${L('Вид', 'View')}">
+          <button role="radio" aria-checked="${homeView === 'list'}" class="${homeView === 'list' ? 'on' : ''}" data-action="homeView" data-view="list">${L('Список', 'List')}</button>
+          <button role="radio" aria-checked="${homeView === 'cal'}" class="${homeView === 'cal' ? 'on' : ''}" data-action="homeView" data-view="cal">${L('Календарь', 'Calendar')}</button></div>` : '';
       if (k === 'upcoming' && homeView === 'cal') body = `<div class="panel-tools">${toggle}</div>${calendarHtml(mine.filter(e => myInvite(e, u)?.status !== 'declined'), u)}`;
-      else body = lists[k].length ? `${search(toggle)}<div id="home-grid">${grid(filterQ(lists[k])) || '<p class="muted">Ничего не нашлось.</p>'}</div>` : (toggle ? `<div class="panel-tools">${toggle}</div>` : '') + empties[k];
+      else body = lists[k].length ? `${search(toggle)}<div id="home-grid">${grid(filterQ(lists[k])) || nothing}</div>` : (toggle ? `<div class="panel-tools">${toggle}</div>` : '') + empties[k];
     }
 
     view.innerHTML = `
-      <section class="greet-line"><h1>Привет, ${esc(u.name)}</h1><span class="muted">${dtFull.format(new Date())}</span></section>
+      <section class="greet-line"><div><span class="eyebrow">${L('События', 'Events')}</span><h1>${L('Мои сборы', 'My events')}</h1></div>
+        <button class="btn btn-primary btn-sm" type="button" data-action="newEvent">${ICON.plus}${L('Новый сбор', 'New event')}</button></section>
       ${nextCard}
-      <nav class="quick" aria-label="Быстрые действия">
-        ${qa(ICON.plus, 'Новый сбор', 'data-action="newEvent"')}
-        ${qa(ICON.smoke, 'Свой микс', 'data-action="newMix"')}
-        ${qa(ICON.users, 'Позвать друга', 'href="#/people"')}
-        ${qa(ICON.star, 'Каталог', 'href="#/catalog"')}
-      </nav>
       ${uTabs('home', [
-        { key: 'upcoming', label: 'Ближайшие', count: upcoming.length },
-        { key: 'invites', label: 'Приглашения', count: invites.length, alert: invites.length > 0 },
-        { key: 'hosting', label: 'Организую', count: hosting.length },
-        { key: 'past', label: 'Прошедшие' },
-        { key: 'feed', label: 'Лента', count: unseen, alert: unseen > 0 }
+        { key: 'upcoming', label: L('Ближайшие', 'Upcoming'), count: upcoming.length },
+        { key: 'invites', label: L('Приглашения', 'Invitations'), count: invites.length, alert: invites.length > 0 },
+        { key: 'hosting', label: L('Организую', 'Hosting'), count: hosting.length },
+        { key: 'past', label: L('Прошедшие', 'Past') },
+        { key: 'feed', label: L('Лента', 'Feed'), count: unseen, alert: unseen > 0 }
       ])}
       ${tabPanel('home', body)}`;
-
     if (tab.home === 'feed') prefs.set('feedSeen', Date.now());
     $('#home-q')?.addEventListener('input', ev => {
       homeQ = ev.target.value;
-      $('#home-grid').innerHTML = grid(filterQ(lists[tab.home])) || '<p class="muted">Ничего не нашлось.</p>';
+      $('#home-grid').innerHTML = grid(filterQ(lists[tab.home])) || nothing;
     });
   }
 
   function stepsHtml() {
     return `<div class="steps">
-      <div class="step"><h3>Создайте сбор</h3><p>Нажмите «+», укажите заведение, время, сколько кальянов и почём.</p></div>
-      <div class="step"><h3>Пригласите друзей</h3><p>Найдите друзей по имени или номеру. Тех, кого ещё нет в сервисе, пригласите по номеру: сбор появится у них после регистрации.</p></div>
-      <div class="step"><h3>Выберите табаки</h3><p>Участники отмечают вкусы и чашу, самые популярные поднимаются наверх. Сумма делится поровну.</p></div>
+      <div class="step"><h3>${L('Выберите место', 'Pick a place')}</h3><p>${L('Откройте карту заведений: адреса, часы работы и что открыто сейчас.', 'Open the venue map: addresses, opening hours and what is open now.')}</p></div>
+      <div class="step"><h3>${L('Пригласите друзей', 'Invite friends')}</h3><p>${L('Нажмите «+», укажите время и позовите друзей по имени или номеру. Тех, кого ещё нет в сервисе, сбор дождётся после регистрации.', 'Tap “+”, set the time and invite friends by name or number. People not yet on the service get the event once they sign up.')}</p></div>
+      <div class="step"><h3>${L('Выберите табаки', 'Pick tobacco')}</h3><p>${L('Участники отмечают вкусы и чашу, самые популярные поднимаются наверх. Сумма делится поровну.', 'Guests mark flavours and a bowl, the most popular rise to the top. The bill is split evenly.')}</p></div>
     </div>`;
   }
 
-  function mixCard(m, u) {
-    const author = userById(m.authorId), liked = !!u && m.likes.includes(u.id);
-    return `<article class="cat-card mix-card">
-      <div class="cat-top"><span class="cat-brand">Микс · ${m.parts.length} ${plural(m.parts.length, 'вкус', 'вкуса', 'вкусов')}</span>
-        <button class="like-btn ${liked ? 'on' : ''}" type="button" data-action="likeMix" data-id="${m.id}" aria-pressed="${liked}" aria-label="Нравится">${ICON.heart}<span>${m.likes.length}</span></button></div>
-      <h3>${esc(m.name)}</h3>
-      <div class="mix-bar">${m.parts.map(p => `<span style="flex:${p.pct};--pc:${tobacco(p.id)?.color || 'gray'}" title="${esc(tobaccoName(p.id))} ${p.pct}%"></span>`).join('')}</div>
-      <ul class="mix-legend">${m.parts.map(p => `<li><i style="--pc:${tobacco(p.id)?.color || 'gray'}"></i><span>${esc(tobaccoName(p.id))}</span><b class="mono">${p.pct}%</b></li>`).join('')}</ul>
-      <div class="ev-venue">${avatar(author, 'xs')}<span>${esc(author?.name || 'Гость')}</span></div>
-    </article>`;
-  }
-
-  function pageLanding() {
-    const sample = eventById('e1') || db.events[0];
-    const topMixes = [...db.mixes].sort((a, b) => b.likes.length - a.likes.length).slice(0, 6);
-    const topT = [...CATALOG.tobaccos].sort((a, b) => ratingOf(b.id).avg - ratingOf(a.id).avg || ratingOf(b.id).n - ratingOf(a.id).n).slice(0, 8);
-    const feat = (icon, h, p) => `<div class="feature"><span class="feature-ic">${icon}</span><h3>${h}</h3><p>${p}</p></div>`;
-    const body = {
-      how: `<section class="features">
-          ${feat(ICON.users, 'Приглашения по номеру', 'Зовите друзей из контактов. Кого нет в сервисе, получит сбор после регистрации.')}
-          ${feat(ICON.star, 'Голосование за табаки', 'Каждый отмечает вкусы и чашу. Популярное поднимается наверх списка.')}
-          ${feat(ICON.wallet, 'Складчина', 'Укажите число кальянов и цену. Сервис посчитает, сколько с каждого, и отметит, кто скинулся.')}
-          ${feat(ICON.chat, 'Обсуждение и напоминания', 'Чат внутри сбора, напоминание за час и выгрузка в календарь телефона.')}
-        </section>${stepsHtml()}`,
-      mixes: `<div class="cat-grid">${topMixes.map(m => mixCard(m, null)).join('')}</div>`,
-      top: `<div class="cat-grid">${topT.map(t => tobaccoCard(t, null)).join('')}</div>`
-    }[tab.guest] || '';
-    view.innerHTML = `
-      <section class="hero">
-        <div><span class="eyebrow">Hookah Party</span>
-          <h1>Собирайте друзей на&nbsp;<span>кальян</span> в&nbsp;пару касаний</h1>
-          <p>Выберите заведение, отправьте приглашения и проголосуйте за табаки. Кальянщик получит готовый список, а счёт поделится сам.</p>
-          <div class="hero-cta"><a class="btn btn-primary" href="#/register">Зарегистрироваться</a><a class="btn" href="#/login">У меня есть аккаунт</a></div>
-        </div>
-        <div class="hero-preview">${sample ? `<span class="eyebrow">Пример сбора</span><div style="height:10px"></div>${eventCard(sample, null, '#/login')}` : ''}</div>
-      </section>
-      ${uTabs('guest', [{ key: 'how', label: 'Как это работает' }, { key: 'mixes', label: 'Популярные миксы' }, { key: 'top', label: 'Лучшие табаки' }])}
-      ${tabPanel('guest', body)}
-      <section class="cta-band"><div><h2>Пятница уже скоро</h2><p>Регистрация занимает минуту: имя, номер и код из SMS.</p></div><a class="btn btn-primary" href="#/register">Создать аккаунт</a></section>`;
-  }
-
   function pageHow() {
-    view.innerHTML = `<section class="section"><span class="eyebrow">Помощь</span><h1>Как это работает</h1></section>
+    view.innerHTML = `<section class="section"><span class="eyebrow">${L('Помощь', 'Help')}</span><h1>${L('Как это работает', 'How it works')}</h1></section>
       ${stepsHtml()}
-      <section class="panel"><h2>Подтверждение телефона</h2><p class="muted" style="margin-top:8px;max-width:65ch">
-      При регистрации мы отправляем на номер четырёхзначный код. Пока номер не подтверждён, войти в сервис и получать приглашения нельзя.
-      Так друзья могут найти вас по номеру, а приглашения не уходят чужим людям. Полный номер видят только друзья и участники общих сборов.</p></section>
-      <section class="panel"><h2>Складчина</h2><p class="muted" style="margin-top:8px;max-width:65ch">
-      Организатор указывает, сколько кальянов заказать и сколько стоит один. Сумма делится поровну между теми, кто идёт.
-      Организатор отмечает, кто уже перевёл деньги, и все видят, сколько собрано.</p></section>
-      <section class="panel"><h2>Напоминания</h2><p class="muted" style="margin-top:8px;max-width:65ch">
-      Включите колокольчик на странице сбора, и сайт напомнит за час, если он открыт. Чтобы напоминание пришло наверняка,
-      нажмите «В календарь»: сбор добавится в календарь телефона с напоминанием за час.</p></section>`;
+      <section class="panel"><h2>${L('Подтверждение телефона', 'Phone verification')}</h2><p class="muted" style="margin-top:8px;max-width:65ch">
+      ${L('При регистрации мы отправляем на номер четырёхзначный код. Пока номер не подтверждён, войти в сервис и получать приглашения нельзя. Полный номер видят только друзья и участники общих сборов.',
+        'When you sign up we text a four-digit code to your number. Until it is confirmed you cannot sign in or receive invitations. Only friends and people from shared events see your full number.')}</p></section>
+      <section class="panel"><h2>${L('Складчина', 'Splitting the bill')}</h2><p class="muted" style="margin-top:8px;max-width:65ch">
+      ${L('Организатор указывает, сколько кальянов заказать и сколько стоит один. Сумма делится поровну между теми, кто идёт. Организатор отмечает, кто уже перевёл деньги.',
+        'The host sets how many hookahs to order and the price of one. The total is split evenly between everyone going. The host marks who has already paid.')}</p></section>
+      <section class="panel"><h2>${L('Напоминания', 'Reminders')}</h2><p class="muted" style="margin-top:8px;max-width:65ch">
+      ${L('Включите колокольчик на странице сбора, и сайт напомнит за час, если он открыт. Чтобы напоминание пришло наверняка, нажмите «В календарь».',
+        'Turn on the bell on the event page and the site reminds you an hour before while it is open. For a guaranteed reminder, tap “Add to calendar”.')}</p></section>`;
   }
 
   function pageEvent(id) {
     const u = me();
     if (!u) return go('login');
     const e = eventById(id);
-    if (!e) { view.innerHTML = `<div class="empty"><p>Сбор не найден или удалён.</p><a class="btn" href="#/">К моим сборам</a></div>`; return; }
-    if (!isMember(e, u)) { view.innerHTML = `<div class="empty"><p>Это закрытый сбор. Попросите организатора прислать приглашение.</p><a class="btn" href="#/">К моим сборам</a></div>`; return; }
+    if (!e) { view.innerHTML = emptyState(L('Сбор не найден', 'Event not found'), L('Возможно, его отменили.', 'It may have been cancelled.'), `<a class="btn btn-sm" href="#/events">${L('К моим сборам', 'To my events')}</a>`); return; }
+    if (!isMember(e, u)) { view.innerHTML = emptyState(L('Это закрытый сбор', 'This is a private event'), L('Попросите организатора прислать приглашение.', 'Ask the host to send you an invitation.'), `<a class="btn btn-sm" href="#/events">${L('К моим сборам', 'To my events')}</a>`); return; }
     const d = new Date(e.at), host = userById(e.hostId), inv = myInvite(e, u), isHost = e.hostId === u.id, past = isPast(e);
     const going = goingIds(e), b = bill(e);
     const tRank = ranking(e.picks, tobaccoName), bRank = ranking(e.bowls, bowlName);
     const myPicks = e.picks[u.id] || [];
     const reminded = !!e.remind[u.id];
-    const place = [e.venue, e.address].filter(Boolean).join(', ');
+    const v = eventVenue(e);
+    const q = placeQuery(e.venue, e.address);
+    const votes = n => pl(n, ['голос', 'голоса', 'голосов'], ['vote', 'votes']);
 
     const rankHtml = (rank, kind) => {
-      if (!rank.length) return `<div class="empty"><p>${kind === 't' ? 'Пока никто не выбрал табак.' : 'Чашу ещё не выбрали.'}</p></div>`;
+      if (!rank.length) return emptyState(kind === 't' ? L('Пока никто не выбрал табак', 'No tobacco picked yet') : L('Чашу ещё не выбрали', 'No bowl picked yet'), kind === 't' ? L('Отметьте свои вкусы, и список начнёт складываться.', 'Mark your flavours and the list will start to form.') : L('Проголосуйте за чашу, на которой хотите курить.', 'Vote for the bowl you want.'));
       const max = rank[0].users.length;
       return `<ol class="rank">${rank.map((r, i) => {
         const n = r.users.length;
         const lead = i === 0 && (rank.length === 1 || rank[1].users.length < n);
-        let name, sub, art;
-        if (kind === 't') { const t = tobacco(r.id); art = `<span class="swatch" style="--pc:${t?.color}"></span>`; name = `<b>${esc(t?.brand)}</b> ${esc(t?.flavor)}`; sub = `${esc(t?.note)} · крепость ${t?.strength}/10`; }
-        else { const bw = bowl(r.id); art = ''; name = `<b>${esc(bw?.name)}</b><small>${esc(bw?.type)}</small>`; sub = esc(bw?.note); }
+        let name, sub, art = '';
+        if (kind === 't') { const t = tobacco(r.id); art = `<span class="swatch" style="--pc:${t?.color}"></span>`; name = `<b>${esc(t?.brand)}</b> ${esc(t?.flavor)}`; sub = `${esc(tr(t?.note))} · ${L('крепость', 'strength')} ${t?.strength}/10`; }
+        else { const bw = bowl(r.id); name = `<b>${esc(tr(bw?.name))}</b><small>${tr(BOWL_TYPE[bw?.type] || ['', ''])}</small>`; sub = esc(tr(bw?.note)); }
         return `<li class="rank-row ${lead ? 'is-top' : ''}">
           <div class="rank-pos">${i + 1}</div>
           <div class="rank-body">
-            <div class="rank-name">${art}${name} ${lead ? '<span class="lead-badge">лидер</span>' : ''}</div>
+            <div class="rank-name">${art}${name} ${lead ? `<span class="lead-badge">${L('лидер', 'top')}</span>` : ''}</div>
             <div class="rank-bar"><span style="width:${Math.round(n / max * 100)}%"></span></div>
             <div class="rank-meta">${avatarStack(r.users, 6, 'xs')}<span>${sub}</span></div>
           </div>
-          <div class="rank-count">${n}<small>${plural(n, 'голос', 'голоса', 'голосов')}</small></div>
+          <div class="rank-count">${n}<small>${votes(n)}</small></div>
         </li>`;
       }).join('')}</ol>`;
     };
 
-    const statusLabel = { going: 'Идёт', pending: 'Ждём ответа', declined: 'Не придёт' };
+    const statusLabel = { going: L('Идёт', 'Going'), pending: L('Ждём ответа', 'Awaiting'), declined: L('Не придёт', 'Not going') };
     const personRow = (p, phone, pill) => `<li class="person">${avatar(p, 'sm')}<div class="person-name">
-      ${p ? `<a href="#/user/${p.id}"><b>${esc(p.name)}</b></a>` : '<b>Ещё не в сервисе</b>'}<small class="mono">${fmtPhone(phone)}</small></div>${pill}</li>`;
+      ${p ? `<a href="#/user/${p.id}"><b>${esc(p.name)}</b></a>` : `<b>${L('Ещё не в сервисе', 'Not on the service yet')}</b>`}<small class="mono">${fmtPhone(phone)}</small></div>${pill}</li>`;
     const people = [
-      personRow(host, host?.phone, '<span class="pill pill-host">Организатор</span>'),
+      personRow(host, host?.phone, `<span class="pill pill-host">${L('Организатор', 'Host')}</span>`),
       ...e.invites.map(i => { const p = i.userId ? userById(i.userId) : null; return personRow(p, p ? p.phone : i.phone, `<span class="pill pill-${i.status}">${statusLabel[i.status]}</span>`); })
     ].join('');
-
+    const paidLabel = paid => paid ? L('Скинул', 'Paid') : L('Не скинул', 'Not paid');
     const billHtml = b.total ? `
-      <div class="bill-sum"><div><small>${e.hookahs} ${plural(e.hookahs, 'кальян', 'кальяна', 'кальянов')} × ${money(e.price)}</small><b>${money(b.total)}</b></div>
-        <div><small>С каждого из ${going.length}</small><b>${money(b.per)}</b></div></div>
-      <div class="progress" role="img" aria-label="Собрано ${money(b.collected)} из ${money(b.total)}"><span style="width:${Math.round(b.collected / b.total * 100)}%"></span></div>
-      <p class="muted" style="font-size:13px">Собрано ${money(b.collected)} из ${money(b.total)}</p>
-      <ul class="people">${going.map(uid => {
-        const p = userById(uid), paid = !!e.paid[uid];
-        const ctl = isHost && !past ? `<button class="pay-btn ${paid ? 'on' : ''}" data-action="togglePaid" data-id="${e.id}" data-user="${uid}" aria-pressed="${paid}">${paid ? 'Скинул' : 'Не скинул'}</button>`
-          : `<span class="pill ${paid ? 'pill-going' : 'pill-pending'}">${paid ? 'Скинул' : 'Не скинул'}</span>`;
+      <div class="bill-sum"><div><small>${e.hookahs} × ${money(e.price)}</small><b>${money(b.total)}</b></div>
+        <div><small>${L(`С каждого из ${going.length}`, `Each of ${going.length}`)}</small><b>${money(b.per)}</b></div></div>
+      <div class="progress" role="img" aria-label="${L('Собрано', 'Collected')} ${money(b.collected)} / ${money(b.total)}"><span style="width:${Math.round(b.collected / b.total * 100)}%"></span></div>
+      <p class="muted" style="font-size:13px">${L('Собрано', 'Collected')} ${money(b.collected)} ${L('из', 'of')} ${money(b.total)}</p>
+      <ul class="people">${going.map(pid => {
+        const p = userById(pid), paid = !!e.paid[pid];
+        const ctl = isHost && !past ? `<button class="pay-btn ${paid ? 'on' : ''}" data-action="togglePaid" data-id="${e.id}" data-user="${pid}" aria-pressed="${paid}">${paidLabel(paid)}</button>`
+          : `<span class="pill ${paid ? 'pill-going' : 'pill-pending'}">${paidLabel(paid)}</span>`;
         return `<li class="person">${avatar(p, 'xs')}<div class="person-name"><b>${esc(p?.name)}</b></div>${ctl}</li>`;
       }).join('')}</ul>`
-      : `<div class="empty"><p>${isHost ? 'Укажите, сколько кальянов заказываете и почём, и сервис поделит счёт.' : 'Организатор ещё не указал цену.'}</p></div>`;
+      : `<p class="muted">${isHost ? L('Укажите, сколько кальянов заказываете и почём, и сервис поделит счёт.', 'Set how many hookahs you order and the price, and the bill will be split.') : L('Организатор ещё не указал цену.', 'The host has not set a price yet.')}</p>`;
 
     view.innerHTML = `
-      <a class="back" href="#/">← Мои сборы</a>
+      <a class="back" href="#/events">← ${L('Мои сборы', 'My events')}</a>
       <section class="ev-hero">
-        <div class="section-head"><div><span class="eyebrow">${past ? 'Сбор прошёл' : 'Сбор'}</span><h1 style="margin-top:8px">${esc(e.title)}</h1></div>
+        <div class="section-head"><div><span class="eyebrow">${past ? L('Сбор прошёл', 'Past event') : L('Сбор', 'Event')}</span><h1 style="margin-top:8px">${esc(e.title)}</h1></div>
           <div class="btn-row">
-            <button class="btn btn-sm" data-action="repeatEvent" data-id="${e.id}">${ICON.repeat}Повторить</button>
-            ${isHost && !past ? `<button class="btn btn-sm" data-action="editEvent" data-id="${e.id}">${ICON.edit}Изменить</button>
-              <button class="btn btn-danger btn-sm" data-action="deleteEvent" data-id="${e.id}">Отменить сбор</button>` : ''}
+            <button class="btn btn-sm" data-action="repeatEvent" data-id="${e.id}">${ICON.repeat}${L('Повторить', 'Repeat')}</button>
+            ${isHost && !past ? `<button class="btn btn-sm" data-action="editEvent" data-id="${e.id}">${ICON.edit}${L('Изменить', 'Edit')}</button>
+              <button class="btn btn-danger btn-sm" data-action="deleteEvent" data-id="${e.id}">${L('Отменить сбор', 'Cancel event')}</button>` : ''}
           </div></div>
         <div class="ev-facts">
-          <div class="fact"><small>Заведение</small><b>${esc(e.venue)}</b></div>
-          <div class="fact"><small>Адрес</small><b>${esc(e.address || 'Не указан')}</b></div>
-          <div class="fact"><small>Когда</small><b>${dtFull.format(d)}, ${dtTime.format(d)}</b></div>
-          <div class="fact"><small>Участники</small><b>${going.length} ${plural(going.length, 'идёт', 'идут', 'идут')} · ${e.invites.length + 1} ${plural(e.invites.length + 1, 'приглашён', 'приглашены', 'приглашены')}</b></div>
+          <div class="fact"><small>${L('Заведение', 'Venue')}</small><b>${esc(e.venue)}</b></div>
+          <div class="fact"><small>${L('Адрес', 'Address')}</small><b>${esc(e.address || L('Не указан', 'Not set'))}</b></div>
+          <div class="fact"><small>${L('Когда', 'When')}</small><b>${cap(fFull(d))}, ${fTime(d)}</b></div>
+          <div class="fact"><small>${L('Участники', 'Guests')}</small><b>${going.length} ${pl(going.length, ['идёт', 'идут', 'идут'], ['going', 'going'])} · ${e.invites.length + 1} ${pl(e.invites.length + 1, ['приглашён', 'приглашены', 'приглашены'], ['invited', 'invited'])}</b></div>
         </div>
         <div class="btn-row">
-          <a class="btn btn-sm" href="https://yandex.ru/maps/?text=${encodeURIComponent(place)}" target="_blank" rel="noopener">${ICON.pin}Яндекс Карты</a>
-          <a class="btn btn-sm" href="https://2gis.ru/search/${encodeURIComponent(place)}" target="_blank" rel="noopener">${ICON.pin}2ГИС</a>
-          ${e.mapUrl ? `<a class="btn btn-sm" href="${esc(e.mapUrl)}" target="_blank" rel="noopener">${ICON.ext}Сайт заведения</a>` : ''}
-          ${!past ? `<button class="btn btn-sm ${reminded ? 'btn-on' : ''}" data-action="toggleRemind" data-id="${e.id}" aria-pressed="${reminded}">${ICON.bell}${reminded ? 'Напомним за час' : 'Напомнить за час'}</button>
-          <button class="btn btn-sm" data-action="ics" data-id="${e.id}">${ICON.cal}В календарь</button>` : ''}
+          ${v ? `<button class="btn btn-sm" data-action="showVenue" data-vid="${v.id}">${ICON.home}${L('На нашей карте', 'On our map')}</button>` : ''}
+          <a class="btn btn-sm" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}" target="_blank" rel="noopener">${ICON.pin}Google ${L('Карты', 'Maps')}</a>
+          <a class="btn btn-sm" href="https://2gis.kg/bishkek/search/${encodeURIComponent(e.venue)}${v ? `?m=${v.lon},${v.lat}/18` : ''}" target="_blank" rel="noopener">${ICON.pin}2ГИС</a>
+          ${e.mapUrl ? `<a class="btn btn-sm" href="${esc(e.mapUrl)}" target="_blank" rel="noopener">${ICON.ext}${L('Сайт заведения', 'Venue website')}</a>` : ''}
+          ${!past ? `<button class="btn btn-sm ${reminded ? 'btn-on' : ''}" data-action="toggleRemind" data-id="${e.id}" aria-pressed="${reminded}">${ICON.bell}${reminded ? L('Напомним за час', 'Reminder on') : L('Напомнить за час', 'Remind me 1 h before')}</button>
+          <button class="btn btn-sm" data-action="ics" data-id="${e.id}">${ICON.cal}${L('В календарь', 'Add to calendar')}</button>` : ''}
         </div>
         ${e.desc ? `<p style="max-width:65ch">${esc(e.desc)}</p>` : ''}
-        ${inv && !past ? `<div class="rsvp"><span>Ваш ответ:</span>
-          <button class="btn btn-sm ${inv.status === 'going' ? 'btn-primary' : ''}" data-action="rsvp" data-id="${e.id}" data-status="going">Иду</button>
-          <button class="btn btn-sm ${inv.status === 'declined' ? 'btn-primary' : ''}" data-action="rsvp" data-id="${e.id}" data-status="declined">Не смогу</button></div>` : ''}
+        ${inv && !past ? `<div class="rsvp"><span>${L('Ваш ответ:', 'Your reply:')}</span>
+          <button class="btn btn-sm ${inv.status === 'going' ? 'btn-primary' : ''}" data-action="rsvp" data-id="${e.id}" data-status="going">${L('Иду', 'Going')}</button>
+          <button class="btn btn-sm ${inv.status === 'declined' ? 'btn-primary' : ''}" data-action="rsvp" data-id="${e.id}" data-status="declined">${L('Не смогу', 'Can’t make it')}</button></div>` : ''}
       </section>
       <div class="ev-layout">
         <div class="ev-main">
           <section class="panel">
-            <div class="panel-head"><div><h2>Табаки</h2><p class="muted" style="font-size:13.5px;margin-top:4px">Чем больше голосов, тем выше позиция</p></div>
-              ${canVote(e, u) && !past ? `<button class="btn btn-sm ${myPicks.length ? '' : 'btn-primary'}" data-action="pickTobacco" data-id="${e.id}">${myPicks.length ? `Мой выбор · ${myPicks.length}` : 'Выбрать табаки'}</button>` : ''}</div>
+            <div class="panel-head"><div><h2>${L('Табаки', 'Tobacco')}</h2><p class="muted" style="font-size:13.5px;margin-top:4px">${L('Чем больше голосов, тем выше позиция', 'More votes, higher position')}</p></div>
+              ${canVote(e, u) && !past ? `<button class="btn btn-sm ${myPicks.length ? '' : 'btn-primary'}" data-action="pickTobacco" data-id="${e.id}">${myPicks.length ? `${L('Мой выбор', 'My pick')} · ${myPicks.length}` : L('Выбрать табаки', 'Pick tobacco')}</button>` : ''}</div>
             ${rankHtml(tRank, 't')}
           </section>
           <section class="panel">
-            <div class="panel-head"><h2>Чаша</h2>
-              ${canVote(e, u) && !past ? `<button class="btn btn-sm" data-action="pickBowl" data-id="${e.id}">${e.bowls[u.id] ? 'Изменить' : 'Выбрать чашу'}</button>` : ''}</div>
+            <div class="panel-head"><h2>${L('Чаша', 'Bowl')}</h2>
+              ${canVote(e, u) && !past ? `<button class="btn btn-sm" data-action="pickBowl" data-id="${e.id}">${e.bowls[u.id] ? L('Изменить', 'Change') : L('Выбрать чашу', 'Pick a bowl')}</button>` : ''}</div>
             ${rankHtml(bRank, 'b')}
           </section>
           <section class="panel">
-            <div class="panel-head"><h2>Обсуждение</h2><span class="muted" style="font-size:13.5px">${e.comments.length} ${plural(e.comments.length, 'сообщение', 'сообщения', 'сообщений')}</span></div>
+            <div class="panel-head"><h2>${L('Обсуждение', 'Discussion')}</h2><span class="muted" style="font-size:13.5px">${e.comments.length} ${pl(e.comments.length, ['сообщение', 'сообщения', 'сообщений'], ['message', 'messages'])}</span></div>
             <ul class="comments">${e.comments.length ? e.comments.map(c => {
               const p = userById(c.userId);
-              return `<li class="comment">${avatar(p, 'sm')}<div class="comment-body"><div class="comment-head"><b>${esc(p?.name || 'Участник')}</b><small>${timeAgo(c.at)}</small>
-                ${c.userId === u.id || isHost ? `<button class="link-btn danger" data-action="deleteComment" data-id="${e.id}" data-comment="${c.id}">Удалить</button>` : ''}</div><p>${esc(c.text)}</p></div></li>`;
-            }).join('') : '<li class="muted">Пока тихо. Напишите первым: кто что берёт, во сколько встречаемся.</li>'}</ul>
+              return `<li class="comment">${avatar(p, 'sm')}<div class="comment-body"><div class="comment-head"><b>${esc(p?.name || '—')}</b><small>${timeAgo(c.at)}</small>
+                ${c.userId === u.id || isHost ? `<button class="link-btn danger" data-action="deleteComment" data-id="${e.id}" data-comment="${c.id}">${L('Удалить', 'Delete')}</button>` : ''}</div><p>${esc(c.text)}</p></div></li>`;
+            }).join('') : `<li class="muted">${L('Пока тихо. Напишите первым: кто что берёт, во сколько встречаемся.', 'Quiet so far. Be the first: who brings what, what time to meet.')}</li>`}</ul>
             <form class="comment-form" id="comment-form">
-              <textarea id="comment-text" rows="2" maxlength="500" placeholder="Сообщение участникам" aria-label="Сообщение"></textarea>
-              <button class="btn btn-primary" type="submit">Отправить</button>
+              <textarea id="comment-text" rows="2" maxlength="500" placeholder="${L('Сообщение участникам', 'Message to guests')}" aria-label="${L('Сообщение', 'Message')}"></textarea>
+              <button class="btn btn-primary" type="submit">${L('Отправить', 'Send')}</button>
             </form>
           </section>
         </div>
         <div class="ev-main">
           <aside class="panel">
-            <div class="panel-head"><h2>Участники</h2>
-              ${(isHost || inv?.status === 'going') && !past ? `<button class="plus-btn sm" data-action="invite" data-id="${e.id}" title="Пригласить" aria-label="Пригласить участников">${ICON.plus}</button>` : ''}</div>
+            <div class="panel-head"><h2>${L('Участники', 'Guests')}</h2>
+              ${(isHost || inv?.status === 'going') && !past ? `<button class="plus-btn sm" data-action="invite" data-id="${e.id}" title="${L('Пригласить', 'Invite')}" aria-label="${L('Пригласить участников', 'Invite guests')}">${ICON.plus}</button>` : ''}</div>
             <ul class="people">${people}</ul>
           </aside>
           <aside class="panel">
-            <div class="panel-head"><h2>Складчина</h2>
-              ${isHost && !past ? `<button class="btn btn-sm" data-action="editBill" data-id="${e.id}">${b.total ? 'Изменить' : 'Указать'}</button>` : ''}</div>
+            <div class="panel-head"><h2>${L('Складчина', 'Bill')}</h2>
+              ${isHost && !past ? `<button class="btn btn-sm" data-action="editBill" data-id="${e.id}">${b.total ? L('Изменить', 'Edit') : L('Указать', 'Set')}</button>` : ''}</div>
             ${billHtml}
           </aside>
         </div>
@@ -847,40 +1193,52 @@
 
   // ---------- Каталог ----------
   const cat = { q: '', strength: 'all', tag: '', sort: 'rating' };
+  const strengthBar = s => `<div class="strength"><div class="strength-bar">${Array.from({ length: 10 }, (_, i) => `<i class="${i < s ? 'on' : ''} ${i < s && i >= 7 ? 'hot' : ''}"></i>`).join('')}</div><small>${L('Крепость', 'Strength')} ${s}/10</small></div>`;
+  const reviewsWord = n => pl(n, ['отзыв', 'отзыва', 'отзывов'], ['review', 'reviews']);
   function tobaccoCard(t, u) {
     const r = ratingOf(t.id), fav = !!u && u.favs.includes(t.id);
-    return `<article class="cat-card t-card" data-action="tobacco" data-id="${t.id}" role="button" tabindex="0" aria-label="${esc(t.brand + ' ' + t.flavor)}: подробнее и отзывы">
+    return `<article class="cat-card t-card" data-action="tobacco" data-id="${t.id}" role="button" tabindex="0" aria-label="${esc(t.brand + ' ' + t.flavor)}">
       ${packArt(t)}
       <div class="cat-top"><span class="cat-brand">${esc(t.brand)}</span>
-        ${u ? `<button class="fav-btn ${fav ? 'on' : ''}" type="button" data-action="fav" data-id="${t.id}" aria-pressed="${fav}" aria-label="В избранное">${ICON.heart}</button>` : ''}</div>
-      <h3>${esc(t.flavor)}</h3><p>${esc(t.note)}</p>
-      <div class="rating-line">${stars(r.avg)}<small>${r.n ? `${r.avg.toFixed(1)} · ${r.n} ${plural(r.n, 'отзыв', 'отзыва', 'отзывов')}` : 'Нет отзывов'}</small></div>
+        ${u ? `<button class="fav-btn ${fav ? 'on' : ''}" type="button" data-action="fav" data-id="${t.id}" aria-pressed="${fav}" aria-label="${L('В избранное', 'Favourite')}">${ICON.heart}</button>` : ''}</div>
+      <h3>${esc(t.flavor)}</h3><p>${esc(tr(t.note))}</p>
+      <div class="rating-line">${stars(r.avg)}<small>${r.n ? `${r.avg.toFixed(1)} · ${r.n} ${reviewsWord(r.n)}` : L('Нет отзывов', 'No reviews')}</small></div>
       ${strengthBar(t.strength)}
-      <div class="cat-tags">${t.tags.map(x => `<span class="chip">${esc(x)}</span>`).join('')}</div>
+      <div class="cat-tags">${t.tags.map(x => `<span class="chip">${esc(tagName(x))}</span>`).join('')}</div>
     </article>`;
   }
-  const strengthBar = s => `<div class="strength"><div class="strength-bar">${Array.from({ length: 10 }, (_, i) => `<i class="${i < s ? 'on' : ''} ${i < s && i >= 7 ? 'hot' : ''}"></i>`).join('')}</div><small>Крепость ${s}/10</small></div>`;
+  function mixCard(m, u) {
+    const author = userById(m.authorId), liked = !!u && m.likes.includes(u.id);
+    return `<article class="cat-card mix-card">
+      <div class="cat-top"><span class="cat-brand">${L('Микс', 'Mix')} · ${m.parts.length} ${pl(m.parts.length, ['вкус', 'вкуса', 'вкусов'], ['flavour', 'flavours'])}</span>
+        <button class="like-btn ${liked ? 'on' : ''}" type="button" data-action="likeMix" data-id="${m.id}" aria-pressed="${liked}" aria-label="${L('Нравится', 'Like')}">${ICON.heart}<span>${m.likes.length}</span></button></div>
+      <h3>${esc(m.name)}</h3>
+      <div class="mix-bar">${m.parts.map(p => `<span style="flex:${p.pct};--pc:${tobacco(p.id)?.color || 'gray'}" title="${esc(tobaccoName(p.id))} ${p.pct}%"></span>`).join('')}</div>
+      <ul class="mix-legend">${m.parts.map(p => `<li><i style="--pc:${tobacco(p.id)?.color || 'gray'}"></i><span>${esc(tobaccoName(p.id))}</span><b class="mono">${p.pct}%</b></li>`).join('')}</ul>
+      <div class="ev-venue">${avatar(author, 'xs')}<span>${esc(author?.name || '—')}</span></div>
+    </article>`;
+  }
 
   function pageCatalog() {
     const u = me();
     view.innerHTML = `
-      <section class="section"><span class="eyebrow">Каталог</span><h1>Табаки, миксы и всё для кальяна</h1></section>
+      <section class="section"><span class="eyebrow">${L('Кальян', 'Hookah')}</span><h1>${L('Табаки, миксы и всё для кальяна', 'Tobacco, mixes and hookah gear')}</h1></section>
       ${uTabs('cat', [
-        { key: 'tobaccos', label: 'Табаки', count: CATALOG.tobaccos.length }, { key: 'mixes', label: 'Миксы', count: db.mixes.length },
-        { key: 'bowls', label: 'Чаши', count: CATALOG.bowls.length }, { key: 'gear', label: 'Аксессуары', count: CATALOG.gear.length }
+        { key: 'tobaccos', label: L('Табаки', 'Tobacco'), count: CATALOG.tobaccos.length }, { key: 'mixes', label: L('Миксы', 'Mixes'), count: db.mixes.length },
+        { key: 'bowls', label: L('Чаши', 'Bowls'), count: CATALOG.bowls.length }, { key: 'gear', label: L('Аксессуары', 'Accessories'), count: CATALOG.gear.length }
       ])}
       ${tabPanel('cat', `<div class="panel-tools">
-        <input class="input" id="cat-q" type="search" placeholder="${tab.cat === 'mixes' ? 'Поиск по названию или табаку' : 'Поиск по бренду или вкусу'}" value="${esc(cat.q)}" aria-label="Поиск">
-        ${tab.cat === 'mixes' ? '<button class="btn btn-primary btn-sm" data-action="newMix">+ Свой микс</button>' : ''}
+        <input class="input" id="cat-q" type="search" placeholder="${tab.cat === 'mixes' ? L('Поиск по названию или табаку', 'Search by name or tobacco') : L('Поиск по бренду или вкусу', 'Search by brand or flavour')}" value="${esc(cat.q)}" aria-label="${L('Поиск', 'Search')}">
+        ${tab.cat === 'mixes' ? `<button class="btn btn-primary btn-sm" data-action="newMix">+ ${L('Свой микс', 'Your mix')}</button>` : ''}
       </div>
       ${tab.cat === 'tobaccos' ? `<div class="filters">
-        <div class="chip-row" role="group" aria-label="Крепость">${Object.entries(STRENGTH).map(([k, [label]]) => `<button class="chip-btn ${cat.strength === k ? 'on' : ''}" data-action="catFilter" data-strength="${k}">${label}</button>`).join('')}</div>
-        <div class="chip-row" role="group" aria-label="Вкус"><button class="chip-btn ${!cat.tag ? 'on' : ''}" data-action="catFilter" data-tag="">Все вкусы</button>${ALL_TAGS.map(x => `<button class="chip-btn ${cat.tag === x ? 'on' : ''}" data-action="catFilter" data-tag="${esc(x)}">${esc(x)}</button>`).join('')}</div>
-        <label class="sort">Сортировка <select id="cat-sort" class="input">
-          <option value="rating" ${cat.sort === 'rating' ? 'selected' : ''}>По рейтингу</option>
-          <option value="name" ${cat.sort === 'name' ? 'selected' : ''}>По названию</option>
-          <option value="strong" ${cat.sort === 'strong' ? 'selected' : ''}>Сначала крепкие</option>
-          <option value="light" ${cat.sort === 'light' ? 'selected' : ''}>Сначала лёгкие</option></select></label>
+        <div class="chip-row" role="group" aria-label="${L('Крепость', 'Strength')}">${Object.entries(STRENGTH).map(([k, [label]]) => `<button class="chip-btn ${cat.strength === k ? 'on' : ''}" data-action="catFilter" data-strength="${k}">${tr(label)}</button>`).join('')}</div>
+        <div class="chip-row" role="group" aria-label="${L('Вкус', 'Flavour')}"><button class="chip-btn ${!cat.tag ? 'on' : ''}" data-action="catFilter" data-tag="">${L('Все вкусы', 'All flavours')}</button>${ALL_TAGS.map(x => `<button class="chip-btn ${cat.tag === x ? 'on' : ''}" data-action="catFilter" data-tag="${esc(x)}">${esc(tagName(x))}</button>`).join('')}</div>
+        <label class="sort">${L('Сортировка', 'Sort')} <select id="cat-sort" class="input">
+          <option value="rating" ${cat.sort === 'rating' ? 'selected' : ''}>${L('По рейтингу', 'By rating')}</option>
+          <option value="name" ${cat.sort === 'name' ? 'selected' : ''}>${L('По названию', 'By name')}</option>
+          <option value="strong" ${cat.sort === 'strong' ? 'selected' : ''}>${L('Сначала крепкие', 'Strongest first')}</option>
+          <option value="light" ${cat.sort === 'light' ? 'selected' : ''}>${L('Сначала лёгкие', 'Lightest first')}</option></select></label>
       </div>` : ''}
       <div class="cat-grid" id="cat-grid"></div>`)}`;
     const grid = $('#cat-grid');
@@ -890,7 +1248,7 @@
       if (tab.cat === 'tobaccos') {
         const [, lo, hi] = STRENGTH[cat.strength];
         const list = CATALOG.tobaccos
-          .filter(t => (!q || `${t.brand} ${t.flavor} ${t.note} ${t.tags.join(' ')}`.toLowerCase().includes(q)) && t.strength >= lo && t.strength <= hi && (!cat.tag || t.tags.includes(cat.tag)))
+          .filter(t => (!q || `${t.brand} ${t.flavor} ${t.note.join(' ')} ${t.tags.map(x => x + ' ' + TAGS[x]).join(' ')}`.toLowerCase().includes(q)) && t.strength >= lo && t.strength <= hi && (!cat.tag || t.tags.includes(cat.tag)))
           .sort({
             rating: (a, b) => ratingOf(b.id).avg - ratingOf(a.id).avg || ratingOf(b.id).n - ratingOf(a.id).n,
             name: (a, b) => tobaccoName(a.id).localeCompare(tobaccoName(b.id), 'ru'),
@@ -900,12 +1258,16 @@
       } else if (tab.cat === 'mixes') {
         html = [...db.mixes].filter(m => !q || (m.name + ' ' + m.parts.map(p => tobaccoName(p.id)).join(' ')).toLowerCase().includes(q))
           .sort((a, b) => b.likes.length - a.likes.length).map(m => mixCard(m, u)).join('');
+      } else if (tab.cat === 'bowls') {
+        html = CATALOG.bowls.filter(x => !q || `${tr(x.name)} ${BOWL_TYPE[x.type].join(' ')} ${x.note.join(' ')}`.toLowerCase().includes(q)).map(x => `
+          <article class="cat-card"><div class="art-tile">${bowlArt(x.type)}</div>
+            <span class="cat-brand">${tr(BOWL_TYPE[x.type])}</span><h3>${esc(tr(x.name))}</h3><p>${esc(tr(x.note))}</p></article>`).join('');
       } else {
-        html = CATALOG[tab.cat].filter(x => !q || `${x.name} ${x.type} ${x.note}`.toLowerCase().includes(q)).map(x => `
-          <article class="cat-card"><div class="art-tile">${tab.cat === 'bowls' ? bowlArt(x.type) : `<span class="art-word">${esc(x.type)}</span>`}</div>
-            <span class="cat-brand">${esc(x.type)}</span><h3>${esc(x.name)}</h3><p>${esc(x.note)}</p></article>`).join('');
+        html = CATALOG.gear.filter(x => !q || `${[].concat(x.name).join(' ')} ${x.type.join(' ')} ${x.note.join(' ')}`.toLowerCase().includes(q)).map(x => `
+          <article class="cat-card"><div class="art-tile"><span class="art-word">${esc(tr(x.type))}</span></div>
+            <span class="cat-brand">${esc(tr(x.type))}</span><h3>${esc(tr(x.name))}</h3><p>${esc(tr(x.note))}</p></article>`).join('');
       }
-      grid.innerHTML = html || `<div class="empty" style="grid-column:1/-1"><p>Ничего не нашлось. Измените поиск или фильтры.</p></div>`;
+      grid.innerHTML = html || `<div style="grid-column:1/-1"><p class="muted">${L('Ничего не нашлось. Измените поиск или фильтры.', 'Nothing found. Change the search or filters.')}</p></div>`;
     };
     draw();
     $('#cat-q').addEventListener('input', ev => { cat.q = ev.target.value; draw(); });
@@ -918,44 +1280,45 @@
     const inMixes = db.mixes.filter(m => m.parts.some(p => p.id === id));
     openModal(`${t.brand} ${t.flavor}`, `
       <div class="t-detail">${packArt(t, 'lg')}
-        <div class="t-info"><p>${esc(t.note)}</p>${strengthBar(t.strength)}
-          <div class="rating-line">${stars(r.avg, 'lg')}<small>${r.n ? `${r.avg.toFixed(1)} из 5 · ${r.n} ${plural(r.n, 'отзыв', 'отзыва', 'отзывов')}` : 'Отзывов пока нет'}</small></div>
-          <div class="cat-tags">${t.tags.map(x => `<span class="chip">${esc(x)}</span>`).join('')}</div>
-          ${u ? `<div><button class="btn btn-sm ${fav ? 'btn-on' : ''}" data-action="fav" data-id="${t.id}" aria-pressed="${fav}">${ICON.heart}${fav ? 'В избранном' : 'В избранное'}</button></div>` : ''}
+        <div class="t-info"><p>${esc(tr(t.note))}</p>${strengthBar(t.strength)}
+          <div class="rating-line">${stars(r.avg, 'lg')}<small>${r.n ? `${r.avg.toFixed(1)} ${L('из 5', 'of 5')} · ${r.n} ${reviewsWord(r.n)}` : L('Отзывов пока нет', 'No reviews yet')}</small></div>
+          <div class="cat-tags">${t.tags.map(x => `<span class="chip">${esc(tagName(x))}</span>`).join('')}</div>
+          ${u ? `<div><button class="btn btn-sm ${fav ? 'btn-on' : ''}" data-action="fav" data-id="${t.id}" aria-pressed="${fav}">${ICON.heart}${fav ? L('В избранном', 'In favourites') : L('В избранное', 'Add to favourites')}</button></div>` : ''}
         </div></div>
-      ${inMixes.length ? `<div><span class="label">Встречается в миксах</span><div class="cat-tags" style="margin-top:6px">${inMixes.map(m => `<span class="chip chip-accent">${esc(m.name)}</span>`).join('')}</div></div>` : ''}
+      ${inMixes.length ? `<div><span class="label">${L('Встречается в миксах', 'Used in mixes')}</span><div class="cat-tags" style="margin-top:6px">${inMixes.map(m => `<span class="chip chip-accent">${esc(m.name)}</span>`).join('')}</div></div>` : ''}
       ${u ? `<form class="form review-form" id="rv-form">
-        <span class="label">${mine ? 'Ваш отзыв' : 'Оставить отзыв'}</span>
-        <div class="star-input" role="radiogroup" aria-label="Оценка">${[5, 4, 3, 2, 1].map(n => `<input type="radio" name="rv-star" id="rv-s${n}" value="${n}" ${mine?.rating === n ? 'checked' : ''}><label for="rv-s${n}" title="${n} из 5">★</label>`).join('')}</div>
-        <div class="field"><textarea id="rv-text" maxlength="400" placeholder="Как раскрывается, с чем мешать, на какой чаше лучше">${esc(mine?.text || '')}</textarea></div>
+        <span class="label">${mine ? L('Ваш отзыв', 'Your review') : L('Оставить отзыв', 'Leave a review')}</span>
+        <div class="star-input" role="radiogroup" aria-label="${L('Оценка', 'Rating')}">${[5, 4, 3, 2, 1].map(n => `<input type="radio" name="rv-star" id="rv-s${n}" value="${n}" ${mine?.rating === n ? 'checked' : ''}><label for="rv-s${n}" title="${n} / 5">★</label>`).join('')}</div>
+        <div class="field"><textarea id="rv-text" maxlength="400" placeholder="${L('Как раскрывается, с чем мешать, на какой чаше лучше', 'How it smokes, what to mix it with, which bowl suits it')}">${esc(mine?.text || '')}</textarea></div>
         <div class="error" id="rv-err"></div>
-        <div><button class="btn btn-primary btn-sm" type="submit">${mine ? 'Обновить отзыв' : 'Опубликовать'}</button></div>
-      </form>` : '<p class="muted"><a href="#/login" style="color:var(--accent)">Войдите</a>, чтобы оставить отзыв.</p>'}
+        <div><button class="btn btn-primary btn-sm" type="submit">${mine ? L('Обновить отзыв', 'Update review') : L('Опубликовать', 'Publish')}</button></div>
+      </form>` : `<p class="muted"><a href="#/login" style="color:var(--accent)">${L('Войдите', 'Sign in')}</a>${L(', чтобы оставить отзыв.', ' to leave a review.')}</p>`}
       <ul class="comments">${list.map(x => {
         const p = userById(x.userId);
-        return `<li class="comment">${avatar(p, 'sm')}<div class="comment-body"><div class="comment-head"><b>${esc(p?.name || 'Гость')}</b>${stars(x.rating)}<small>${timeAgo(x.at)}</small></div>${x.text ? `<p>${esc(x.text)}</p>` : ''}</div></li>`;
+        return `<li class="comment">${avatar(p, 'sm')}<div class="comment-body"><div class="comment-head"><b>${esc(p?.name || '—')}</b>${stars(x.rating)}<small>${timeAgo(x.at)}</small></div>${x.text ? `<p>${esc(x.text)}</p>` : ''}</div></li>`;
       }).join('')}</ul>`, m => {
       const f = $('#rv-form', m);
       f && f.addEventListener('submit', ev => {
         ev.preventDefault();
         const rating = +($('input[name=rv-star]:checked', m)?.value || 0);
-        if (!rating) { $('#rv-err', m).textContent = 'Поставьте оценку от 1 до 5 звёзд.'; return; }
+        if (!rating) { $('#rv-err', m).textContent = L('Поставьте оценку от 1 до 5 звёзд.', 'Give a rating from 1 to 5 stars.'); return; }
         const text = $('#rv-text', m).value.trim();
         if (mine) Object.assign(mine, { rating, text, at: new Date().toISOString() });
         else db.reviews.push({ id: uid('r'), tobaccoId: id, userId: u.id, rating, text, at: new Date().toISOString() });
-        save(); toast('Спасибо за отзыв'); render(); openTobacco(id);
+        save(); toast(L('Спасибо за отзыв', 'Thanks for the review')); render(); openTobacco(id);
       });
     });
   }
 
   // ---------- Люди ----------
+  const friendBtn = (p, friend) => `<button class="btn btn-sm ${friend ? 'btn-on' : 'btn-primary'}" data-action="toggleFriend" data-id="${p.id}" aria-pressed="${friend}">${friend ? `${ICON.check}${L('В друзьях', 'Friends')}` : `+ ${L('В друзья', 'Add friend')}`}</button>`;
   function personCard(p, u) {
-    const friend = isFriend(u, p), shared = sharedEvents(u, p).length;
+    const shared = sharedEvents(u, p).length;
     return `<article class="person-card">
       <a class="person-link" href="#/user/${p.id}">${avatar(p)}<div class="person-name"><b>${esc(p.name)}</b>
-        <small>${p.favVenue ? `Любит ${esc(p.favVenue)}` : 'Любимое место не указано'}</small>
-        <small>${shared ? `${shared} ${plural(shared, 'общий сбор', 'общих сбора', 'общих сборов')}` : 'Общих сборов нет'}</small></div></a>
-      <button class="btn btn-sm ${friend ? 'btn-on' : 'btn-primary'}" data-action="toggleFriend" data-id="${p.id}" aria-pressed="${friend}">${friend ? `${ICON.check}В друзьях` : '+ В друзья'}</button>
+        <small>${p.favVenue ? `${L('Любит', 'Likes')} ${esc(p.favVenue)}` : L('Любимое место не указано', 'No favourite place')}</small>
+        <small>${shared ? `${shared} ${pl(shared, ['общий сбор', 'общих сбора', 'общих сборов'], ['shared event', 'shared events'])}` : L('Общих сборов нет', 'No shared events')}</small></div></a>
+      ${friendBtn(p, isFriend(u, p))}
     </article>`;
   }
   let peopleQ = '';
@@ -965,16 +1328,16 @@
     const others = db.users.filter(p => p.id !== u.id);
     const friends = others.filter(p => isFriend(u, p));
     view.innerHTML = `
-      <section class="section"><span class="eyebrow">Люди</span><h1>Друзья и знакомые</h1>
-        <p class="muted">Друзья первыми появляются в списке приглашений и видят ваш номер целиком.</p></section>
-      ${uTabs('people', [{ key: 'friends', label: 'Друзья', count: friends.length }, { key: 'all', label: 'Все люди', count: others.length }])}
-      ${tabPanel('people', `<div class="panel-tools"><input class="input" id="pp-q" type="search" placeholder="Имя или номер" value="${esc(peopleQ)}" aria-label="Поиск людей"></div>
+      <section class="section"><span class="eyebrow">${L('Люди', 'People')}</span><h1>${L('Друзья и знакомые', 'Friends and contacts')}</h1>
+        <p class="muted">${L('Друзья первыми появляются в списке приглашений и видят ваш номер целиком.', 'Friends come first in the invite list and see your full number.')}</p></section>
+      ${uTabs('people', [{ key: 'friends', label: L('Друзья', 'Friends'), count: friends.length }, { key: 'all', label: L('Все люди', 'Everyone'), count: others.length }])}
+      ${tabPanel('people', `<div class="panel-tools"><input class="input" id="pp-q" type="search" placeholder="${L('Имя или номер', 'Name or number')}" value="${esc(peopleQ)}" aria-label="${L('Поиск людей', 'Search people')}"></div>
       <div class="people-grid" id="pp-grid"></div>`)}`;
     const draw = () => {
       const q = peopleQ.trim().toLowerCase(), qd = digits(q);
       const list = (tab.people === 'friends' ? friends : others).filter(p => !q || p.name.toLowerCase().includes(q) || (qd.length >= 4 && p.phone.includes(qd)));
       $('#pp-grid').innerHTML = list.map(p => personCard(p, u)).join('') ||
-        `<div style="grid-column:1/-1">${tab.people === 'friends' && !q ? emptyState('Друзей пока нет', 'Откройте вкладку «Все люди» и добавьте тех, с кем ходите на кальян.', '<button class="btn btn-primary btn-sm" data-action="switchTab" data-tabs="people" data-tab="all">Все люди</button>') : '<p class="muted">Никого не нашли.</p>'}</div>`;
+        `<div style="grid-column:1/-1">${tab.people === 'friends' && !q ? emptyState(L('Друзей пока нет', 'No friends yet'), L('Откройте вкладку «Все люди» и добавьте тех, с кем ходите на кальян.', 'Open “Everyone” and add the people you go out with.'), `<button class="btn btn-primary btn-sm" data-action="switchTab" data-tabs="people" data-tab="all">${L('Все люди', 'Everyone')}</button>`) : `<p class="muted">${L('Никого не нашли.', 'Nobody found.')}</p>`}</div>`;
     };
     draw();
     $('#pp-q').addEventListener('input', ev => { peopleQ = ev.target.value; draw(); });
@@ -985,27 +1348,26 @@
     if (!u) return go('login');
     if (id === u.id) return go('profile');
     const p = userById(id);
-    if (!p) { view.innerHTML = `<div class="empty"><p>Пользователь не найден.</p><a class="btn" href="#/people">К людям</a></div>`; return; }
-    const friend = isFriend(u, p), shared = sharedEvents(u, p).sort((a, b) => new Date(b.at) - new Date(a.at));
+    if (!p) { view.innerHTML = emptyState(L('Пользователь не найден', 'User not found'), '', `<a class="btn btn-sm" href="#/people">${L('К людям', 'To people')}</a>`); return; }
+    const shared = sharedEvents(u, p).sort((a, b) => new Date(b.at) - new Date(a.at));
     const favs = p.favs.map(tobacco).filter(Boolean), mixes = db.mixes.filter(m => m.authorId === p.id);
     view.innerHTML = `
-      <a class="back" href="#/people">← Люди</a>
+      <a class="back" href="#/people">← ${L('Люди', 'People')}</a>
       <div class="profile">
         <section class="panel profile-card">
           ${avatar(p, 'lg')}
           <div><h2>${esc(p.name)}</h2><div class="mono" style="margin-top:6px">${canSeePhone(u, p) ? fmtPhone(p.phone) : maskedPhone(p.phone)}</div>
-            ${p.verified ? `<div class="verified" style="margin-top:6px">${ICON.check}Номер подтверждён</div>` : ''}</div>
-          ${p.favVenue ? `<div class="fact" style="width:100%"><small>Любимое место</small><b>${esc(p.favVenue)}</b></div>` : ''}
-          <div class="btn-row" style="justify-content:center">
-            <button class="btn btn-sm ${friend ? 'btn-on' : 'btn-primary'}" data-action="toggleFriend" data-id="${p.id}" aria-pressed="${friend}">${friend ? `${ICON.check}В друзьях` : '+ В друзья'}</button>
-            <button class="btn btn-sm" data-action="inviteUser" data-id="${p.id}">Позвать на сбор</button></div>
+            ${p.verified ? `<div class="verified" style="margin-top:6px">${ICON.check}${L('Номер подтверждён', 'Number verified')}</div>` : ''}</div>
+          ${p.favVenue ? `<div class="fact" style="width:100%"><small>${L('Любимое место', 'Favourite place')}</small><b>${esc(p.favVenue)}</b></div>` : ''}
+          <div class="btn-row" style="justify-content:center">${friendBtn(p, isFriend(u, p))}
+            <button class="btn btn-sm" data-action="inviteUser" data-id="${p.id}">${L('Позвать на сбор', 'Invite to an event')}</button></div>
         </section>
         <div class="ev-main">
-          <section class="panel"><div class="panel-head"><h2>Любимые табаки</h2></div>
-            ${favs.length ? `<div class="cat-tags">${favs.map(t => `<button class="chip chip-accent" data-action="tobacco" data-id="${t.id}">${esc(t.brand)} ${esc(t.flavor)}</button>`).join('')}</div>` : '<p class="muted">Пока ничего не отмечено.</p>'}</section>
-          ${mixes.length ? `<section class="panel"><div class="panel-head"><h2>Миксы</h2></div><div class="cat-grid">${mixes.map(m => mixCard(m, u)).join('')}</div></section>` : ''}
-          <section class="panel"><div class="panel-head"><h2>Общие сборы</h2></div>
-            ${shared.length ? `<div class="ev-grid">${shared.map(e => eventCard(e, u)).join('')}</div>` : '<p class="muted">Вы ещё не были на одном сборе.</p>'}</section>
+          <section class="panel"><div class="panel-head"><h2>${L('Любимые табаки', 'Favourite tobacco')}</h2></div>
+            ${favs.length ? `<div class="cat-tags">${favs.map(t => `<button class="chip chip-accent" data-action="tobacco" data-id="${t.id}">${esc(t.brand)} ${esc(t.flavor)}</button>`).join('')}</div>` : `<p class="muted">${L('Пока ничего не отмечено.', 'Nothing marked yet.')}</p>`}</section>
+          ${mixes.length ? `<section class="panel"><div class="panel-head"><h2>${L('Миксы', 'Mixes')}</h2></div><div class="cat-grid">${mixes.map(m => mixCard(m, u)).join('')}</div></section>` : ''}
+          <section class="panel"><div class="panel-head"><h2>${L('Общие сборы', 'Shared events')}</h2></div>
+            ${shared.length ? `<div class="ev-grid">${shared.map(e => eventCard(e, u)).join('')}</div>` : `<p class="muted">${L('Вы ещё не были на одном сборе.', 'You have not been to the same event yet.')}</p>`}</section>
         </div>
       </div>`;
   }
@@ -1017,80 +1379,80 @@
     const history = db.events.filter(e => isPast(e) && goingIds(e).includes(u.id)).sort((a, b) => new Date(b.at) - new Date(a.at));
     const favs = u.favs.map(tobacco).filter(Boolean);
     const friends = u.friends.map(userById).filter(Boolean);
-    const venues = [...new Set(db.events.map(e => e.venue))];
+    const venues = [...new Set([...VENUES.map(v => v.name), ...db.events.map(e => e.venue)])];
     const theme = prefs.get('theme', 'auto'), accent = prefs.get('accent', 'copper');
+    const panels = {
+      about: `<section class="panel">
+          <div class="panel-head"><h2>${L('Личные данные', 'Personal details')}</h2></div>
+          <form class="form" id="profile-form">
+            <div class="field"><label for="pf-name">${L('Имя', 'Name')}</label><input id="pf-name" required minlength="2" maxlength="40" value="${esc(u.name)}"></div>
+            <div class="field"><label for="pf-venue">${L('Любимое заведение', 'Favourite venue')}</label><input id="pf-venue" maxlength="60" list="pf-venues" placeholder="${L('Где чаще всего собираетесь', 'Where you meet most often')}" value="${esc(u.favVenue)}">
+              <datalist id="pf-venues">${venues.map(v => `<option value="${esc(v)}">`).join('')}</datalist></div>
+            <div class="field"><span class="label">${L('Телефон', 'Phone')}</span><div class="input mono" style="opacity:.8">${fmtPhone(u.phone)}</div></div>
+            <div class="error" id="pf-err"></div>
+            <div><button class="btn btn-primary" type="submit">${L('Сохранить', 'Save')}</button></div>
+          </form>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>${L('Любимые табаки', 'Favourite tobacco')}</h2><a class="btn btn-sm" href="#/catalog">${L('Открыть каталог', 'Open catalogue')}</a></div>
+          ${favs.length ? `<div class="cat-tags">${favs.map(t => `<button class="chip chip-accent" data-action="tobacco" data-id="${t.id}">${esc(t.brand)} ${esc(t.flavor)}</button>`).join('')}</div>`
+            : `<p class="muted">${L('Отмечайте вкусы сердечком в каталоге, и они появятся здесь.', 'Heart flavours in the catalogue and they will appear here.')}</p>`}
+        </section>`,
+      friends: `<section class="panel">
+          <div class="panel-head"><h2>${L('Друзья', 'Friends')}</h2><a class="btn btn-sm" href="#/people">${L('Найти друзей', 'Find friends')}</a></div>
+          ${friends.length ? `<div class="friend-row">${friends.map(f => `<a href="#/user/${f.id}" class="friend">${avatar(f)}<span>${esc(f.name)}</span></a>`).join('')}</div>` : `<p class="muted">${L('Добавьте друзей, чтобы быстрее звать их на сборы.', 'Add friends to invite them faster.')}</p>`}
+        </section>`,
+      history: `<section class="panel">
+          <div class="panel-head"><h2>${L('История', 'History')}</h2></div>
+          ${history.length ? `<ul class="history">${history.map(e => {
+            const mine = (e.picks[u.id] || []).map(tobaccoName), top = ranking(e.picks, tobaccoName).slice(0, 2).map(r => tobaccoName(r.id));
+            return `<li><a href="#/event/${e.id}"><span class="history-date mono">${fShort(new Date(e.at))}</span><span class="history-main"><b>${esc(e.title)}</b><small>${esc(e.venue)}</small></span>
+              <span class="history-t">${mine.length ? `${L('Мой выбор', 'My pick')}: ${esc(mine.join(', '))}` : top.length ? `${L('Курили', 'Smoked')}: ${esc(top.join(', '))}` : ''}</span></a></li>`;
+          }).join('')}</ul>` : `<p class="muted">${L('Здесь появятся прошедшие сборы: где были и что курили.', 'Past events will appear here: where you went and what you smoked.')}</p>`}
+        </section>`,
+      settings: `<section class="panel">
+          <div class="panel-head"><h2>${L('Оформление', 'Appearance')}</h2></div>
+          <div class="form">
+            <div class="field"><span class="label">${L('Язык', 'Language')}</span><div class="segmented" role="radiogroup" aria-label="${L('Язык', 'Language')}">
+              <button role="radio" aria-checked="${lang === 'ru'}" class="${lang === 'ru' ? 'on' : ''}" data-action="setLang" data-lang="ru">Русский</button>
+              <button role="radio" aria-checked="${lang === 'en'}" class="${lang === 'en' ? 'on' : ''}" data-action="setLang" data-lang="en">English</button></div></div>
+            <div class="field"><span class="label">${L('Тема', 'Theme')}</span><div class="segmented" role="radiogroup" aria-label="${L('Тема', 'Theme')}">${Object.entries(THEMES).map(([k, [label, ic]]) => `<button role="radio" aria-checked="${theme === k}" class="${theme === k ? 'on' : ''}" data-action="setTheme" data-theme="${k}">${ic}${tr(label)}</button>`).join('')}</div></div>
+            <div class="field"><span class="label">${L('Цвет акцента', 'Accent colour')}</span><div class="swatches" role="radiogroup" aria-label="${L('Цвет акцента', 'Accent colour')}">${Object.entries(ACCENTS).map(([k, label]) => `<button role="radio" aria-checked="${accent === k}" class="sw sw-${k} ${accent === k ? 'on' : ''}" data-action="setAccent" data-accent="${k}"><i></i>${tr(label)}</button>`).join('')}</div></div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>${L('Демо-данные', 'Demo data')}</h2></div>
+          <p class="muted" style="margin-bottom:14px">${L('Все данные этого шаблона хранятся в вашем браузере. Сброс вернёт тестовых пользователей, сборы, отзывы и миксы.', 'All template data lives in your browser. Resetting restores the test users, events, reviews and mixes.')}</p>
+          <button class="btn btn-danger btn-sm" data-action="reset">${L('Сбросить демо-данные', 'Reset demo data')}</button>
+        </section>`
+    };
     view.innerHTML = `
-      <section class="section"><span class="eyebrow">Профиль</span><h1>Мой аккаунт</h1></section>
+      <section class="section"><span class="eyebrow">${L('Профиль', 'Profile')}</span><h1>${L('Мой аккаунт', 'My account')}</h1></section>
       <div class="profile">
         <section class="panel profile-card">
           ${avatar(u, 'lg')}
-          <div class="avatar-actions"><button class="btn btn-sm" data-action="uploadAvatar">${u.avatar ? 'Сменить фото' : 'Загрузить фото'}</button>
-            ${u.avatar ? '<button class="btn btn-ghost btn-sm" data-action="removeAvatar">Удалить</button>' : ''}</div>
+          <div class="avatar-actions"><button class="btn btn-sm" data-action="uploadAvatar">${u.avatar ? L('Сменить фото', 'Change photo') : L('Загрузить фото', 'Upload photo')}</button>
+            ${u.avatar ? `<button class="btn btn-ghost btn-sm" data-action="removeAvatar">${L('Удалить', 'Remove')}</button>` : ''}</div>
           <div><h2>${esc(u.name)}</h2>
             <div style="margin-top:6px" class="mono">${fmtPhone(u.phone)}</div>
-            ${u.verified ? `<div class="verified" style="margin-top:6px">${ICON.check}Номер подтверждён</div>` : ''}</div>
+            ${u.verified ? `<div class="verified" style="margin-top:6px">${ICON.check}${L('Номер подтверждён', 'Number verified')}</div>` : ''}</div>
           <div class="stats">
-            <div class="stat"><b>${hosted}</b><small>создал</small></div>
-            <div class="stat"><b>${history.length}</b><small>посетил</small></div>
-            <div class="stat"><b>${friends.length}</b><small>${plural(friends.length, 'друг', 'друга', 'друзей')}</small></div>
+            <div class="stat"><b>${hosted}</b><small>${L('создал', 'hosted')}</small></div>
+            <div class="stat"><b>${history.length}</b><small>${L('посетил', 'attended')}</small></div>
+            <div class="stat"><b>${friends.length}</b><small>${pl(friends.length, ['друг', 'друга', 'друзей'], ['friend', 'friends'])}</small></div>
           </div>
-          <button class="btn btn-ghost btn-sm" data-action="logout">Выйти из аккаунта</button>
+          <button class="btn btn-ghost btn-sm" data-action="logout">${L('Выйти из аккаунта', 'Sign out')}</button>
         </section>
         <div class="ev-main">
-          ${uTabs('profile', [{ key: 'about', label: 'Обо мне' }, { key: 'friends', label: 'Друзья', count: friends.length }, { key: 'history', label: 'История', count: history.length }, { key: 'settings', label: 'Настройки' }])}
-          ${tabPanel('profile', ({
-            about: `          <section class="panel">
-            <div class="panel-head"><h2>Личные данные</h2></div>
-            <form class="form" id="profile-form">
-              <div class="field"><label for="pf-name">Имя</label><input id="pf-name" required minlength="2" maxlength="40" value="${esc(u.name)}"></div>
-              <div class="field"><label for="pf-venue">Любимое заведение</label><input id="pf-venue" maxlength="60" list="pf-venues" placeholder="Где чаще всего собираетесь" value="${esc(u.favVenue)}">
-                <datalist id="pf-venues">${venues.map(v => `<option value="${esc(v)}">`).join('')}</datalist></div>
-              <div class="field"><span class="label">Телефон</span><div class="input mono" style="opacity:.8">${fmtPhone(u.phone)}</div></div>
-              <div class="error" id="pf-err"></div>
-              <div><button class="btn btn-primary" type="submit">Сохранить</button></div>
-            </form>
-          </section>
-          <section class="panel">
-            <div class="panel-head"><h2>Любимые табаки</h2><a class="btn btn-sm" href="#/catalog">Открыть каталог</a></div>
-            ${favs.length ? `<div class="cat-tags">${favs.map(t => `<button class="chip chip-accent" data-action="tobacco" data-id="${t.id}">${esc(t.brand)} ${esc(t.flavor)}</button>`).join('')}</div>`
-              : '<p class="muted">Отмечайте вкусы сердечком в каталоге, и они появятся здесь.</p>'}
-          </section>
-`,
-            friends: `          <section class="panel">
-            <div class="panel-head"><h2>Друзья</h2><a class="btn btn-sm" href="#/people">Найти друзей</a></div>
-            ${friends.length ? `<div class="friend-row">${friends.map(f => `<a href="#/user/${f.id}" class="friend">${avatar(f)}<span>${esc(f.name)}</span></a>`).join('')}</div>` : '<p class="muted">Добавьте друзей, чтобы быстрее звать их на сборы.</p>'}
-          </section>
-`,
-            history: `          <section class="panel">
-            <div class="panel-head"><h2>История</h2></div>
-            ${history.length ? `<ul class="history">${history.map(e => {
-              const mine = (e.picks[u.id] || []).map(tobaccoName), top = ranking(e.picks, tobaccoName).slice(0, 2).map(r => tobaccoName(r.id));
-              return `<li><a href="#/event/${e.id}"><span class="history-date mono">${dtShort.format(new Date(e.at))}</span><span class="history-main"><b>${esc(e.title)}</b><small>${esc(e.venue)}</small></span>
-                <span class="history-t">${mine.length ? `Мой выбор: ${esc(mine.join(', '))}` : top.length ? `Курили: ${esc(top.join(', '))}` : ''}</span></a></li>`;
-            }).join('')}</ul>` : '<p class="muted">Здесь появятся прошедшие сборы: где были и что курили.</p>'}
-          </section>
-`,
-            settings: `          <section class="panel">
-            <div class="panel-head"><h2>Оформление</h2></div>
-            <div class="form">
-              <div class="field"><span class="label">Тема</span><div class="segmented" role="radiogroup" aria-label="Тема">${Object.entries(THEMES).map(([k, [label, ic]]) => `<button role="radio" aria-checked="${theme === k}" class="${theme === k ? 'on' : ''}" data-action="setTheme" data-theme="${k}">${ic}${label}</button>`).join('')}</div></div>
-              <div class="field"><span class="label">Цвет акцента</span><div class="swatches" role="radiogroup" aria-label="Цвет акцента">${Object.entries(ACCENTS).map(([k, label]) => `<button role="radio" aria-checked="${accent === k}" class="sw sw-${k} ${accent === k ? 'on' : ''}" data-action="setAccent" data-accent="${k}"><i></i>${label}</button>`).join('')}</div></div>
-            </div>
-          </section>
-          <section class="panel">
-            <div class="panel-head"><h2>Демо-данные</h2></div>
-            <p class="muted" style="margin-bottom:14px">Все данные этого шаблона хранятся в вашем браузере. Сброс вернёт тестовых пользователей, сборы, отзывы и миксы.</p>
-            <button class="btn btn-danger btn-sm" data-action="reset">Сбросить демо-данные</button>
-          </section>
-`
-          })[tab.profile])}
+          ${uTabs('profile', [{ key: 'about', label: L('Обо мне', 'About') }, { key: 'friends', label: L('Друзья', 'Friends'), count: friends.length }, { key: 'history', label: L('История', 'History'), count: history.length }, { key: 'settings', label: L('Настройки', 'Settings') }])}
+          ${tabPanel('profile', panels[tab.profile])}
         </div>
       </div>`;
     $('#profile-form')?.addEventListener('submit', ev => {
       ev.preventDefault();
       const name = $('#pf-name').value.trim();
-      if (name.length < 2) { $('#pf-err').textContent = 'Имя должно быть не короче двух букв.'; return; }
-      u.name = name; u.favVenue = $('#pf-venue').value.trim(); save(); toast('Профиль сохранён'); render();
+      if (name.length < 2) { $('#pf-err').textContent = L('Имя должно быть не короче двух букв.', 'The name must be at least two letters.'); return; }
+      u.name = name; u.favVenue = $('#pf-venue').value.trim(); save(); toast(L('Профиль сохранён', 'Profile saved')); render();
     });
   }
 
@@ -1101,59 +1463,58 @@
     const card = $('#auth-card');
     mode === 'register' ? renderRegister(card) : renderLogin(card);
   }
-
+  const phonePh = '+996 700 123 456';
   function renderLogin(card) {
     card.innerHTML = `
-      <div><span class="eyebrow">Вход</span><h1 style="margin-top:8px">С возвращением</h1></div>
+      <div><span class="eyebrow">${L('Вход', 'Sign in')}</span><h1 style="margin-top:8px">${L('С возвращением', 'Welcome back')}</h1></div>
       <form class="form" id="login-form" novalidate>
-        <div class="field"><label for="lg-phone">Номер телефона</label><input id="lg-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7 (900) 000-00-00"></div>
-        <div class="field"><label for="lg-pass">Пароль</label><input id="lg-pass" type="password" autocomplete="current-password"></div>
+        <div class="field"><label for="lg-phone">${L('Номер телефона', 'Phone number')}</label><input id="lg-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="${phonePh}"></div>
+        <div class="field"><label for="lg-pass">${L('Пароль', 'Password')}</label><input id="lg-pass" type="password" autocomplete="current-password"></div>
         <div class="error" id="lg-err"></div>
-        <button class="btn btn-primary" type="submit">Войти</button>
-        <button class="btn" type="button" id="lg-sms">Войти по SMS-коду</button>
+        <button class="btn btn-primary" type="submit">${L('Войти', 'Sign in')}</button>
+        <button class="btn" type="button" id="lg-sms">${L('Войти по SMS-коду', 'Sign in with an SMS code')}</button>
       </form>
-      <div class="hint">Демо-аккаунт: <span class="mono">+7 (900) 000-00-01</span>, пароль <b>hookah</b></div>
-      <p class="muted" style="text-align:center">Нет аккаунта? <a href="#/register" style="color:var(--accent)">Зарегистрируйтесь</a></p>`;
+      <div class="hint">${L('Демо-аккаунт', 'Demo account')}: <span class="mono">+996 700 000 001</span>, ${L('пароль', 'password')} <b>hookah</b></div>
+      <p class="muted" style="text-align:center">${L('Нет аккаунта?', 'No account?')} <a href="#/register" style="color:var(--accent)">${L('Зарегистрируйтесь', 'Sign up')}</a></p>`;
     maskPhone($('#lg-phone'));
     const err = $('#lg-err');
     $('#login-form').addEventListener('submit', ev => {
       ev.preventDefault();
       const phone = normPhone($('#lg-phone').value), user = userByPhone(phone);
-      if (!validPhone(phone)) { err.textContent = 'Введите номер полностью, вместе с кодом страны.'; return; }
-      if (!user || user.pass !== hashPass($('#lg-pass').value)) { err.textContent = 'Неверный номер или пароль.'; return; }
+      if (!validPhone(phone)) { err.textContent = L('Введите номер полностью, вместе с кодом страны.', 'Enter the full number including the country code.'); return; }
+      if (!user || user.pass !== hashPass($('#lg-pass').value)) { err.textContent = L('Неверный номер или пароль.', 'Wrong number or password.'); return; }
       if (!user.verified) { renderVerify(card, phone, () => { user.verified = true; signIn(user); }); return; }
       signIn(user);
     });
     $('#lg-sms').addEventListener('click', () => {
       const phone = normPhone($('#lg-phone').value), user = userByPhone(phone);
-      if (!validPhone(phone)) { err.textContent = 'Сначала введите номер телефона.'; return; }
-      if (!user) { err.textContent = 'Этот номер ещё не зарегистрирован.'; return; }
+      if (!validPhone(phone)) { err.textContent = L('Сначала введите номер телефона.', 'Enter your phone number first.'); return; }
+      if (!user) { err.textContent = L('Этот номер ещё не зарегистрирован.', 'This number is not registered yet.'); return; }
       renderVerify(card, phone, () => { user.verified = true; signIn(user); });
     });
   }
-
   function renderRegister(card) {
     card.innerHTML = `
-      <div><span class="eyebrow">Регистрация · шаг 1 из 3</span><h1 style="margin-top:8px">Создайте аккаунт</h1></div>
+      <div><span class="eyebrow">${L('Регистрация · шаг 1 из 3', 'Sign up · step 1 of 3')}</span><h1 style="margin-top:8px">${L('Создайте аккаунт', 'Create an account')}</h1></div>
       <form class="form" id="reg-form" novalidate>
-        <div class="field"><label for="rg-name">Имя</label><input id="rg-name" autocomplete="given-name" maxlength="40" placeholder="Как вас называть друзьям"></div>
-        <div class="field"><label for="rg-phone">Номер телефона</label><input id="rg-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7 (900) 000-00-00"></div>
-        <div class="field"><label for="rg-pass">Пароль</label><input id="rg-pass" type="password" autocomplete="new-password" placeholder="Минимум 6 символов"></div>
-        <label class="check"><input type="checkbox" id="rg-age"> Мне исполнилось 18 лет, я принимаю правила сервиса</label>
+        <div class="field"><label for="rg-name">${L('Имя', 'Name')}</label><input id="rg-name" autocomplete="given-name" maxlength="40" placeholder="${L('Как вас называть друзьям', 'What friends call you')}"></div>
+        <div class="field"><label for="rg-phone">${L('Номер телефона', 'Phone number')}</label><input id="rg-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="${phonePh}"></div>
+        <div class="field"><label for="rg-pass">${L('Пароль', 'Password')}</label><input id="rg-pass" type="password" autocomplete="new-password" placeholder="${L('Минимум 6 символов', 'At least 6 characters')}"></div>
+        <label class="check"><input type="checkbox" id="rg-age"> ${L('Мне исполнилось 18 лет, я принимаю правила сервиса', 'I am 18 or older and accept the terms of use')}</label>
         <div class="error" id="rg-err"></div>
-        <button class="btn btn-primary" type="submit">Получить код по SMS</button>
+        <button class="btn btn-primary" type="submit">${L('Получить код по SMS', 'Get an SMS code')}</button>
       </form>
-      <p class="muted" style="text-align:center">Уже есть аккаунт? <a href="#/login" style="color:var(--accent)">Войти</a></p>`;
+      <p class="muted" style="text-align:center">${L('Уже есть аккаунт?', 'Already have an account?')} <a href="#/login" style="color:var(--accent)">${L('Войти', 'Sign in')}</a></p>`;
     maskPhone($('#rg-phone'));
     $('#reg-form').addEventListener('submit', ev => {
       ev.preventDefault();
       const err = $('#rg-err');
       const name = $('#rg-name').value.trim(), phone = normPhone($('#rg-phone').value), pass = $('#rg-pass').value;
-      if (name.length < 2) return void (err.textContent = 'Укажите имя: минимум две буквы.');
-      if (!validPhone(phone)) return void (err.textContent = 'Введите номер полностью, вместе с кодом страны.');
-      if (userByPhone(phone)?.verified) return void (err.textContent = 'Этот номер уже зарегистрирован. Войдите или восстановите доступ по SMS.');
-      if (pass.length < 6) return void (err.textContent = 'Пароль должен быть не короче 6 символов.');
-      if (!$('#rg-age').checked) return void (err.textContent = 'Сервис доступен только совершеннолетним.');
+      if (name.length < 2) return void (err.textContent = L('Укажите имя: минимум две буквы.', 'Enter a name of at least two letters.'));
+      if (!validPhone(phone)) return void (err.textContent = L('Введите номер полностью, вместе с кодом страны.', 'Enter the full number including the country code.'));
+      if (userByPhone(phone)?.verified) return void (err.textContent = L('Этот номер уже зарегистрирован. Войдите или восстановите доступ по SMS.', 'This number is already registered. Sign in or recover access by SMS.'));
+      if (pass.length < 6) return void (err.textContent = L('Пароль должен быть не короче 6 символов.', 'The password must be at least 6 characters.'));
+      if (!$('#rg-age').checked) return void (err.textContent = L('Сервис доступен только совершеннолетним.', 'The service is for adults only.'));
       renderVerify(card, phone, () => {
         let user = userByPhone(phone);
         if (user) Object.assign(user, { name, pass: hashPass(pass), verified: true });
@@ -1161,32 +1522,31 @@
         claimPhoneInvites(user);
         db.session = user.id; save();
         renderAvatarStep(card, user);
-      }, 'Регистрация · шаг 2 из 3');
+      }, L('Регистрация · шаг 2 из 3', 'Sign up · step 2 of 3'));
     });
   }
-
   // Подтверждение номера. В демо код показывается на экране вместо настоящего SMS.
-  function renderVerify(card, phone, onSuccess, eyebrow = 'Подтверждение номера') {
+  function renderVerify(card, phone, onSuccess, eyebrow = L('Подтверждение номера', 'Number verification')) {
     let code = String(1000 + Math.floor(Math.random() * 9000)), timer = null, left = 0;
     card.innerHTML = `
-      <div><span class="eyebrow">${eyebrow}</span><h1 style="margin-top:8px">Введите код из SMS</h1>
-        <p class="muted" style="margin-top:8px">Отправили 4 цифры на <span class="mono">${fmtPhone(phone)}</span></p></div>
+      <div><span class="eyebrow">${eyebrow}</span><h1 style="margin-top:8px">${L('Введите код из SMS', 'Enter the SMS code')}</h1>
+        <p class="muted" style="margin-top:8px">${L('Отправили 4 цифры на', 'We sent 4 digits to')} <span class="mono">${fmtPhone(phone)}</span></p></div>
       <form class="form" id="code-form">
-        <div class="code-inputs">${[0, 1, 2, 3].map(i => `<input id="code-${i}" inputmode="numeric" autocomplete="${i === 0 ? 'one-time-code' : 'off'}" maxlength="1" aria-label="Цифра ${i + 1}">`).join('')}</div>
+        <div class="code-inputs">${[0, 1, 2, 3].map(i => `<input id="code-${i}" inputmode="numeric" autocomplete="${i === 0 ? 'one-time-code' : 'off'}" maxlength="1" aria-label="${L('Цифра', 'Digit')} ${i + 1}">`).join('')}</div>
         <div class="hint" id="sms-hint"></div>
         <div class="error" id="code-err" style="text-align:center"></div>
-        <button class="btn btn-primary" type="submit">Подтвердить</button>
+        <button class="btn btn-primary" type="submit">${L('Подтвердить', 'Confirm')}</button>
         <div class="resend" id="resend"></div>
-        <button class="link-btn" type="button" id="code-back">Изменить номер</button>
+        <button class="link-btn" type="button" id="code-back">${L('Изменить номер', 'Change number')}</button>
       </form>`;
     const boxes = $$('.code-inputs input', card);
-    const showHint = () => { $('#sms-hint').innerHTML = `Демо-режим, SMS не отправляется. Ваш код: <b>${code}</b>`; };
+    const showHint = () => { $('#sms-hint').innerHTML = `${L('Демо-режим, SMS не отправляется. Ваш код:', 'Demo mode, no SMS is sent. Your code:')} <b>${code}</b>`; };
     const tick = () => {
       const r = $('#resend'); if (!r) return clearInterval(timer);
-      r.innerHTML = left > 0 ? `Отправить код повторно через <span class="mono">0:${pad(left)}</span>` : '<button class="link-btn" type="button" id="resend-btn">Отправить код ещё раз</button>';
+      r.innerHTML = left > 0 ? `${L('Отправить код повторно через', 'Resend the code in')} <span class="mono">0:${pad(left)}</span>` : `<button class="link-btn" type="button" id="resend-btn">${L('Отправить код ещё раз', 'Send the code again')}</button>`;
       if (left-- <= 0) {
         clearInterval(timer);
-        $('#resend-btn').onclick = () => { code = String(1000 + Math.floor(Math.random() * 9000)); showHint(); toast('Новый код отправлен'); start(); };
+        $('#resend-btn').onclick = () => { code = String(1000 + Math.floor(Math.random() * 9000)); showHint(); toast(L('Новый код отправлен', 'A new code has been sent')); start(); };
       }
     };
     const start = () => { left = 30; clearInterval(timer); tick(); timer = setInterval(tick, 1000); };
@@ -1204,51 +1564,49 @@
     $('#code-form').addEventListener('submit', ev => {
       ev.preventDefault();
       if (boxes.map(b => b.value).join('') !== code) {
-        $('#code-err').textContent = 'Код не подходит. Проверьте цифры или запросите новый.';
+        $('#code-err').textContent = L('Код не подходит. Проверьте цифры или запросите новый.', 'The code is wrong. Check the digits or request a new one.');
         boxes.forEach(b => b.value = ''); boxes[0].focus(); return;
       }
       clearInterval(timer); onSuccess();
     });
     $('#code-back').addEventListener('click', () => { clearInterval(timer); route(); });
   }
-
   function renderAvatarStep(card, user) {
     const draw = () => {
       card.innerHTML = `
-        <div><span class="eyebrow">Регистрация · шаг 3 из 3</span><h1 style="margin-top:8px">Добавьте фото</h1>
-          <p class="muted" style="margin-top:8px">По аватару друзья узнают вас в списке участников.</p></div>
+        <div><span class="eyebrow">${L('Регистрация · шаг 3 из 3', 'Sign up · step 3 of 3')}</span><h1 style="margin-top:8px">${L('Добавьте фото', 'Add a photo')}</h1>
+          <p class="muted" style="margin-top:8px">${L('По аватару друзья узнают вас в списке участников.', 'Friends will recognise you in the guest list.')}</p></div>
         <div class="avatar-upload">${avatar(user, 'lg')}
-          <div class="verified">${ICON.check}Номер ${fmtPhone(user.phone)} подтверждён</div>
-          <div class="avatar-actions"><button class="btn" type="button" id="av-up">${user.avatar ? 'Выбрать другое' : 'Загрузить фото'}</button></div></div>
-        <button class="btn btn-primary" type="button" id="av-done">${user.avatar ? 'Готово' : 'Пропустить'}</button>`;
+          <div class="verified">${ICON.check}${L('Номер', 'Number')} ${fmtPhone(user.phone)} ${L('подтверждён', 'verified')}</div>
+          <div class="avatar-actions"><button class="btn" type="button" id="av-up">${user.avatar ? L('Выбрать другое', 'Choose another') : L('Загрузить фото', 'Upload photo')}</button></div></div>
+        <button class="btn btn-primary" type="button" id="av-done">${user.avatar ? L('Готово', 'Done') : L('Пропустить', 'Skip')}</button>`;
       $('#av-up').onclick = () => pickAvatarFile(url => { user.avatar = url; save(); draw(); });
-      $('#av-done').onclick = () => { toast(`Добро пожаловать, ${user.name}!`); go(''); };
+      $('#av-done').onclick = () => { toast(L(`Добро пожаловать, ${user.name}!`, `Welcome, ${user.name}!`)); go(''); };
     };
     draw();
   }
-
-  function signIn(user) { db.session = user.id; save(); toast(`Вы вошли как ${user.name}`); go(''); }
+  function signIn(user) { db.session = user.id; save(); toast(L(`Вы вошли как ${user.name}`, `Signed in as ${user.name}`)); go(''); }
 
   // ---------- Пикер приглашений ----------
   function invitePicker(root, exclude, preset = []) {
     const u = me(), sel = preset.slice();
     root.innerHTML = `<div class="picker"><div class="picker-chips"></div>
-      <input class="input" id="inv-q" placeholder="Имя или номер телефона" autocomplete="off" aria-label="Кого пригласить"><div class="suggest"></div></div>`;
+      <input class="input" id="inv-q" placeholder="${L('Имя или номер телефона', 'Name or phone number')}" autocomplete="off" aria-label="${L('Кого пригласить', 'Who to invite')}"><div class="suggest"></div></div>`;
     const chips = $('.picker-chips', root), sug = $('.suggest', root), q = $('#inv-q', root);
     const taken = () => new Set([...exclude, ...sel.map(s => s.userId || s.phone)]);
     const draw = () => {
       chips.innerHTML = sel.map((s, i) => {
         const p = s.userId && userById(s.userId);
-        return `<span class="chip">${p ? avatar(p, 'xs') + esc(p.name) : `<span class="mono">${fmtPhone(s.phone)}</span>`}<button type="button" data-i="${i}" aria-label="Убрать">×</button></span>`;
+        return `<span class="chip">${p ? avatar(p, 'xs') + esc(p.name) : `<span class="mono">${fmtPhone(s.phone)}</span>`}<button type="button" data-i="${i}" aria-label="${L('Убрать', 'Remove')}">×</button></span>`;
       }).join('');
       const text = q.value.trim().toLowerCase(), qd = digits(text), t = taken();
       const found = db.users
         .filter(p => !t.has(p.id) && (!text || p.name.toLowerCase().includes(text) || (qd.length >= 3 && p.phone.includes(qd))))
         .sort((a, b) => isFriend(u, b) - isFriend(u, a) || a.name.localeCompare(b.name, 'ru')).slice(0, 6);
-      let html = found.map(p => `<button type="button" data-u="${p.id}">${avatar(p, 'sm')}<span>${esc(p.name)}${isFriend(u, p) ? ' <em class="tag-friend">друг</em>' : ''}</span><small>${canSeePhone(u, p) ? fmtPhone(p.phone) : maskedPhone(p.phone)}</small></button>`).join('');
+      let html = found.map(p => `<button type="button" data-u="${p.id}">${avatar(p, 'sm')}<span>${esc(p.name)}${isFriend(u, p) ? ` <em class="tag-friend">${L('друг', 'friend')}</em>` : ''}</span><small>${canSeePhone(u, p) ? fmtPhone(p.phone) : maskedPhone(p.phone)}</small></button>`).join('');
       const np = normPhone(qd);
-      if (validPhone(np) && !userByPhone(np) && !t.has(np)) html += `<button type="button" data-p="${np}"><span class="av av-sm av-ghost">+</span><span>Пригласить по номеру</span><small>${fmtPhone(np)}</small></button>`;
-      sug.innerHTML = html || `<p class="muted" style="padding:8px;font-size:13.5px">${text ? 'Никого не нашли. Введите номер полностью, чтобы пригласить по SMS.' : 'Все ваши знакомые уже приглашены.'}</p>`;
+      if (validPhone(np) && !userByPhone(np) && !t.has(np)) html += `<button type="button" data-p="${np}"><span class="av av-sm av-ghost">+</span><span>${L('Пригласить по номеру', 'Invite by number')}</span><small>${fmtPhone(np)}</small></button>`;
+      sug.innerHTML = html || `<p class="muted" style="padding:8px;font-size:13.5px">${text ? L('Никого не нашли. Введите номер полностью, чтобы пригласить по SMS.', 'Nobody found. Enter the full number to invite by SMS.') : L('Все ваши знакомые уже приглашены.', 'Everyone you know is already invited.')}</p>`;
     };
     q.addEventListener('input', draw);
     root.addEventListener('click', e => {
@@ -1267,48 +1625,52 @@
     return p ? { userId: p.id, status: 'pending' } : { ...s, status: 'pending' };
   });
 
-  // Форма сбора: создание, повтор и редактирование.
+  // Форма сбора: создание, повтор и редактирование. Заведение можно выбрать из карты.
   function eventForm({ heading, submitLabel, data = {}, preset = [], withPicker = true, onSave }) {
     const u = me();
     const at = data.at ? new Date(data.at) : (() => { const t = new Date(Date.now() + 864e5); t.setHours(20, 0, 0, 0); return t; })();
+    const names = [...new Set([...VENUES.map(v => v.name), u.favVenue, ...db.events.map(e => e.venue)].filter(Boolean))];
     let picker;
     openModal(heading, `
       <form class="form" id="ev-form" novalidate>
-        <div class="field"><label for="ev-title">Название</label><input id="ev-title" maxlength="60" placeholder="Например, пятничный сбор" value="${esc(data.title || '')}"></div>
-        <div class="row-2"><div class="field"><label for="ev-venue">Заведение</label><input id="ev-venue" maxlength="60" list="ev-venues" placeholder="Название кальянной" value="${esc(data.venue || u.favVenue || '')}">
-            <datalist id="ev-venues">${[...new Set([u.favVenue, ...db.events.map(e => e.venue)].filter(Boolean))].map(v => `<option value="${esc(v)}">`).join('')}</datalist></div>
-          <div class="field"><label for="ev-address">Адрес</label><input id="ev-address" maxlength="100" placeholder="Улица, дом" value="${esc(data.address || '')}"></div></div>
-        <div class="field"><label for="ev-map">Ссылка на заведение <span class="muted">(необязательно)</span></label><input id="ev-map" type="url" maxlength="300" placeholder="https://… сайт, Instagram или карточка на картах" value="${esc(data.mapUrl || '')}"></div>
-        <div class="row-2"><div class="field"><label for="ev-date">Дата</label><input id="ev-date" type="date" value="${ymd(at)}"></div>
-          <div class="field"><label for="ev-time">Время</label><input id="ev-time" type="time" value="${hm(at)}"></div></div>
-        <div class="row-2"><div class="field"><label for="ev-hookahs">Кальянов</label><input id="ev-hookahs" type="number" min="0" max="20" value="${data.hookahs ?? 2}"></div>
-          <div class="field"><label for="ev-price">Цена одного, ₽</label><input id="ev-price" type="number" min="0" max="100000" step="50" value="${data.price ?? 1800}"></div></div>
-        <div class="field"><label for="ev-desc">Комментарий</label><textarea id="ev-desc" maxlength="400" placeholder="Бронь, кто что приносит">${esc(data.desc || '')}</textarea></div>
-        ${withPicker ? '<div class="field"><span class="label">Пригласить</span><div id="ev-picker"></div></div>' : ''}
+        <div class="field"><label for="ev-title">${L('Название', 'Title')}</label><input id="ev-title" maxlength="60" placeholder="${L('Например, пятничный сбор', 'For example, Friday night')}" value="${esc(data.title || '')}"></div>
+        <div class="row-2"><div class="field"><label for="ev-venue">${L('Заведение', 'Venue')}</label><input id="ev-venue" maxlength="60" list="ev-venues" placeholder="${L('Начните вводить название', 'Start typing a name')}" value="${esc(data.venue || u.favVenue || '')}">
+            <datalist id="ev-venues">${names.map(v => `<option value="${esc(v)}">`).join('')}</datalist></div>
+          <div class="field"><label for="ev-address">${L('Адрес', 'Address')}</label><input id="ev-address" maxlength="100" placeholder="${L('Подставится сам для мест с карты', 'Filled in automatically for places on the map')}" value="${esc(data.address || '')}"></div></div>
+        <div class="field"><label for="ev-map">${L('Ссылка на заведение', 'Venue link')} <span class="muted">(${L('необязательно', 'optional')})</span></label><input id="ev-map" type="url" maxlength="300" placeholder="https://…" value="${esc(data.mapUrl || '')}"></div>
+        <div class="row-2"><div class="field"><label for="ev-date">${L('Дата', 'Date')}</label><input id="ev-date" type="date" value="${ymd(at)}"></div>
+          <div class="field"><label for="ev-time">${L('Время', 'Time')}</label><input id="ev-time" type="time" value="${hm(at)}"></div></div>
+        <div class="row-2"><div class="field"><label for="ev-hookahs">${L('Кальянов', 'Hookahs')}</label><input id="ev-hookahs" type="number" min="0" max="20" value="${data.hookahs ?? 2}"></div>
+          <div class="field"><label for="ev-price">${L('Цена одного, сом', 'Price each, KGS')}</label><input id="ev-price" type="number" min="0" max="100000" step="50" value="${data.price ?? 1200}"></div></div>
+        <div class="field"><label for="ev-desc">${L('Комментарий', 'Notes')}</label><textarea id="ev-desc" maxlength="400" placeholder="${L('Бронь, кто что приносит', 'Booking, who brings what')}">${esc(data.desc || '')}</textarea></div>
+        ${withPicker ? `<div class="field"><span class="label">${L('Пригласить', 'Invite')}</span><div id="ev-picker"></div></div>` : ''}
         <div class="error" id="ev-err"></div>
-        <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">Отмена</button><button class="btn btn-primary" type="submit">${submitLabel}</button></div>
+        <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">${L('Отмена', 'Cancel')}</button><button class="btn btn-primary" type="submit">${submitLabel}</button></div>
       </form>`, m => {
       if (withPicker) picker = invitePicker($('#ev-picker', m), [u.id], preset);
+      const vIn = $('#ev-venue', m), aIn = $('#ev-address', m);
+      vIn.addEventListener('change', () => { const v = VENUES.find(x => x.name === vIn.value.trim()); if (v && v.addr && !aIn.value.trim()) aIn.value = v.addr; });
       $('#ev-form', m).addEventListener('submit', ev => {
         ev.preventDefault();
         const err = $('#ev-err', m), val = s => $(s, m).value.trim();
         const title = val('#ev-title'), venue = val('#ev-venue'), mapUrl = val('#ev-map');
-        if (!title) return void (err.textContent = 'Придумайте название сбора.');
-        if (!venue) return void (err.textContent = 'Укажите заведение.');
-        if (mapUrl && !/^https?:\/\/\S+\.\S+/.test(mapUrl)) return void (err.textContent = 'Ссылка должна начинаться с https://');
+        if (!title) return void (err.textContent = L('Придумайте название сбора.', 'Give the event a title.'));
+        if (!venue) return void (err.textContent = L('Укажите заведение.', 'Choose a venue.'));
+        if (mapUrl && !/^https?:\/\/\S+\.\S+/.test(mapUrl)) return void (err.textContent = L('Ссылка должна начинаться с https://', 'The link must start with https://'));
         const when = new Date(`${val('#ev-date')}T${val('#ev-time') || '20:00'}`);
-        if (isNaN(when)) return void (err.textContent = 'Укажите дату и время.');
-        if (when < Date.now()) return void (err.textContent = 'Это время уже прошло. Выберите время в будущем.');
+        if (isNaN(when)) return void (err.textContent = L('Укажите дату и время.', 'Set a date and time.'));
+        if (when < Date.now()) return void (err.textContent = L('Это время уже прошло. Выберите время в будущем.', 'That time has passed. Pick a time in the future.'));
         const hookahs = Math.max(0, Math.min(20, parseInt(val('#ev-hookahs'), 10) || 0));
         const price = Math.max(0, parseInt(val('#ev-price'), 10) || 0);
-        onSave({ title, venue, address: val('#ev-address'), mapUrl, at: when.toISOString(), hookahs, price, desc: val('#ev-desc') }, picker ? toInvites(picker.get()) : []);
+        const v = VENUES.find(x => x.name === venue);
+        onSave({ title, venue, venueId: v ? v.id : null, address: val('#ev-address') || v?.addr || '', mapUrl, at: when.toISOString(), hookahs, price, desc: val('#ev-desc') }, picker ? toInvites(picker.get()) : []);
       });
     });
   }
   function createEvent(fields, invites) {
     const e = { id: uid('e'), hostId: me().id, createdAt: new Date().toISOString(), ...fields, invites, picks: {}, bowls: {}, comments: [], paid: {}, remind: {}, notified: {} };
     db.events.push(e); save(); closeModal();
-    toast(invites.length ? `Сбор создан, приглашения отправлены: ${invites.length}` : 'Сбор создан');
+    toast(invites.length ? L(`Сбор создан, приглашения отправлены: ${invites.length}`, `Event created, invitations sent: ${invites.length}`) : L('Сбор создан', 'Event created'));
     go('event/' + e.id);
   }
 
@@ -1320,14 +1682,13 @@
       const left = new Date(e.at) - Date.now();
       if (left > 0 && left <= 3600e3) {
         e.notified[u.id] = true; save();
-        const msg = `Через ${Math.ceil(left / 60000)} мин: ${e.title}, ${e.venue}`;
+        const msg = L(`Через ${Math.ceil(left / 60000)} мин: ${e.title}, ${e.venue}`, `In ${Math.ceil(left / 60000)} min: ${e.title}, ${e.venue}`);
         toast(msg);
         try { if ('Notification' in window && Notification.permission === 'granted') new Notification('Hookah Party', { body: msg }); } catch (err) { /* уведомления недоступны */ }
       }
     }
   }
-  setInterval(checkReminders, 30000);
-
+  setInterval(() => { checkReminders(); $$('[data-countdown]').forEach(el => { el.textContent = countdown(el.dataset.countdown); }); }, 30000);
   function downloadIcs(e) {
     const f = d => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
     const x = t => String(t || '').replace(/[\\,;]/g, m => '\\' + m).replace(/\n/g, '\\n');
@@ -1335,7 +1696,7 @@
     const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Hookah Party//RU', 'BEGIN:VEVENT',
       `UID:${e.id}@hookahparty`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(s)}`, `DTEND:${f(end)}`,
       `SUMMARY:${x(e.title)}`, `LOCATION:${x([e.venue, e.address].filter(Boolean).join(', '))}`, `DESCRIPTION:${x(e.desc)}`,
-      'BEGIN:VALARM', 'TRIGGER:-PT60M', 'ACTION:DISPLAY', 'DESCRIPTION:Через час кальянный сбор', 'END:VALARM',
+      'BEGIN:VALARM', 'TRIGGER:-PT60M', 'ACTION:DISPLAY', `DESCRIPTION:${x(L('Через час кальянный сбор', 'Hookah meet-up in one hour'))}`, 'END:VALARM',
       'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
@@ -1346,46 +1707,49 @@
 
   // ---------- Действия ----------
   function go(path) { const h = '#/' + path; if (location.hash === h) route(); else location.hash = h; }
-  function requireUser() { if (me()) return true; toast('Войдите, чтобы продолжить'); go('login'); return false; }
+  function requireUser() { if (me()) return true; toast(L('Войдите, чтобы продолжить', 'Sign in to continue')); go('login'); return false; }
+  const newEventForm = (extra = {}) => eventForm({ heading: L('Новый сбор', 'New event'), submitLabel: L('Создать и пригласить', 'Create and invite'), onSave: createEvent, ...extra });
 
   const actions = {
     closeModal,
-    newEvent() {
+    newEvent() { if (requireUser()) newEventForm(); },
+    inviteUser({ id }) { if (requireUser()) newEventForm({ preset: [{ userId: id }] }); },
+    gatherHere({ vid }) {
       if (!requireUser()) return;
-      eventForm({ heading: 'Новый сбор', submitLabel: 'Создать и пригласить', onSave: createEvent });
+      const v = venueById(vid);
+      newEventForm({ data: { venue: v.name, address: v.addr } });
     },
-    inviteUser({ id }) {
-      if (!requireUser()) return;
-      eventForm({ heading: 'Новый сбор', submitLabel: 'Создать и пригласить', preset: [{ userId: id }], onSave: createEvent });
-    },
+    showVenue({ vid }) { pendingVenue = vid; go('venues'); },
+    venueOpen() { venueOpenOnly = !venueOpenOnly; render(); },
+    openInvites() { tab.home = 'invites'; prefs.set('tab.home', 'invites'); go('events'); },
     repeatEvent({ id }) {
       const e = eventById(id), u = me(); if (!e || !u) return;
       const next = new Date(e.at);
       do next.setDate(next.getDate() + 7); while (next < Date.now());
       const preset = [...(e.hostId !== u.id ? [{ userId: e.hostId }] : []),
         ...e.invites.filter(i => i.userId !== u.id && i.status !== 'declined').map(i => i.userId ? { userId: i.userId } : { phone: i.phone })];
-      eventForm({ heading: 'Повторить сбор', submitLabel: 'Создать и пригласить', data: { ...e, at: next.toISOString() }, preset, onSave: createEvent });
+      eventForm({ heading: L('Повторить сбор', 'Repeat event'), submitLabel: L('Создать и пригласить', 'Create and invite'), data: { ...e, at: next.toISOString() }, preset, onSave: createEvent });
     },
     editEvent({ id }) {
       const e = eventById(id); if (!e) return;
       eventForm({
-        heading: 'Изменить сбор', submitLabel: 'Сохранить', data: e, withPicker: false,
+        heading: L('Изменить сбор', 'Edit event'), submitLabel: L('Сохранить', 'Save'), data: e, withPicker: false,
         onSave(fields) {
           if (fields.at !== e.at) e.notified = {};
-          Object.assign(e, fields); save(); closeModal(); toast('Сбор обновлён'); render();
+          Object.assign(e, fields); save(); closeModal(); toast(L('Сбор обновлён', 'Event updated')); render();
         }
       });
     },
     editBill({ id }) {
       const e = eventById(id); if (!e) return;
-      openModal('Складчина', `<form class="form" id="bill-form">
-        <div class="row-2"><div class="field"><label for="bl-h">Кальянов</label><input id="bl-h" type="number" min="0" max="20" value="${e.hookahs}"></div>
-          <div class="field"><label for="bl-p">Цена одного, ₽</label><input id="bl-p" type="number" min="0" step="50" value="${e.price}"></div></div>
+      openModal(L('Складчина', 'Bill'), `<form class="form" id="bill-form">
+        <div class="row-2"><div class="field"><label for="bl-h">${L('Кальянов', 'Hookahs')}</label><input id="bl-h" type="number" min="0" max="20" value="${e.hookahs}"></div>
+          <div class="field"><label for="bl-p">${L('Цена одного, сом', 'Price each, KGS')}</label><input id="bl-p" type="number" min="0" step="50" value="${e.price}"></div></div>
         <p class="muted" id="bl-sum"></p>
-        <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">Отмена</button><button class="btn btn-primary" type="submit">Сохранить</button></div></form>`, m => {
+        <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">${L('Отмена', 'Cancel')}</button><button class="btn btn-primary" type="submit">${L('Сохранить', 'Save')}</button></div></form>`, m => {
         const n = goingIds(e).length, upd = () => {
           const t = (+$('#bl-h', m).value || 0) * (+$('#bl-p', m).value || 0);
-          $('#bl-sum', m).textContent = `Итого ${money(t)}, с каждого из ${n}: ${money(n ? t / n : 0)}`;
+          $('#bl-sum', m).textContent = L(`Итого ${money(t)}, с каждого из ${n}: ${money(n ? t / n : 0)}`, `Total ${money(t)}, each of ${n}: ${money(n ? t / n : 0)}`);
         };
         $$('input', m).forEach(i => i.addEventListener('input', upd)); upd();
         $('#bill-form', m).addEventListener('submit', ev => {
@@ -1403,13 +1767,13 @@
     },
     toggleRemind({ id }) {
       const e = eventById(id), u = me(); if (!e || !u) return;
-      if (e.remind[u.id]) { delete e.remind[u.id]; save(); toast('Напоминание выключено'); render(); return; }
+      if (e.remind[u.id]) { delete e.remind[u.id]; save(); toast(L('Напоминание выключено', 'Reminder off')); render(); return; }
       e.remind[u.id] = true; delete e.notified[u.id]; save(); render();
-      toast('Напомним за час, пока сайт открыт. Надёжнее добавить сбор в календарь.');
+      toast(L('Напомним за час, пока сайт открыт. Надёжнее добавить сбор в календарь.', 'We will remind you an hour before while the site is open. Adding it to your calendar is more reliable.'));
       try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {}); } catch (err) { /* уведомления недоступны */ }
       checkReminders();
     },
-    ics({ id }) { const e = eventById(id); if (e) { downloadIcs(e); toast('Файл календаря скачан. Откройте его, чтобы добавить сбор.'); } },
+    ics({ id }) { const e = eventById(id); if (e) { downloadIcs(e); toast(L('Файл календаря скачан. Откройте его, чтобы добавить сбор.', 'Calendar file downloaded. Open it to add the event.')); } },
     deleteComment({ id, comment }) {
       const e = eventById(id); if (!e) return;
       e.comments = e.comments.filter(c => c.id !== comment); save(); render();
@@ -1417,13 +1781,13 @@
     invite({ id }) {
       const e = eventById(id); if (!e) return;
       let picker;
-      openModal('Пригласить на сбор', `<div id="inv-picker"></div>
-        <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">Отмена</button><button class="btn btn-primary" type="button" id="inv-send">Отправить приглашения</button></div>`, m => {
+      openModal(L('Пригласить на сбор', 'Invite to the event'), `<div id="inv-picker"></div>
+        <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">${L('Отмена', 'Cancel')}</button><button class="btn btn-primary" type="button" id="inv-send">${L('Отправить приглашения', 'Send invitations')}</button></div>`, m => {
         picker = invitePicker($('#inv-picker', m), [e.hostId, ...e.invites.map(i => i.userId || i.phone)]);
         $('#inv-send', m).onclick = () => {
           const list = toInvites(picker.get());
-          if (!list.length) return toast('Выберите хотя бы одного человека', 'err');
-          e.invites.push(...list); save(); closeModal(); toast(`Приглашения отправлены: ${list.length}`); render();
+          if (!list.length) return toast(L('Выберите хотя бы одного человека', 'Choose at least one person'), 'err');
+          e.invites.push(...list); save(); closeModal(); toast(L(`Приглашения отправлены: ${list.length}`, `Invitations sent: ${list.length}`)); render();
         };
       });
     },
@@ -1431,23 +1795,23 @@
       const e = eventById(id), u = me(), inv = e && u && myInvite(e, u); if (!inv) return;
       inv.status = status; inv.at = new Date().toISOString();
       if (status !== 'going') { delete e.picks[u.id]; delete e.bowls[u.id]; delete e.paid[u.id]; }
-      save(); toast(status === 'going' ? 'Отлично, ждём вас! Выберите табаки.' : 'Организатор узнает, что вы не придёте'); render();
+      save(); toast(status === 'going' ? L('Отлично, ждём вас! Выберите табаки.', 'Great, see you there! Pick your tobacco.') : L('Организатор узнает, что вы не придёте', 'The host will know you can’t make it')); render();
     },
     pickTobacco({ id }) {
       const e = eventById(id), u = me(); if (!e || !canVote(e, u)) return;
       const MAX = 5, cur = new Set(e.picks[u.id] || []);
       const list = [...CATALOG.tobaccos].sort((a, b) => u.favs.includes(b.id) - u.favs.includes(a.id));
-      openModal('Мои табаки', `
-        <p class="muted">Отметьте до ${MAX} вкусов. Избранные стоят первыми. Позиции, которые выбрало больше участников, будут выше в общем списке.</p>
-        <input class="input" id="pk-q" type="search" placeholder="Поиск по бренду или вкусу" aria-label="Поиск табака">
-        <div class="pick-list" id="pk-list">${list.map(t => `<label class="pick-item" data-s="${esc((t.brand + ' ' + t.flavor + ' ' + t.note).toLowerCase())}">
-          <input type="checkbox" value="${t.id}" ${cur.has(t.id) ? 'checked' : ''}><span class="swatch" style="--pc:${t.color}"></span><span><b>${esc(t.brand)}</b> ${esc(t.flavor)}${u.favs.includes(t.id) ? ' <em class="tag-friend">избранное</em>' : ''}<small>${esc(t.note)}</small></span><em>${t.strength}/10</em></label>`).join('')}</div>
+      openModal(L('Мои табаки', 'My tobacco'), `
+        <p class="muted">${L(`Отметьте до ${MAX} вкусов. Избранные стоят первыми.`, `Mark up to ${MAX} flavours. Favourites come first.`)}</p>
+        <input class="input" id="pk-q" type="search" placeholder="${L('Поиск по бренду или вкусу', 'Search by brand or flavour')}" aria-label="${L('Поиск табака', 'Search tobacco')}">
+        <div class="pick-list" id="pk-list">${list.map(t => `<label class="pick-item" data-s="${esc((t.brand + ' ' + t.flavor + ' ' + t.note.join(' ')).toLowerCase())}">
+          <input type="checkbox" value="${t.id}" ${cur.has(t.id) ? 'checked' : ''}><span class="swatch" style="--pc:${t.color}"></span><span><b>${esc(t.brand)}</b> ${esc(t.flavor)}${u.favs.includes(t.id) ? ` <em class="tag-friend">${L('избранное', 'favourite')}</em>` : ''}<small>${esc(tr(t.note))}</small></span><em>${t.strength}/10</em></label>`).join('')}</div>
         <div class="modal-foot"><span class="muted" id="pk-count" style="margin-right:auto;align-self:center"></span>
-          <button class="btn btn-ghost" type="button" data-action="closeModal">Отмена</button><button class="btn btn-primary" type="button" id="pk-save">Сохранить</button></div>`, m => {
+          <button class="btn btn-ghost" type="button" data-action="closeModal">${L('Отмена', 'Cancel')}</button><button class="btn btn-primary" type="button" id="pk-save">${L('Сохранить', 'Save')}</button></div>`, m => {
         const boxes = $$('input[type=checkbox]', m);
         const upd = () => {
           const n = boxes.filter(b => b.checked).length;
-          $('#pk-count', m).textContent = `Выбрано ${n} из ${MAX}`;
+          $('#pk-count', m).textContent = L(`Выбрано ${n} из ${MAX}`, `${n} of ${MAX} selected`);
           boxes.forEach(b => { b.disabled = !b.checked && n >= MAX; });
         };
         boxes.forEach(b => b.addEventListener('change', upd)); upd();
@@ -1458,20 +1822,20 @@
         $('#pk-save', m).onclick = () => {
           const ids = boxes.filter(b => b.checked).map(b => b.value);
           if (ids.length) e.picks[u.id] = ids; else delete e.picks[u.id];
-          save(); closeModal(); toast('Ваш выбор учтён'); render();
+          save(); closeModal(); toast(L('Ваш выбор учтён', 'Your pick is saved')); render();
         };
       });
     },
     pickBowl({ id }) {
       const e = eventById(id), u = me(); if (!e || !canVote(e, u)) return;
       const cur = e.bowls[u.id];
-      openModal('Чаша', `<div class="pick-list">${CATALOG.bowls.map(b => `<label class="pick-item"><input type="radio" name="bowl" value="${b.id}" ${cur === b.id ? 'checked' : ''}>
-          <span><b>${esc(b.name)}</b><small>${esc(b.type)} · ${esc(b.note)}</small></span></label>`).join('')}</div>
-        <div class="modal-foot">${cur ? '<button class="btn btn-ghost" type="button" id="bw-clear" style="margin-right:auto">Снять голос</button>' : ''}
-          <button class="btn btn-ghost" type="button" data-action="closeModal">Отмена</button><button class="btn btn-primary" type="button" id="bw-save">Сохранить</button></div>`, m => {
+      openModal(L('Чаша', 'Bowl'), `<div class="pick-list">${CATALOG.bowls.map(b => `<label class="pick-item"><input type="radio" name="bowl" value="${b.id}" ${cur === b.id ? 'checked' : ''}>
+          <span><b>${esc(tr(b.name))}</b><small>${tr(BOWL_TYPE[b.type])} · ${esc(tr(b.note))}</small></span></label>`).join('')}</div>
+        <div class="modal-foot">${cur ? `<button class="btn btn-ghost" type="button" id="bw-clear" style="margin-right:auto">${L('Снять голос', 'Remove vote')}</button>` : ''}
+          <button class="btn btn-ghost" type="button" data-action="closeModal">${L('Отмена', 'Cancel')}</button><button class="btn btn-primary" type="button" id="bw-save">${L('Сохранить', 'Save')}</button></div>`, m => {
         $('#bw-save', m).onclick = () => {
           const v = $('input[name=bowl]:checked', m)?.value;
-          if (!v) return toast('Выберите чашу', 'err');
+          if (!v) return toast(L('Выберите чашу', 'Choose a bowl'), 'err');
           e.bowls[u.id] = v; save(); closeModal(); render();
         };
         const c = $('#bw-clear', m); if (c) c.onclick = () => { delete e.bowls[u.id]; save(); closeModal(); render(); };
@@ -1479,9 +1843,9 @@
     },
     deleteEvent({ id }) {
       const e = eventById(id); if (!e) return;
-      openModal('Отменить сбор?', `<p class="muted">Сбор «${esc(e.title)}» исчезнет у всех приглашённых. Это действие нельзя отменить.</p>
-        <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">Оставить</button><button class="btn btn-danger" type="button" id="del-ok">Отменить сбор</button></div>`, m => {
-        $('#del-ok', m).onclick = () => { db.events = db.events.filter(x => x.id !== id); save(); closeModal(); toast('Сбор отменён'); go(''); };
+      openModal(L('Отменить сбор?', 'Cancel the event?'), `<p class="muted">${L(`Сбор «${esc(e.title)}» исчезнет у всех приглашённых. Это действие нельзя отменить.`, `“${esc(e.title)}” will disappear for everyone invited. This cannot be undone.`)}</p>
+        <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">${L('Оставить', 'Keep it')}</button><button class="btn btn-danger" type="button" id="del-ok">${L('Отменить сбор', 'Cancel event')}</button></div>`, m => {
+        $('#del-ok', m).onclick = () => { db.events = db.events.filter(x => x.id !== id); save(); closeModal(); toast(L('Сбор отменён', 'Event cancelled')); go('events'); };
       });
     },
     tobacco({ id }) { openTobacco(id); },
@@ -1495,37 +1859,38 @@
     },
     newMix() {
       if (!requireUser()) return;
-      const opts = `<option value="">— не выбран —</option>` + CATALOG.tobaccos.map(t => `<option value="${t.id}">${esc(t.brand)} ${esc(t.flavor)}</option>`).join('');
-      openModal('Свой микс', `<form class="form" id="mix-form">
-        <div class="field"><label for="mx-name">Название</label><input id="mx-name" maxlength="40" placeholder="Например, Ягодный лёд"></div>
-        ${[0, 1, 2].map(i => `<div class="mix-row"><div class="field"><label for="mx-t${i}">Табак ${i + 1}${i === 2 ? ' <span class="muted">(необязательно)</span>' : ''}</label><select id="mx-t${i}" class="input">${opts}</select></div>
-          <div class="field"><label for="mx-p${i}">Доля, %</label><input id="mx-p${i}" type="number" min="0" max="100" step="5" value="${[60, 40, 0][i]}"></div></div>`).join('')}
+      const opts = `<option value="">— ${L('не выбран', 'none')} —</option>` + CATALOG.tobaccos.map(t => `<option value="${t.id}">${esc(t.brand)} ${esc(t.flavor)}</option>`).join('');
+      openModal(L('Свой микс', 'Your mix'), `<form class="form" id="mix-form">
+        <div class="field"><label for="mx-name">${L('Название', 'Name')}</label><input id="mx-name" maxlength="40" placeholder="${L('Например, Ягодный лёд', 'For example, Berry Ice')}"></div>
+        ${[0, 1, 2].map(i => `<div class="mix-row"><div class="field"><label for="mx-t${i}">${L('Табак', 'Tobacco')} ${i + 1}${i === 2 ? ` <span class="muted">(${L('необязательно', 'optional')})</span>` : ''}</label><select id="mx-t${i}" class="input">${opts}</select></div>
+          <div class="field"><label for="mx-p${i}">${L('Доля, %', 'Share, %')}</label><input id="mx-p${i}" type="number" min="0" max="100" step="5" value="${[60, 40, 0][i]}"></div></div>`).join('')}
         <div class="mix-bar" id="mx-bar"></div>
         <p class="muted" id="mx-sum"></p>
         <div class="error" id="mx-err"></div>
-        <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">Отмена</button><button class="btn btn-primary" type="submit">Опубликовать</button></div></form>`, m => {
+        <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">${L('Отмена', 'Cancel')}</button><button class="btn btn-primary" type="submit">${L('Опубликовать', 'Publish')}</button></div></form>`, m => {
         const parts = () => [0, 1, 2].map(i => ({ id: $(`#mx-t${i}`, m).value, pct: parseInt($(`#mx-p${i}`, m).value, 10) || 0 })).filter(p => p.id && p.pct > 0);
         const upd = () => {
           const p = parts(), sum = p.reduce((s, x) => s + x.pct, 0);
-          $('#mx-sum', m).textContent = `Сумма долей: ${sum}%${sum !== 100 ? ' · должно быть 100%' : ''}`;
+          $('#mx-sum', m).textContent = L(`Сумма долей: ${sum}%`, `Total: ${sum}%`) + (sum !== 100 ? L(' · должно быть 100%', ' · must be 100%') : '');
           $('#mx-bar', m).innerHTML = p.map(x => `<span style="flex:${x.pct};--pc:${tobacco(x.id).color}"></span>`).join('');
         };
         $$('input, select', m).forEach(i => i.addEventListener('input', upd)); upd();
         $('#mix-form', m).addEventListener('submit', ev => {
           ev.preventDefault();
           const err = $('#mx-err', m), name = $('#mx-name', m).value.trim(), p = parts();
-          if (!name) return void (err.textContent = 'Придумайте название микса.');
-          if (p.length < 2) return void (err.textContent = 'Выберите хотя бы два табака с долей больше нуля.');
-          if (new Set(p.map(x => x.id)).size !== p.length) return void (err.textContent = 'Табаки в миксе не должны повторяться.');
-          if (p.reduce((s, x) => s + x.pct, 0) !== 100) return void (err.textContent = 'Доли должны давать в сумме 100%.');
+          if (!name) return void (err.textContent = L('Придумайте название микса.', 'Give the mix a name.'));
+          if (p.length < 2) return void (err.textContent = L('Выберите хотя бы два табака с долей больше нуля.', 'Choose at least two tobaccos with a share above zero.'));
+          if (new Set(p.map(x => x.id)).size !== p.length) return void (err.textContent = L('Табаки в миксе не должны повторяться.', 'Each tobacco can appear only once.'));
+          if (p.reduce((s, x) => s + x.pct, 0) !== 100) return void (err.textContent = L('Доли должны давать в сумме 100%.', 'Shares must add up to 100%.'));
           db.mixes.push({ id: uid('m'), name, authorId: me().id, parts: p.sort((a, b) => b.pct - a.pct), likes: [], at: new Date().toISOString() });
-          save(); closeModal(); toast('Микс опубликован'); tab.cat = 'mixes'; prefs.set('tab.cat', 'mixes'); render();
+          save(); closeModal(); toast(L('Микс опубликован', 'Mix published')); tab.cat = 'mixes'; prefs.set('tab.cat', 'mixes');
+          if (location.hash !== '#/catalog') go('catalog'); else render();
         });
       });
     },
     likeMix({ id }) {
-      const u = me(); if (!requireUser()) return;
-      const m = db.mixes.find(x => x.id === id); if (!m) return;
+      if (!requireUser()) return;
+      const u = me(), m = db.mixes.find(x => x.id === id); if (!m) return;
       m.likes = m.likes.includes(u.id) ? m.likes.filter(x => x !== u.id) : [...m.likes, u.id];
       save(); render();
     },
@@ -1542,30 +1907,31 @@
     toggleFriend({ id }) {
       const u = me(), p = userById(id); if (!u || !p) return;
       // В демо дружба взаимная сразу; на сервере здесь будет заявка в друзья.
-      if (isFriend(u, p)) { u.friends = u.friends.filter(x => x !== id); p.friends = p.friends.filter(x => x !== u.id); toast(`${p.name} удалён из друзей`); }
-      else { u.friends.push(id); if (!p.friends.includes(u.id)) p.friends.push(u.id); toast(`${p.name} теперь в друзьях`); }
+      if (isFriend(u, p)) { u.friends = u.friends.filter(x => x !== id); p.friends = p.friends.filter(x => x !== u.id); toast(L(`${p.name} удалён из друзей`, `${p.name} removed from friends`)); }
+      else { u.friends.push(id); if (!p.friends.includes(u.id)) p.friends.push(u.id); toast(L(`${p.name} теперь в друзьях`, `${p.name} is now your friend`)); }
       save(); render();
     },
+    setLang({ lang: l }) { if (l === lang) return; lang = l; prefs.set('lang', l); applyLook(); render(); },
     cycleTheme() {
       const order = ['auto', 'light', 'dark'], cur = prefs.get('theme', 'auto');
       const next = order[(order.indexOf(cur) + 1) % order.length];
-      prefs.set('theme', next); applyLook(); render(); toast(`Тема: ${THEMES[next][0].toLowerCase()}`);
+      prefs.set('theme', next); applyLook(); render(); toast(`${L('Тема', 'Theme')}: ${tr(THEMES[next][0]).toLowerCase()}`);
     },
     setTheme({ theme }) { prefs.set('theme', theme); applyLook(); render(); },
     setAccent({ accent }) { prefs.set('accent', accent); applyLook(); render(); },
-    uploadAvatar() { const u = me(); pickAvatarFile(url => { u.avatar = url; save(); toast('Фото обновлено'); render(); }); },
+    uploadAvatar() { const u = me(); pickAvatarFile(url => { u.avatar = url; save(); toast(L('Фото обновлено', 'Photo updated')); render(); }); },
     removeAvatar() { const u = me(); u.avatar = null; save(); render(); },
-    logout() { db.session = null; save(); toast('Вы вышли из аккаунта'); go(''); },
-    reset() { db = seed(); save(); toast('Демо-данные восстановлены'); go(''); },
+    logout() { db.session = null; save(); toast(L('Вы вышли из аккаунта', 'You have signed out')); go(''); },
+    reset() { db = seed(); save(); toast(L('Демо-данные восстановлены', 'Demo data restored')); go(''); },
     info({ key }) {
       const texts = {
-        rules: ['Правила сервиса', 'Сервис предназначен для лиц старше 18 лет. Организатор отвечает за бронь в заведении. Запрещено приглашать людей без их согласия и рассылать рекламу.'],
-        privacy: ['Конфиденциальность', 'Номер телефона нужен для входа и чтобы друзья могли пригласить вас. Полный номер видят только друзья и участники общих сборов. Мы не передаём данные третьим лицам.'],
-        venues: ['Заведениям', 'Хотите, чтобы гости находили вас в Hookah Party и бронировали столы? Напишите на hello@hookahparty.app, расскажем об условиях.'],
-        faq: ['Вопросы и ответы', 'Как пригласить друга без аккаунта? Введите его номер в поле приглашения. Сбор появится у него сразу после регистрации с этим номером.']
+        rules: [['Правила сервиса', 'Terms of use'], ['Сервис предназначен для лиц старше 18 лет. Организатор отвечает за бронь в заведении. Запрещено приглашать людей без их согласия и рассылать рекламу.', 'The service is for people aged 18 and over. The host is responsible for the booking. Inviting people without consent and sending ads is not allowed.']],
+        privacy: [['Конфиденциальность', 'Privacy'], ['Номер телефона нужен для входа и чтобы друзья могли пригласить вас. Полный номер видят только друзья и участники общих сборов. Мы не передаём данные третьим лицам.', 'Your phone number is used to sign in and so friends can invite you. Only friends and people from shared events see the full number. We do not share data with third parties.']],
+        venues: [['Заведениям', 'For venues'], ['Хотите оказаться на карте Hookah Party или поправить данные о своём заведении? Напишите на hello@hookahparty.app.', 'Want to appear on the Hookah Party map or correct your venue details? Write to hello@hookahparty.app.']],
+        faq: [['Вопросы и ответы', 'FAQ'], ['Как пригласить друга без аккаунта? Введите его номер в поле приглашения. Сбор появится у него сразу после регистрации с этим номером.', 'How do I invite a friend without an account? Enter their number in the invite field. The event appears for them as soon as they sign up with that number.']]
       };
       const [t, body] = texts[key] || texts.faq;
-      openModal(t, `<p class="muted" style="max-width:60ch">${esc(body)}</p><div class="modal-foot"><button class="btn btn-primary" type="button" data-action="closeModal">Понятно</button></div>`);
+      openModal(tr(t), `<p class="muted" style="max-width:60ch">${esc(tr(body))}</p><div class="modal-foot"><button class="btn btn-primary" type="button" data-action="closeModal">${L('Понятно', 'Got it')}</button></div>`);
     }
   };
 
@@ -1577,12 +1943,16 @@
   });
 
   // ---------- Роутер ----------
+  const view = $('#view');
   // render() перерисовывает текущую страницу без прокрутки наверх; route() — полный переход.
   function render() {
     const [page = '', arg] = location.hash.replace(/^#\/?/, '').split('/');
-    const nav = { '': 'home', event: 'home', catalog: 'catalog', people: 'people', user: 'people', how: 'how', profile: 'profile', login: 'profile', register: 'profile' }[page] || '';
+    const nav = { venues: 'venues', catalog: 'catalog', events: 'events', event: 'events', people: 'people', user: 'people', profile: 'profile', login: 'profile', register: 'profile' }[page] || '';
     renderChrome(nav);
+    document.title = 'Hookah Party';
     switch (page) {
+      case 'venues': pageVenues(); break;
+      case 'events': pageEvents(); break;
       case 'event': pageEvent(arg); break;
       case 'catalog': pageCatalog(); break;
       case 'people': pagePeople(); break;
