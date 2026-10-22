@@ -469,6 +469,7 @@
     if (season) root.dataset.season = season; else delete root.dataset.season;
     root.lang = lang;
     seasonFx(season);
+    window.requestAnimationFrame?.(() => typeof syncScroll === 'function' && syncScroll());
   }
 
   // Летучие мыши на Хэллоуин и снег на Новый год. Слой не ловит клики и выключается при «уменьшить движение».
@@ -531,6 +532,34 @@
       <button class="ribbon-x" type="button" data-action="closeRibbon" data-key="${key}" aria-label="${L('Скрыть', 'Hide')}">×</button></div>`;
   }
   applyLook();
+
+  // Живой фон: световые пятна сдвигаются при прокрутке, цвет меняется от верха страницы к низу.
+  const ambient = document.createElement('div');
+  ambient.className = 'ambient'; ambient.setAttribute('aria-hidden', 'true');
+  ambient.innerHTML = '<i class="amb amb-1"></i><i class="amb amb-2"></i><i class="amb amb-3"></i><i class="amb amb-4"></i>';
+  document.body.prepend(ambient);
+  let scrollQueued = false;
+  function syncScroll() {
+    scrollQueued = false;
+    const root = document.documentElement, max = Math.max(1, root.scrollHeight - window.innerHeight);
+    root.style.setProperty('--sy', Math.round(window.scrollY));
+    root.style.setProperty('--sp', Math.min(1, window.scrollY / max).toFixed(3));
+  }
+  window.addEventListener('scroll', () => { if (!scrollQueued) { scrollQueued = true; requestAnimationFrame(syncScroll); } }, { passive: true });
+  window.addEventListener('resize', syncScroll);
+  syncScroll();
+  // Свечение под курсором: координаты мыши внутри карточки.
+  const GLOW = '.tile-box, .ev-card, .cat-card, .vcard, .quote, .spot, .feature, .person-card, .panel, .step';
+  let glowEl = null;
+  document.addEventListener('pointermove', e => {
+    if (e.pointerType !== 'mouse') return;
+    const el = e.target.closest?.(GLOW);
+    if (glowEl && glowEl !== el) { glowEl.style.removeProperty('--mx'); glowEl.style.removeProperty('--my'); }
+    glowEl = el;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--mx', (e.clientX - r.left) + 'px'); el.style.setProperty('--my', (e.clientY - r.top) + 'px');
+  }, { passive: true });
 
   // ---------- Шапка, меню и подвал ----------
   function renderChrome(page) {
