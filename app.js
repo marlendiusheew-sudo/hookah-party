@@ -287,6 +287,7 @@
           bowls: { u2: 'b-fruit' }, comments: [], remind: {}, notified: {}
         }
       ],
+      storiesSeeded: true,
       reviews: [
         { id: 'r1', tobaccoId: 'ds-supernova', userId: 'u3', rating: 5, text: 'Лучший холодок, добавляю в каждый микс по чуть-чуть.', at: ago(60 * 24 * 3) },
         { id: 'r2', tobaccoId: 'ds-supernova', userId: 'u2', rating: 4, text: 'Сильно холодит, больше 20% не кладу.', at: ago(60 * 24 * 8) },
@@ -305,9 +306,75 @@
       ]
     };
   }
+  // Примеры для «Истории»: прошедшие вечера в настоящих заведениях с рассказом организатора.
+  function seedStories() {
+    const day = 864e5, past = (d, h) => { const x = new Date(Date.now() - d * day); x.setHours(h, 0, 0, 0); return x.toISOString(); };
+    const ago = mins => new Date(Date.now() - mins * 60000).toISOString();
+    const V = id => venueById(id) || { name: 'Hookah', addr: '' };
+    const ev = (id, title, vid, at, hostId, guests, picks, bowls, hookahs, price, story) => ({
+      id, title, venue: V(vid).name, address: V(vid).addr, venueId: vid, mapUrl: '', at, hostId, createdAt: at, desc: '',
+      hookahs, price, paid: Object.fromEntries([hostId, ...guests].map(g => [g, true])),
+      invites: guests.map(g => ({ userId: g, status: 'going', at })), picks, bowls, comments: [], remind: {}, notified: {}, story
+    });
+    const nyAt = (() => { const y = new Date().getMonth() >= 11 ? new Date().getFullYear() : new Date().getFullYear() - 1; return new Date(y, 11, 30, 21).toISOString(); })();
+    return {
+      e3: {
+        rating: 4, at: ago(60 * 24 * 8), fire: ['u1', 'u6'],
+        text: 'Заскочили после работы на пару часов. Кислая вишня в чистом виде оказалась слишком резкой, кальянщик подмешал грейпфрут, и стало то что нужно.',
+        highlights: ['Вишня + грейпфрут 50/50: забираем в миксы', 'Кальянщик Эрлан, просите его'],
+        comments: [{ id: 'sc1', userId: 'u6', text: 'Тот самый грейпфрут спас вечер 😄', at: ago(60 * 24 * 8 - 30) }]
+      },
+      events: [
+        ev('e4', 'Проводы лета', 'n4270648990', past(55, 20), 'u3', ['u1', 'u2', 'u5', 'u6'],
+          { u3: ['mh-pinkman', 'el-grapefruit'], u1: ['mh-pinkman', 'ds-supernova'], u2: ['mh-pinkman'], u5: ['ds-supernova'], u6: ['el-grapefruit'] }, { u3: 'b-phunnel', u1: 'b-phunnel' }, 2, 1200,
+          { rating: 5, at: past(54, 12), fire: ['u1', 'u2', 'u5', 'u6', 'u4'],
+            text: 'Последний тёплый вечер на веранде. Взяли два кальяна на фанеле и просидели до двух ночи. «Ледяной грейпфрут» по нашему миксу зашёл всем, второй забили так же.',
+            highlights: ['Pinkman + грейпфрут + капля Supernova — лучший микс лета', 'Веранда с видом на проспект, бронируйте заранее', 'Вышло по 480 сом с человека'],
+            comments: [
+              { id: 'sc2', userId: 'u1', text: 'Лучший вечер этого лета, без вариантов.', at: past(54, 13) },
+              { id: 'sc3', userId: 'u5', text: 'Повторим в сентябре, пока не похолодало?', at: past(53, 18) },
+              { id: 'sc4', userId: 'u6', text: 'Микс записала себе в избранное.', at: past(52, 10) }
+            ] }),
+        ev('e5', 'Футбол и кальян', 'n4724156811', past(30, 19), 'u5', ['u1', 'u3'],
+          { u5: ['od-cola', 'tg-canemint'], u1: ['od-cola'], u3: ['tg-canemint'] }, { u5: 'b-killer' }, 1, 1400,
+          { rating: 4, at: past(29, 11), fire: ['u1', 'u3'],
+            text: 'Смотрели матч на большом экране. Попросили собрать «Мятную колу» 70/30, кальянщик сделал на киллере, держал почти два часа. Наши выиграли 2:1.',
+            highlights: ['Cola 70% + Cane Mint 30%', 'Экран видно с любого дивана', 'Шумно во время матча, на разговоры лучше в другой день'],
+            comments: [{ id: 'sc5', userId: 'u3', text: 'Cane Mint крепкий, с колой как раз смягчается.', at: past(29, 15) }] }),
+        ev('e6', 'Девичник Сабины', 'n6360868686', past(20, 19), 'u4', ['u2', 'u6'],
+          { u4: ['fu-gummi', 'ad-love66'], u2: ['ad-love66', 'sb-bluemist'], u6: ['sb-bluemist', 'fu-gummi'] }, { u4: 'b-fruit', u2: 'b-fruit' }, 2, 1500,
+          { rating: 5, at: past(19, 13), fire: ['u2', 'u6', 'u3', 'u1'],
+            text: 'Отмечали втроём. Первый кальян на грейпфруте с мармеладными мишками, второй — Blue Mist. Музыка не громкая, можно спокойно поговорить.',
+            highlights: ['Чаша на грейпфруте — must have для праздника', 'Gummi Bear + Love 66 — сладко, но не приторно', 'Попросите столик у окна'],
+            comments: [
+              { id: 'sc6', userId: 'u2', text: 'Мишки на грейпфруте — это любовь.', at: past(19, 14) },
+              { id: 'sc7', userId: 'u3', text: 'Надо будет сводить туда парней.', at: past(18, 20) }
+            ] }),
+        ev('e7', 'Новогодний сбор', 'n5620015285', nyAt, 'u1', ['u2', 'u3', 'u4', 'u5', 'u6'],
+          { u1: ['ds-supernova', 'mh-pinkman'], u2: ['ds-fallingstar'], u3: ['ds-supernova'], u4: ['fu-gummi'], u5: ['ds-supernova', 'od-cola'], u6: ['ds-fallingstar'] }, { u1: 'b-phunnel', u3: 'b-phunnel', u5: 'b-killer' }, 3, 1300,
+          { rating: 5, at: new Date(new Date(nyAt).getTime() + 15 * 3600e3).toISOString(), fire: ['u2', 'u3', 'u4', 'u5', 'u6'],
+            text: 'Собрались всей компанией за день до Нового года. Три кальяна, тайный Санта и бенгальские огни на улице. Supernova выбрали почти все — зимой холодок особенно в тему.',
+            highlights: ['Тайный Санта: лимит 1000 сом', 'Supernova — фаворит вечера', 'Divan Lounge закрывает зал под компании от 6 человек'],
+            comments: [
+              { id: 'sc8', userId: 'u4', text: 'Мой подарок до сих пор стоит на полке!', at: new Date(new Date(nyAt).getTime() + 20 * 3600e3).toISOString() },
+              { id: 'sc9', userId: 'u6', text: 'Делаем традицией.', at: new Date(new Date(nyAt).getTime() + 26 * 3600e3).toISOString() }
+            ] })
+      ]
+    };
+  }
+
   // Дополняет сохранённые данные полями, которых не было в прошлых версиях.
+  function withStories(d) {
+    const st = seedStories();
+    const e3 = d.events.find(e => e.id === 'e3');
+    if (e3 && !e3.story) e3.story = st.e3;
+    for (const e of st.events) if (!d.events.some(x => x.id === e.id)) d.events.push(e);
+    d.storiesSeeded = true;
+    return d;
+  }
   function migrate(d) {
     const s = seed();
+    if (!d.storiesSeeded) withStories(d);
     d.users.forEach(u => { u.favs ||= []; u.friends ||= []; u.favVenue ??= ''; });
     d.events.forEach(e => {
       e.picks ||= {}; e.bowls ||= {}; e.comments ||= []; e.paid ||= {}; e.remind ||= {}; e.notified ||= {};
@@ -319,7 +386,7 @@
   }
   function load() { try { const raw = localStorage.getItem(KEY); if (raw) return migrate(JSON.parse(raw)); } catch (e) { /* хранилище недоступно */ } return null; }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { /* хранилище недоступно */ } }
-  let db = load() || seed();
+  let db = load() || withStories(seed());
 
   const me = () => db.users.find(u => u.id === db.session) || null;
   const userById = id => db.users.find(u => u.id === id);
@@ -566,7 +633,7 @@
   // ---------- Шапка, меню и подвал ----------
   function renderChrome(page) {
     const u = me(), theme = prefs.get('theme', 'auto'), themeName = tr(THEMES[theme][0]);
-    const navItems = [['venues', L('Заведения', 'Venues')], ['catalog', L('Кальян', 'Hookah')], ['events', L('События', 'Events')], ['people', L('Люди', 'People')]];
+    const navItems = [['venues', L('Заведения', 'Venues')], ['catalog', L('Кальян', 'Hookah')], ['events', L('События', 'Events')], ['history', L('История', 'History')], ['people', L('Люди', 'People')]];
     $('#nav').innerHTML = navItems.map(([k, t]) => `<a href="#/${k}" data-nav="${k}">${t}</a>`).join('');
     $('#nav').setAttribute('aria-label', L('Основное меню', 'Main menu'));
     $('#topbar-actions').innerHTML = `
@@ -590,7 +657,7 @@
         </div>
         <div class="footer-col"><h4>${L('Сервис', 'Service')}</h4>
           <a href="#/venues">${L('Заведения', 'Venues')}</a><a href="#/catalog">${L('Каталог табаков', 'Tobacco catalogue')}</a>
-          <a href="#/catalog" data-action="catTab" data-tab="mixes">${L('Миксы', 'Mixes')}</a><a href="#/events">${L('События', 'Events')}</a>
+          <a href="#/catalog" data-action="catTab" data-tab="mixes">${L('Миксы', 'Mixes')}</a><a href="#/events">${L('События', 'Events')}</a><a href="#/history">${L('История', 'History')}</a>
           <a href="#/people">${L('Люди', 'People')}</a><a href="#/how">${L('Как это работает', 'How it works')}</a></div>
         <div class="footer-col"><h4>${L('Помощь', 'Help')}</h4>
           <a href="#/" data-action="info" data-key="rules">${L('Правила сервиса', 'Terms of use')}</a>
@@ -614,7 +681,7 @@
   // Одни и те же вкладки в событиях, каталоге, у людей и в профиле. Последняя открытая запоминается.
   const tab = {
     home: prefs.get('tab.home', 'upcoming'), cat: prefs.get('tab.cat', 'tobaccos'),
-    people: prefs.get('tab.people', 'friends'), profile: prefs.get('tab.profile', 'about')
+    people: prefs.get('tab.people', 'friends'), profile: prefs.get('tab.profile', 'about'), history: prefs.get('tab.history', 'all')
   };
   const tabKeys = {};
   let tabDir = null;
@@ -1262,7 +1329,7 @@
 
     view.innerHTML = `
       <section class="greet-line"><div><span class="eyebrow">${L('События', 'Events')}</span><h1>${L('Мои сборы', 'My events')}</h1></div>
-        <button class="btn btn-primary btn-sm" type="button" data-action="newEvent">${ICON.plus}${L('Новый сбор', 'New event')}</button></section>
+        <div class="btn-row"><a class="btn btn-sm" href="#/history">${ICON.clock}${L('История вечеров', 'Evening stories')}</a><button class="btn btn-primary btn-sm" type="button" data-action="newEvent">${ICON.plus}${L('Новый сбор', 'New event')}</button></div></section>
       ${nextCard}
       ${uTabs('home', [
         { key: 'upcoming', label: L('Ближайшие', 'Upcoming'), count: upcoming.length },
@@ -1388,6 +1455,8 @@
       </section>
       <div class="ev-layout">
         <div class="ev-main">
+          ${past && isHost && !e.story ? storyFormHtml(e) : ''}
+          ${past && e.story ? `<a class="story-link" href="#/history" data-action="openStory" data-id="${e.id}">${ICON.clock}<span><b>${L('Рассказ об этом вечере в Истории', 'This evening’s story in History')}</b><small>${stars(e.story.rating)} · ${e.story.comments.length} ${pl(e.story.comments.length, ['комментарий', 'комментария', 'комментариев'], ['comment', 'comments'])}</small></span><span class="next-go">→</span></a>` : ''}
           <section class="panel">
             <div class="panel-head"><div><h2>${L('Табаки', 'Tobacco')}</h2><p class="muted" style="font-size:13.5px;margin-top:4px">${L('Чем больше голосов, тем выше позиция', 'More votes, higher position')}</p></div>
               ${canVote(e, u) && !past ? `<button class="btn btn-sm ${myPicks.length ? '' : 'btn-primary'}" data-action="pickTobacco" data-id="${e.id}">${myPicks.length ? `${L('Мой выбор', 'My pick')} · ${myPicks.length}` : L('Выбрать табаки', 'Pick tobacco')}</button>` : ''}</div>
@@ -1425,6 +1494,15 @@
         </div>
       </div>`;
 
+    $('#story-form')?.addEventListener('submit', ev => {
+      ev.preventDefault();
+      const rating = +($('input[name=st-star]:checked')?.value || 0), text = $('#st-text').value.trim();
+      const highlights = $('#st-hl').value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 3);
+      if (!rating) return void ($('#st-err').textContent = L('Оцените вечер от 1 до 5 звёзд.', 'Rate the evening from 1 to 5 stars.'));
+      if (text.length < 20) return void ($('#st-err').textContent = L('Напишите хотя бы пару предложений: что курили и как было.', 'Write at least a couple of sentences: what you smoked and how it was.'));
+      e.story = { rating, text, highlights, at: new Date().toISOString(), fire: [], comments: [] };
+      save(); toast(L('Рассказ опубликован в Истории', 'Story published to History')); pendingStory = e.id; go('history');
+    });
     const form = $('#comment-form'), ta = $('#comment-text');
     form.addEventListener('submit', ev => {
       ev.preventDefault();
@@ -1435,6 +1513,129 @@
       $('#comment-text')?.focus();
     });
     ta.addEventListener('keydown', ev => { if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) form.requestSubmit(); });
+  }
+
+  // ---------- История ----------
+  // Прошедшие вечера с рассказом организатора. Комментировать вечер можно раз в день.
+  const sameDay = (a, b) => ymd(new Date(a)) === ymd(new Date(b));
+  const myStoryCommentToday = (e, u) => !!u && (e.story?.comments || []).some(c => c.userId === u.id && sameDay(c.at, Date.now()));
+  function untilTomorrow() {
+    const t = new Date(); t.setHours(24, 0, 0, 0);
+    const m = Math.ceil((t - Date.now()) / 60000), h = Math.floor(m / 60);
+    return h ? L(`${h} ч ${m % 60} мин`, `${h} h ${m % 60} min`) : L(`${m} мин`, `${m} min`);
+  }
+  const storyEvents = () => db.events.filter(e => e.story && isPast(e)).sort((a, b) => new Date(b.at) - new Date(a.at));
+
+  function storyCard(e, u) {
+    const st = e.story, host = userById(e.hostId), going = goingIds(e), b = bill(e), v = eventVenue(e);
+    const top = ranking(e.picks, tobaccoName).slice(0, 3).map(r => ({ t: tobacco(r.id), n: r.users.length })).filter(x => x.t);
+    const bw = ranking(e.bowls, bowlName)[0], fired = !!u && st.fire.includes(u.id), d = new Date(e.at);
+    const commented = myStoryCommentToday(e, u);
+    return `<article class="story" id="story-${e.id}">
+      <div class="story-rail"><span class="story-dot"></span></div>
+      <div class="story-card">
+        <div class="story-cover cols-${top.length || 1}">
+          ${top.map((x, i) => `<div class="story-shot">${window.HP_ART ? HP_ART.flavor(x.t) : ''}<span class="story-shot-tag">${i === 0 ? `<b>${L('Лидер вечера', 'Top pick')}</b>` : ''}${esc(x.t.brand)} ${esc(x.t.flavor)}</span></div>`).join('')}
+          <div class="story-date"><b>${fDay(d)}</b><span>${fMon(d)}</span></div>
+        </div>
+        <div class="story-main">
+          <div class="story-head">
+            <div><h3>${esc(e.title)}</h3>
+              <div class="story-meta">
+                ${v ? `<button class="link-btn" type="button" data-action="showVenue" data-vid="${v.id}">${ICON.pin}${esc(e.venue)}</button>` : `<span>${ICON.pin}${esc(e.venue)}</span>`}
+                <span>${avatar(host, 'xs')}${L('организатор', 'host')} ${esc(host?.name || '')}</span>
+              </div></div>
+            <div class="story-score" aria-label="${L('Оценка вечера', 'Evening rating')} ${st.rating} / 5">${stars(st.rating)}<small>${L('вечер', 'evening')} ${st.rating}/5</small></div>
+          </div>
+          <p class="story-text">${esc(st.text)}</p>
+          ${st.highlights?.length ? `<ul class="story-highlights">${st.highlights.map(h => `<li>${esc(h)}</li>`).join('')}</ul>` : ''}
+          <div class="story-facts">
+            <span>${avatarStack(going, 6, 'xs')}${going.length} ${pl(going.length, ['гость', 'гостя', 'гостей'], ['guest', 'guests'])}</span>
+            ${e.hookahs ? `<span>${ICON.hookah}${e.hookahs} ${pl(e.hookahs, ['кальян', 'кальяна', 'кальянов'], ['hookah', 'hookahs'])}</span>` : ''}
+            ${bw ? `<span>${tr(BOWL_TYPE[bowl(bw.id)?.type] || ['', ''])}: ${esc(bowlName(bw.id))}</span>` : ''}
+            ${b.total ? `<span>${ICON.wallet}${money(b.per)} ${L('с человека', 'per person')}</span>` : ''}
+          </div>
+          <div class="story-actions">
+            <button class="react-btn ${fired ? 'on' : ''}" type="button" data-action="storyFire" data-id="${e.id}" aria-pressed="${fired}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c4.4 0 7-2.8 7-6.6 0-3.4-2.2-5.6-3.6-7.2-.3 1.8-1.3 3-2.4 3.4.6-3.6-1-6.8-4-9.1.2 3-1.5 5-3 6.8C4.7 11 5 12.5 5 15.4 5 19.2 7.6 22 12 22z"/></svg>
+              <span>${L('Огонь', 'Fire')}</span><b>${st.fire.length}</b></button>
+            <button class="btn btn-sm" type="button" data-action="likeThis" data-id="${e.id}">${ICON.repeat}${L('Хочу так же', 'I want this too')}</button>
+            <span class="muted story-count">${ICON.chat}${st.comments.length}</span>
+          </div>
+          <section class="story-comments">
+            ${st.comments.length ? `<ul class="comments">${st.comments.map(c => {
+              const p = userById(c.userId);
+              return `<li class="comment">${avatar(p, 'sm')}<div class="comment-body"><div class="comment-head"><b>${esc(p?.name || '—')}</b><small>${timeAgo(c.at)}</small>
+                ${u && c.userId === u.id ? `<button class="link-btn danger" type="button" data-action="deleteStoryComment" data-id="${e.id}" data-comment="${c.id}">${L('Удалить', 'Delete')}</button>` : ''}</div><p>${esc(c.text)}</p></div></li>`;
+            }).join('')}</ul>` : ''}
+            ${!u ? `<p class="muted story-limit"><a href="#/login" style="color:var(--accent)">${L('Войдите', 'Sign in')}</a>${L(', чтобы оставить комментарий.', ' to leave a comment.')}</p>`
+              : commented ? `<p class="story-limit">${ICON.clock}${L(`Вы уже комментировали этот вечер сегодня. Следующий комментарий можно оставить через ${untilTomorrow()}.`, `You have already commented on this evening today. You can comment again in ${untilTomorrow()}.`)}</p>`
+              : `<form class="comment-form story-form" data-story="${e.id}">
+                  ${avatar(u, 'sm')}<textarea rows="1" maxlength="300" placeholder="${L('Как вам вечер? Один комментарий в день', 'How was it? One comment per day')}" aria-label="${L('Комментарий', 'Comment')}"></textarea>
+                  <button class="btn btn-primary btn-sm" type="submit">${L('Отправить', 'Send')}</button></form>`}
+          </section>
+        </div>
+      </div>
+    </article>`;
+  }
+
+  function pageHistory() {
+    const u = me(), all = storyEvents();
+    const items = [{ key: 'all', label: L('Все вечера', 'All evenings'), count: all.length }];
+    if (u) items.push({ key: 'mine', label: L('Мои', 'Mine'), count: all.filter(e => isMember(e, u)).length }, { key: 'friends', label: L('Друзей', 'Friends'), count: all.filter(e => goingIds(e).some(id => u.friends.includes(id))).length });
+    const key = tab.history = items.some(i => i.key === tab.history) ? tab.history : 'all';
+    const list = key === 'mine' ? all.filter(e => isMember(e, u)) : key === 'friends' ? all.filter(e => goingIds(e).some(id => u.friends.includes(id))) : all;
+    const guests = all.reduce((s, e) => s + goingIds(e).length, 0), hookahs = all.reduce((s, e) => s + (e.hookahs || 0), 0);
+    const favCount = {};
+    all.forEach(e => ranking(e.picks, tobaccoName).forEach(r => { favCount[r.id] = (favCount[r.id] || 0) + r.users.length; }));
+    const fav = Object.entries(favCount).sort((a, b) => b[1] - a[1])[0];
+    let body = '', month = '';
+    for (const e of list) {
+      const m = fMonthYear(new Date(e.at));
+      if (m !== month) { body += `<h3 class="story-month">${m}</h3>`; month = m; }
+      body += storyCard(e, u);
+    }
+    view.innerHTML = `
+      <section class="history-hero">
+        <div><span class="eyebrow">${L('История', 'History')}</span><h1>${L('Как проходили наши вечера', 'How our evenings went')}</h1>
+          <p class="lead">${L('Рассказы организаторов о прошедших сборах: где были, что курили и что запомнилось. Ставьте огонь любимым вечерам и делитесь впечатлениями.', 'Hosts’ stories about past meet-ups: where they went, what they smoked and what they remember. Give your favourite evenings some fire and share your thoughts.')}</p></div>
+        <div class="history-stats">
+          <div><b>${all.length}</b><span>${pl(all.length, ['вечер', 'вечера', 'вечеров'], ['evening', 'evenings'])}</span></div>
+          <div><b>${guests}</b><span>${pl(guests, ['гость', 'гостя', 'гостей'], ['guest', 'guests'])}</span></div>
+          <div><b>${hookahs}</b><span>${pl(hookahs, ['кальян', 'кальяна', 'кальянов'], ['hookah', 'hookahs'])}</span></div>
+          ${fav ? `<div class="hs-fav">${window.HP_ART ? `<span class="flavor-thumb">${HP_ART.flavor(tobacco(fav[0]), { thumb: true })}</span>` : ''}<span>${L('Любимый табак', 'Favourite tobacco')}<b>${esc(tobaccoName(fav[0]))}</b></span></div>` : ''}
+        </div>
+      </section>
+      ${uTabs('history', items)}
+      ${tabPanel('history', list.length ? `<div class="timeline">${body}</div>` : emptyState(L('Здесь пока пусто', 'Nothing here yet'), key === 'mine' ? L('После сбора расскажите, как всё прошло: кнопка появится на странице прошедшего сбора.', 'After an event, tell everyone how it went: the button appears on the past event page.') : L('Когда друзья поделятся рассказами о вечерах, они появятся здесь.', 'When friends share stories about their evenings, they will appear here.')))}`;
+    $$('.story-form').forEach(f => {
+      const ta = $('textarea', f);
+      ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; });
+      f.addEventListener('submit', ev => {
+        ev.preventDefault();
+        const e = eventById(f.dataset.story), text = ta.value.trim();
+        if (!e || !text) return;
+        if (myStoryCommentToday(e, u)) { toast(L('Сегодня вы уже комментировали этот вечер', 'You have already commented on this evening today'), 'err'); return; }
+        e.story.comments.push({ id: uid('sc'), userId: u.id, text, at: new Date().toISOString() });
+        save(); toast(L('Комментарий опубликован', 'Comment published')); render();
+      });
+    });
+  }
+
+  // Форма рассказа о прошедшем сборе — для организатора.
+  function storyFormHtml(e) {
+    return `<section class="panel story-compose">
+      <div class="panel-head"><div><h2>${L('Расскажите, как прошло', 'Tell everyone how it went')}</h2>
+        <p class="muted" style="font-size:13.5px;margin-top:4px">${L('Рассказ появится в «Истории», его смогут прочитать и прокомментировать.', 'The story will appear in History where people can read and comment on it.')}</p></div></div>
+      <form class="form" id="story-form">
+        <div class="field"><span class="label">${L('Оценка вечера', 'Evening rating')}</span>
+          <div class="star-input" role="radiogroup" aria-label="${L('Оценка вечера', 'Evening rating')}">${[5, 4, 3, 2, 1].map(n => `<input type="radio" name="st-star" id="st-s${n}" value="${n}"><label for="st-s${n}" title="${n} / 5">★</label>`).join('')}</div></div>
+        <div class="field"><label for="st-text">${L('Рассказ', 'Story')}</label><textarea id="st-text" maxlength="600" placeholder="${L('Что курили, как было в заведении, что запомнилось', 'What you smoked, how the place was, what you remember')}"></textarea></div>
+        <div class="field"><label for="st-hl">${L('Яркие моменты', 'Highlights')} <span class="muted">(${L('каждый с новой строки, до 3', 'one per line, up to 3')})</span></label><textarea id="st-hl" maxlength="300" rows="3" placeholder="${L('Например: лучший микс вечера', 'For example: best mix of the night')}"></textarea></div>
+        <div class="error" id="st-err"></div>
+        <div><button class="btn btn-primary" type="submit">${L('Опубликовать в Истории', 'Publish to History')}</button></div>
+      </form>
+    </section>`;
   }
 
   // ---------- Каталог ----------
@@ -1692,7 +1893,7 @@
           <button class="btn btn-ghost btn-sm" data-action="logout">${L('Выйти из аккаунта', 'Sign out')}</button>
         </section>
         <div class="ev-main">
-          ${uTabs('profile', [{ key: 'about', label: L('Обо мне', 'About') }, { key: 'friends', label: L('Друзья', 'Friends'), count: friends.length }, { key: 'history', label: L('История', 'History'), count: history.length }, { key: 'settings', label: L('Настройки', 'Settings') }])}
+          ${uTabs('profile', [{ key: 'about', label: L('Обо мне', 'About') }, { key: 'friends', label: L('Друзья', 'Friends'), count: friends.length }, { key: 'history', label: L('Мои вечера', 'My evenings'), count: history.length }, { key: 'settings', label: L('Настройки', 'Settings') }])}
           ${tabPanel('profile', panels[tab.profile])}
         </div>
       </div>`;
@@ -2149,6 +2350,23 @@
       render();
     },
     switchTab({ tabs, tab: t }) { switchTo(tabs, t); },
+    storyFire({ id }) {
+      if (!requireUser()) return;
+      const e = eventById(id), u = me(); if (!e?.story) return;
+      e.story.fire = e.story.fire.includes(u.id) ? e.story.fire.filter(x => x !== u.id) : [...e.story.fire, u.id];
+      save(); render();
+    },
+    deleteStoryComment({ id, comment }) {
+      const e = eventById(id), u = me(); if (!e?.story || !u) return;
+      e.story.comments = e.story.comments.filter(c => !(c.id === comment && c.userId === u.id));
+      save(); render();
+    },
+    likeThis({ id }) {
+      if (!requireUser()) return;
+      const e = eventById(id);
+      newEventForm({ data: { title: L(`Как «${e.title}»`, `Like “${e.title}”`), venue: e.venue, address: e.address, hookahs: e.hookahs, price: e.price } });
+    },
+    openStory({ id }) { pendingStory = id; tab.history = 'all'; go('history'); },
     homeView({ view: v }) { prefs.set('homeView', v); render(); },
     calNav({ step }) { cal.m += +step; if (cal.m < 0) { cal.m = 11; cal.y--; } if (cal.m > 11) { cal.m = 0; cal.y++; } cal.day = null; render(); },
     calDay({ day }) { cal.day = cal.day === day ? null : day; render(); },
@@ -2172,7 +2390,7 @@
     uploadAvatar() { const u = me(); pickAvatarFile(url => { u.avatar = url; save(); toast(L('Фото обновлено', 'Photo updated')); render(); }); },
     removeAvatar() { const u = me(); u.avatar = null; save(); render(); },
     logout() { db.session = null; save(); toast(L('Вы вышли из аккаунта', 'You have signed out')); go(''); },
-    reset() { db = seed(); save(); toast(L('Демо-данные восстановлены', 'Demo data restored')); go(''); },
+    reset() { db = withStories(seed()); save(); toast(L('Демо-данные восстановлены', 'Demo data restored')); go(''); },
     info({ key }) {
       const texts = {
         rules: [['Правила сервиса', 'Terms of use'], ['Сервис предназначен для лиц старше 18 лет. Организатор отвечает за бронь в заведении. Запрещено приглашать людей без их согласия и рассылать рекламу.', 'The service is for people aged 18 and over. The host is responsible for the booking. Inviting people without consent and sending ads is not allowed.']],
@@ -2197,7 +2415,7 @@
   // render() перерисовывает текущую страницу без прокрутки наверх; route() — полный переход.
   function render() {
     const [page = '', arg] = location.hash.replace(/^#\/?/, '').split('/');
-    const nav = { venues: 'venues', catalog: 'catalog', events: 'events', event: 'events', people: 'people', user: 'people', profile: 'profile', login: 'profile', register: 'profile' }[page] || '';
+    const nav = { history: 'history', venues: 'venues', catalog: 'catalog', events: 'events', event: 'events', people: 'people', user: 'people', profile: 'profile', login: 'profile', register: 'profile' }[page] || '';
     renderChrome(nav);
     document.title = 'Hookah Party';
     switch (page) {
@@ -2208,6 +2426,7 @@
       case 'people': pagePeople(); break;
       case 'user': pageUser(arg); break;
       case 'how': pageHow(); break;
+      case 'history': pageHistory(); break;
       case 'profile': pageProfile(); break;
       case 'login': pageAuth('login'); break;
       case 'register': pageAuth('register'); break;
@@ -2215,7 +2434,11 @@
     }
     inkAll();
   }
-  function route() { closeModal(); render(); window.scrollTo(0, 0); checkReminders(); }
+  let pendingStory = null;
+  function route() {
+    closeModal(); render(); window.scrollTo(0, 0); checkReminders();
+    if (pendingStory) { const el = $('#story-' + pendingStory); pendingStory = null; if (el) { el.scrollIntoView({ block: 'start' }); window.scrollBy(0, -90); el.classList.add('flash'); } }
+  }
   // Кнопка «Наверх» появляется после прокрутки.
   const toTop = document.createElement('button');
   toTop.className = 'to-top'; toTop.type = 'button'; toTop.hidden = true;
