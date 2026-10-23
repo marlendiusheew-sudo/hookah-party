@@ -1,0 +1,22 @@
+# systemd: /etc/systemd/system/hookah-party.service
+# sudo systemctl daemon-reload && sudo systemctl enable --now hookah-party
+[Unit]
+Description=Hookah Party
+After=network.target
+
+[Service]
+Type=simple
+User=hookah
+WorkingDirectory=/opt/hookah-party
+EnvironmentFile=/opt/hookah-party/.env
+ExecStart=/usr/bin/node server/index.js
+Restart=on-failure
+# Ограничения процесса: только своя папка с данными, без лишних прав.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/hookah-party/server/data
+
+[Install]
+WantedBy=multi-user.target

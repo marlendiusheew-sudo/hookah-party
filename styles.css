@@ -1404,3 +1404,51 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 .sec-log span { display: grid; min-width: 0; }
 .sec-log small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sec-log time { color: var(--muted); font-size: 11.5px; }
+
+/* ================= Уведомления ================= */
+.bell { position: relative; }
+.bell svg { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.bell.has svg { animation: bellRing 2.6s ease-in-out 1; transform-origin: 50% 10%; }
+@keyframes bellRing { 0%, 60%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(14deg); } 20%, 40% { transform: rotate(-12deg); } 50% { transform: rotate(6deg); } }
+.bell-badge {
+  position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--ember); color: #fff; font: 700 10.5px/18px var(--f-body); text-align: center; box-shadow: 0 0 0 2px var(--bg);
+}
+.bell-pop {
+  position: absolute; z-index: 70; width: min(380px, calc(100vw - 16px)); max-height: min(520px, 75vh); overflow-y: auto; padding: 12px;
+  display: grid; gap: 8px; align-content: start; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow); animation: rise .15s ease-out;
+}
+.bell-head { display: flex; justify-content: space-between; align-items: center; padding: 2px 4px 6px; }
+.bell-all { justify-self: stretch; }
+.notif-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.notif {
+  width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; text-align: left;
+  padding: 11px 12px; border-radius: var(--r); border: 1px solid transparent; background: none; color: var(--fg); font: inherit; cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.notif:hover { background: var(--surface-2); }
+.notif.unread { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+.notif-text { display: grid; gap: 3px; font-size: 14px; line-height: 1.45; min-width: 0; overflow-wrap: anywhere; }
+.notif-text time { font-size: 12px; color: var(--muted); }
+.nt-quote { color: var(--muted); }
+.notif-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ember); margin-top: 6px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ember) 25%, transparent); }
+.feed-ic.nt-invites { background: var(--accent); }
+.feed-ic.nt-replies.ic-check { background: var(--ok); }
+.feed-ic.nt-messages { background: #4a8fe0; }
+.feed-ic.nt-reactions { background: var(--ember); }
+.tab-panel > .notif-list { padding: 6px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--elev); }
+.notif-settings { margin-top: 8px; }
+.switches { display: flex; flex-wrap: wrap; gap: 10px 22px; }
+.switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.sw-track { width: 40px; height: 23px; border-radius: 999px; background: var(--line); position: relative; transition: background .2s; flex: none; }
+.sw-track span { position: absolute; top: 3px; left: 3px; width: 17px; height: 17px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .2s cubic-bezier(.3, 1.4, .5, 1); }
+.switch input:checked + .sw-track { background: var(--accent); }
+.switch input:checked + .sw-track span { transform: translateX(17px); }
+.switch input:focus-visible + .sw-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 760px) { .bell-pop { left: 8px !important; right: 8px; width: auto; } }
+@media (max-width: 440px) {
+  .topbar-actions [data-action="cycleTheme"] { display: none; }
+  .topbar-actions { gap: 8px; }
+}

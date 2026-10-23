@@ -19,6 +19,9 @@
   const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
+  // Режим: SERVER = true, если сайт открыт с нашего сервера (тогда данные и вход идут через API).
+  let SERVER = false, CSRF = null;
+
   // Настройки вида и языка живут только в этом браузере.
   const prefs = {
     get(k, d) { try { return localStorage.getItem('hp.' + k) ?? d; } catch (e) { return d; } },
@@ -535,8 +538,48 @@
       return null;
     }
   }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { /* хранилище недоступно */ } }
+  function save() { if (SERVER) return; try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { /* хранилище недоступно */ } }
   let db = load() || withStories(seed());
+
+  // ---------- Сервер ----------
+  // На GitHub Pages и с диска сайт работает в демо-режиме (данные в браузере).
+  // Если рядом есть наш сервер (/api/health), вход, данные и все проверки идут через API.
+  async function api(method, path, body) {
+    const headers = {};
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    if (CSRF) headers['X-CSRF-Token'] = CSRF;
+    const r = await fetch('/api' + path, { method, credentials: 'same-origin', headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    let data = null;
+    try { data = await r.json(); } catch (e) { /* пустой ответ */ }
+    if (!r.ok) { const err = new Error(data?.error || 'http_' + r.status); err.status = r.status; err.info = data; throw err; }
+    return data;
+  }
+  const apiMsg = err => err?.info?.message ? L(err.info.message.ru, err.info.message.en)
+    : navigator.onLine === false ? L('Нет соединения с интернетом.', 'No internet connection.') : L('Не удалось связаться с сервером. Попробуйте ещё раз.', 'Could not reach the server. Try again.');
+  function applyData(d) { if (d && Array.isArray(d.users)) { db = d; CSRF = d.csrf || null; } }
+  async function refresh() { try { applyData(await api('GET', '/bootstrap')); } catch (e) { /* покажем то, что есть */ } }
+  async function detectServer() {
+    if (location.protocol === 'file:') return false;
+    try { const r = await fetch('/api/health', { cache: 'no-store' }); return r.ok && (await r.json())?.mode === 'server'; } catch (e) { return false; }
+  }
+  // Одно действие пользователя: в демо меняем данные в браузере, на сервере — запрос и свежие данные в ответ.
+  async function act(local, method, path, body) {
+    if (!SERVER) { const r = local && local(); save(); return r; }
+    try { const r = await api(method, path, body); if (r?.data) applyData(r.data); return r; }
+    catch (e) {
+      toast(apiMsg(e), 'err');
+      if (e.status === 401 || e.info?.error === 'bad_csrf') { await refresh(); render(); }
+      throw e;
+    }
+  }
+  const quiet = () => {};
+  // Номер для показа: полный — себе, друзьям и участникам общих сборов, иначе скрытый.
+  const phoneShown = (viewer, p) => p?.phone ? (canSeePhone(viewer, p) ? fmtPhone(p.phone) : maskedPhone(p.phone)) : (p?.phoneMasked || '');
+
+  // Напоминания хранятся в этом браузере в обоих режимах.
+  const REM = 'hp.remind';
+  const remindOn = (e, u) => !!secRead(REM, {})[u.id + ':' + e.id]?.on;
+  const remindSet = (e, u, patch) => { const all = secRead(REM, {}), k = u.id + ':' + e.id; all[k] = { ...all[k], ...patch }; secWrite(REM, all); };
 
   const me = () => db.users.find(u => u.id === db.session) || null;
   const userById = id => db.users.find(u => u.id === id);
@@ -790,6 +833,7 @@
       <div class="lang-switch" role="radiogroup" aria-label="${L('Язык', 'Language')}">
         <button role="radio" aria-checked="${lang === 'ru'}" class="${lang === 'ru' ? 'on' : ''}" data-action="setLang" data-lang="ru">RU</button>
         <button role="radio" aria-checked="${lang === 'en'}" class="${lang === 'en' ? 'on' : ''}" data-action="setLang" data-lang="en">EN</button></div>
+      ${u ? bellHtml() : ''}
       <button class="icon-btn" type="button" data-action="cycleTheme" title="${L('Тема', 'Theme')}: ${themeName}" aria-label="${L('Тема', 'Theme')}: ${themeName}">${THEMES[theme][1]}</button>
       ${u ? `<button class="plus-btn" type="button" data-action="newEvent" title="${L('Создать сбор и пригласить друзей', 'Create an event and invite friends')}" aria-label="${L('Создать сбор', 'Create event')}">${ICON.plus}</button>
          <a class="me-link" href="#/profile" title="${L('Профиль', 'Profile')}">${avatar(u, 'sm')}</a>`
@@ -807,7 +851,7 @@
         </div>
         <div class="footer-col"><h4>${L('Сервис', 'Service')}</h4>
           <a href="#/venues">${L('Заведения', 'Venues')}</a><a href="#/catalog">${L('Каталог табаков', 'Tobacco catalogue')}</a>
-          <a href="#/catalog" data-action="catTab" data-tab="mixes">${L('Миксы', 'Mixes')}</a><a href="#/events">${L('События', 'Events')}</a><a href="#/history">${L('История', 'History')}</a>
+          <a href="#/catalog" data-action="catTab" data-tab="mixes">${L('Миксы', 'Mixes')}</a><a href="#/events">${L('События', 'Events')}</a><a href="#/history">${L('История', 'History')}</a><a href="#/notifications">${L('Уведомления', 'Notifications')}</a>
           <a href="#/people">${L('Люди', 'People')}</a><a href="#/how">${L('Как это работает', 'How it works')}</a></div>
         <div class="footer-col"><h4>${L('Помощь', 'Help')}</h4>
           <a href="#/" data-action="info" data-key="rules">${L('Правила сервиса', 'Terms of use')}</a>
@@ -831,7 +875,7 @@
   // Одни и те же вкладки в событиях, каталоге, у людей и в профиле. Последняя открытая запоминается.
   const tab = {
     home: prefs.get('tab.home', 'upcoming'), cat: prefs.get('tab.cat', 'tobaccos'),
-    people: prefs.get('tab.people', 'friends'), profile: prefs.get('tab.profile', 'about'), history: prefs.get('tab.history', 'all')
+    people: prefs.get('tab.people', 'friends'), profile: prefs.get('tab.profile', 'about'), history: prefs.get('tab.history', 'all'), notif: 'all'
   };
   const tabKeys = {};
   let tabDir = null;
@@ -1530,7 +1574,7 @@
     const going = goingIds(e), b = bill(e);
     const tRank = ranking(e.picks, tobaccoName), bRank = ranking(e.bowls, bowlName);
     const myPicks = e.picks[u.id] || [];
-    const reminded = !!e.remind[u.id];
+    const reminded = remindOn(e, u);
     const v = eventVenue(e);
     const q = placeQuery(e.venue, e.address);
     const votes = n => pl(n, ['голос', 'голоса', 'голосов'], ['vote', 'votes']);
@@ -1652,8 +1696,8 @@
       const highlights = $('#st-hl').value.split('\n').map(x => clean(x, 80)).filter(Boolean).slice(0, 3);
       if (!rating) return void ($('#st-err').textContent = L('Оцените вечер от 1 до 5 звёзд.', 'Rate the evening from 1 to 5 stars.'));
       if (text.length < 20) return void ($('#st-err').textContent = L('Напишите хотя бы пару предложений: что курили и как было.', 'Write at least a couple of sentences: what you smoked and how it was.'));
-      e.story = { rating, text, highlights, at: new Date().toISOString(), fire: [], comments: [] };
-      save(); toast(L('Рассказ опубликован в Истории', 'Story published to History')); pendingStory = e.id; go('history');
+      act(() => { e.story = { rating, text, highlights, at: new Date().toISOString(), fire: [], comments: [] }; }, 'POST', `/events/${e.id}/story`, { rating, text, highlights })
+        .then(() => { toast(L('Рассказ опубликован в Истории', 'Story published to History')); pendingStory = e.id; go('history'); }, quiet);
     });
     const form = $('#comment-form'), ta = $('#comment-text');
     form.addEventListener('submit', ev => {
@@ -1662,8 +1706,8 @@
       if (!text) return;
       const q = chatQuota(e, u);
       if (!q.ok) { toast(L('Сейчас отправить нельзя: сработало ограничение на сообщения', 'You can’t send right now: message limit reached'), 'err'); render(); return; }
-      e.comments.push({ id: uid('c'), userId: u.id, text, at: new Date().toISOString(), reactions: {} });
-      save(); render();
+      act(() => { e.comments.push({ id: uid('c'), userId: u.id, text, at: new Date().toISOString(), reactions: {} }); }, 'POST', `/events/${e.id}/comments`, { text })
+        .then(() => render(), quiet);
     });
     if (!quota.ok) startQuotaTimer();
     ta.addEventListener('keydown', ev => { if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) form.requestSubmit(); });
@@ -1752,9 +1796,8 @@
   function setReaction(scope, eventId, commentId, em) {
     const u = me(), e = eventById(eventId); if (!u || !e) return;
     const c = (scope === 'story' ? e.story?.comments : e.comments)?.find(x => x.id === commentId); if (!c) return;
-    c.reactions ||= {};
-    if (c.reactions[u.id] === em) delete c.reactions[u.id]; else c.reactions[u.id] = em;
-    save(); render();
+    act(() => { c.reactions ||= {}; if (c.reactions[u.id] === em) delete c.reactions[u.id]; else c.reactions[u.id] = em; }, 'PUT', `/comments/${commentId}/reaction`, { emoji: em })
+      .then(() => render(), quiet);
   }
   // Панель смайликов: для реакции и для вставки в текст сообщения.
   let pop = null;
@@ -1883,8 +1926,8 @@
         if (!e || !text) return;
         if (myStoryCommentToday(e, u)) { toast(L('Сегодня вы уже комментировали этот вечер', 'You have already commented on this evening today'), 'err'); return; }
         if (myRecentMessages(u).length >= LIMITS.global) { toast(L(`Лимит: ${LIMITS.global} ${plural(LIMITS.global, 'сообщение', 'сообщения', 'сообщений')} за 7 часов. Попробуйте позже.`, `Limit: ${LIMITS.global} messages per 7 hours. Try again later.`), 'err'); return; }
-        e.story.comments.push({ id: uid('sc'), userId: u.id, text, at: new Date().toISOString(), reactions: {} });
-        save(); toast(L('Комментарий опубликован', 'Comment published')); render();
+        act(() => { e.story.comments.push({ id: uid('sc'), userId: u.id, text, at: new Date().toISOString(), reactions: {} }); }, 'POST', `/events/${e.id}/story/comments`, { text })
+          .then(() => { toast(L('Комментарий опубликован', 'Comment published')); render(); }, quiet);
       });
     });
   }
@@ -1904,6 +1947,130 @@
       </form>
     </section>`;
   }
+
+  // ---------- Уведомления ----------
+  // На сервере уведомления создаёт сам сервер. В демо-режиме они собираются из данных в браузере.
+  const NOTIF_GROUPS = {
+    invites: { types: ['invite', 'cancelled'], label: ['Приглашения', 'Invitations'] },
+    replies: { types: ['rsvp_going', 'rsvp_declined'], label: ['Ответы', 'Replies'] },
+    messages: { types: ['comment', 'story_comment'], label: ['Сообщения', 'Messages'] },
+    reactions: { types: ['reaction', 'fire', 'friend'], label: ['Реакции и друзья', 'Reactions & friends'] }
+  };
+  const groupOf = type => Object.keys(NOTIF_GROUPS).find(g => NOTIF_GROUPS[g].types.includes(type));
+  const notifOff = () => secRead('hp.notifOff', []);
+  function findComment(ref) {
+    const cid = String(ref || '').split(':')[0];
+    for (const e of db.events) for (const c of [...(e.comments || []), ...(e.story?.comments || [])]) if (c.id === cid) return c;
+    return null;
+  }
+  function demoNotifs(u) {
+    const out = [], push = (id, type, actorId, eventId, ref, at) => at && actorId !== u.id && out.push({ id, type, actorId, eventId, ref, at });
+    for (const e of db.events) {
+      const inv = myInvite(e, u);
+      if (inv && inv.status === 'pending' && !isPast(e)) push('inv:' + e.id, 'invite', e.hostId, e.id, null, e.createdAt || e.at);
+      if (e.hostId === u.id) for (const i of e.invites) if (i.userId && i.at && i.status !== 'pending') push(`rsvp:${e.id}:${i.userId}:${i.status}`, i.status === 'going' ? 'rsvp_going' : 'rsvp_declined', i.userId, e.id, null, i.at);
+      if (isMember(e, u)) for (const c of e.comments) push('c:' + c.id, 'comment', c.userId, e.id, c.id, c.at);
+      for (const c of [...e.comments, ...(e.story?.comments || [])]) if (c.userId === u.id) for (const [who, em] of Object.entries(c.reactions || {})) push(`r:${c.id}:${who}`, 'reaction', who, e.id, `${c.id}:${em}`, c.at);
+      if (e.story && e.hostId === u.id) {
+        for (const c of e.story.comments) push('sc:' + c.id, 'story_comment', c.userId, e.id, c.id, c.at);
+        for (const who of e.story.fire) push(`f:${e.id}:${who}`, 'fire', who, e.id, null, e.story.at);
+      }
+    }
+    const read = new Set(secRead('hp.notifRead', []));
+    // Всё старше недели в демо считаем прочитанным, чтобы счётчик не пугал.
+    return out.map(n => ({ ...n, read: read.has(n.id) || Date.now() - new Date(n.at) > 7 * 864e5 }));
+  }
+  function notifications(u = me()) {
+    if (!u) return [];
+    const list = SERVER ? (db.notifications || []) : demoNotifs(u), off = new Set(notifOff());
+    return list.filter(n => !off.has(groupOf(n.type))).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 100);
+  }
+  const unreadCount = () => notifications().filter(n => !n.read).length;
+  function notifText(n) {
+    const who = `<b>${esc(userById(n.actorId)?.name || L('Кто-то', 'Someone'))}</b>`, e = eventById(n.eventId);
+    const ev = e ? `«${esc(e.title)}»` : n.ref && n.type === 'cancelled' ? `«${esc(n.ref)}»` : L('сбор', 'an event');
+    const c = ['comment', 'story_comment', 'reaction'].includes(n.type) ? findComment(n.ref) : null;
+    const snip = c ? `<span class="nt-quote">${esc(c.text.length > 70 ? c.text.slice(0, 70) + '…' : c.text)}</span>` : '';
+    return {
+      invite: L(`${who} зовёт вас на ${ev}`, `${who} invites you to ${ev}`),
+      cancelled: L(`${who} отменяет сбор ${ev}`, `${who} cancelled ${ev}`),
+      rsvp_going: L(`${who} идёт на ${ev}`, `${who} is going to ${ev}`),
+      rsvp_declined: L(`${who} не сможет прийти на ${ev}`, `${who} can’t make it to ${ev}`),
+      comment: L(`${who} в ${ev}: `, `${who} in ${ev}: `) + snip,
+      story_comment: L(`${who} комментирует ваш вечер ${ev}: `, `${who} commented on your evening ${ev}: `) + snip,
+      reaction: L(`${who} реагирует ${String(n.ref || '').split(':')[1] || ''} на ваше сообщение `, `${who} reacted ${String(n.ref || '').split(':')[1] || ''} to your message `) + snip,
+      fire: L(`${who} ставит огонь вашему вечеру ${ev}`, `${who} gave your evening ${ev} some fire`),
+      friend: L(`${who} добавляет вас в друзья`, `${who} added you as a friend`)
+    }[n.type] || esc(n.type);
+  }
+  const notifHref = n => n.type === 'friend' ? `#/user/${n.actorId}` : n.type === 'story_comment' || n.type === 'fire' ? '#/history' : n.eventId && eventById(n.eventId) ? `#/event/${n.eventId}` : '#/events';
+  const NOTIF_ICON = { invite: 'mail', cancelled: 'x', rsvp_going: 'check', rsvp_declined: 'x', comment: 'chat', story_comment: 'chat', reaction: 'heart', fire: 'smoke', friend: 'users' };
+  function notifItem(n) {
+    return `<li><button type="button" class="notif ${n.read ? '' : 'unread'}" data-action="openNotif" data-id="${esc(n.id)}" data-href="${esc(notifHref(n))}" data-story="${n.type === 'story_comment' || n.type === 'fire' ? esc(n.eventId || '') : ''}">
+      <span class="feed-av">${avatar(userById(n.actorId), 'sm')}<span class="feed-ic ic-${NOTIF_ICON[n.type] || 'chat'} nt-${groupOf(n.type)}">${ICON[NOTIF_ICON[n.type]] || ICON.chat}</span></span>
+      <span class="notif-text">${notifText(n)}<time>${timeAgo(n.at)}</time></span>${n.read ? '' : '<i class="notif-dot" aria-label="' + L('Новое', 'New') + '"></i>'}</button></li>`;
+  }
+  async function markRead(ids) {
+    if (!ids.length) return;
+    if (SERVER) { await act(null, 'POST', '/notifications/read', ids === 'all' ? { all: true } : { ids }).catch(() => {}); return; }
+    const all = ids === 'all' ? notifications().map(n => n.id) : ids;
+    secWrite('hp.notifRead', [...new Set([...secRead('hp.notifRead', []), ...all])].slice(-500));
+  }
+
+  function pageNotifications() {
+    const u = me();
+    if (!u) return go('login');
+    const all = notifications(u), off = new Set(notifOff());
+    const items = [{ key: 'all', label: L('Все', 'All'), count: all.filter(n => !n.read).length, alert: all.some(n => !n.read) }]
+      .concat(Object.entries(NOTIF_GROUPS).filter(([g]) => !off.has(g)).map(([g, d]) => ({ key: g, label: tr(d.label), count: all.filter(n => groupOf(n.type) === g && !n.read).length })));
+    tab.notif = items.some(i => i.key === tab.notif) ? tab.notif : 'all';
+    const list = tab.notif === 'all' ? all : all.filter(n => groupOf(n.type) === tab.notif);
+    const dayKey = iso => { const d = new Date(iso); d.setHours(0, 0, 0, 0); return d.getTime(); };
+    const today = dayKey(Date.now()), dayLabel = k => k === today ? L('Сегодня', 'Today') : k === today - 864e5 ? L('Вчера', 'Yesterday') : fShort(new Date(k));
+    let body = '', last = null;
+    for (const n of list) {
+      const k = dayKey(n.at);
+      if (k !== last) { body += `${last === null ? '' : '</ul>'}<h4 class="feed-day">${dayLabel(k)}</h4><ul class="notif-list">`; last = k; }
+      body += notifItem(n);
+    }
+    if (body) body += '</ul>';
+    const unread = all.filter(n => !n.read).length;
+    view.innerHTML = `
+      <section class="greet-line"><div><span class="eyebrow">${L('Уведомления', 'Notifications')}</span><h1>${unread ? L(`${unread} ${plural(unread, 'новое', 'новых', 'новых')}`, `${unread} new`) : L('Всё прочитано', 'All caught up')}</h1></div>
+        ${unread ? `<button class="btn btn-sm" type="button" data-action="readAll">${ICON.check}${L('Отметить всё прочитанным', 'Mark all as read')}</button>` : ''}</section>
+      ${uTabs('notif', items)}
+      ${tabPanel('notif', `${body || emptyState(L('Здесь пока пусто', 'Nothing here yet'), L('Сюда придут приглашения, ответы друзей, сообщения в ваших сборах и реакции на них.', 'Invitations, replies, messages in your events and reactions will show up here.'), `<a class="btn btn-sm" href="#/events">${L('К сборам', 'To events')}</a>`)}
+        <section class="panel notif-settings"><div class="panel-head"><div><h2>${L('Что показывать', 'What to show')}</h2>
+          <p class="muted" style="font-size:13.5px;margin-top:4px">${L('Выключенные типы не попадают в список и счётчик на колокольчике.', 'Hidden types are left out of the list and the bell counter.')}</p></div></div>
+          <div class="switches">${Object.entries(NOTIF_GROUPS).map(([g, d]) => `<label class="switch"><input type="checkbox" data-notif-group="${g}" ${off.has(g) ? '' : 'checked'}><span class="sw-track"><span></span></span>${tr(d.label)}</label>`).join('')}</div>
+        </section>`)}`;
+    $$('[data-notif-group]').forEach(cb => cb.addEventListener('change', () => {
+      const set = new Set(notifOff()); cb.checked ? set.delete(cb.dataset.notifGroup) : set.add(cb.dataset.notifGroup);
+      secWrite('hp.notifOff', [...set]); render();
+    }));
+  }
+
+  // Колокольчик в шапке: быстрый список последних уведомлений.
+  function bellHtml() {
+    const n = unreadCount();
+    return `<button class="icon-btn bell ${n ? 'has' : ''}" type="button" data-action="bell" data-pop-anchor aria-label="${L('Уведомления', 'Notifications')}${n ? ': ' + n : ''}" aria-haspopup="dialog">
+      ${svg('<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5h4"/>')}${n ? `<span class="bell-badge">${n > 99 ? '99+' : n}</span>` : ''}</button>`;
+  }
+  function openBell(anchor) {
+    if (pop && pop.dataset.key === 'bell') { closePop(); return; }
+    closePop();
+    const list = notifications().slice(0, 6);
+    pop = document.createElement('div');
+    pop.className = 'bell-pop'; pop.dataset.key = 'bell'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', L('Уведомления', 'Notifications'));
+    pop.innerHTML = `<div class="bell-head"><b>${L('Уведомления', 'Notifications')}</b>${unreadCount() ? `<button class="link-btn" type="button" data-action="readAll">${L('Прочитать всё', 'Mark all read')}</button>` : ''}</div>
+      ${list.length ? `<ul class="notif-list">${list.map(notifItem).join('')}</ul>` : `<p class="muted" style="padding:10px 4px">${L('Новых уведомлений нет.', 'No new notifications.')}</p>`}
+      <a class="btn btn-sm bell-all" href="#/notifications">${L('Все уведомления', 'All notifications')} →</a>`;
+    document.body.append(pop);
+    const r = anchor.getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(r.right - pop.offsetWidth, window.innerWidth - pop.offsetWidth - 8)) + window.scrollX + 'px';
+    pop.style.top = r.bottom + 8 + window.scrollY + 'px';
+  }
+  function updateTitle() { const n = me() ? unreadCount() : 0; document.title = n ? `(${n}) Hookah Party` : 'Hookah Party'; }
 
   // ---------- Каталог ----------
   const cat = { q: '', strength: 'all', tag: '', sort: 'rating' };
@@ -2018,9 +2185,10 @@
         const rating = +($('input[name=rv-star]:checked', m)?.value || 0);
         if (!rating) { $('#rv-err', m).textContent = L('Поставьте оценку от 1 до 5 звёзд.', 'Give a rating from 1 to 5 stars.'); return; }
         const text = clean($('#rv-text', m).value, 400, true);
-        if (mine) Object.assign(mine, { rating, text, at: new Date().toISOString() });
-        else db.reviews.push({ id: uid('r'), tobaccoId: id, userId: u.id, rating, text, at: new Date().toISOString() });
-        save(); toast(L('Спасибо за отзыв', 'Thanks for the review')); render(); openTobacco(id);
+        act(() => {
+          if (mine) Object.assign(mine, { rating, text, at: new Date().toISOString() });
+          else db.reviews.push({ id: uid('r'), tobaccoId: id, userId: u.id, rating, text, at: new Date().toISOString() });
+        }, 'PUT', `/reviews/${id}`, { rating, text }).then(() => { toast(L('Спасибо за отзыв', 'Thanks for the review')); render(); openTobacco(id); }, quiet);
       });
     });
   }
@@ -2050,7 +2218,7 @@
       <div class="people-grid" id="pp-grid"></div>`)}`;
     const draw = () => {
       const q = peopleQ.trim().toLowerCase(), qd = digits(q);
-      const list = (tab.people === 'friends' ? friends : others).filter(p => !q || p.name.toLowerCase().includes(q) || (qd.length >= 4 && p.phone.includes(qd)));
+      const list = (tab.people === 'friends' ? friends : others).filter(p => !q || p.name.toLowerCase().includes(q) || (qd.length >= 4 && (p.phone || '').includes(qd)));
       $('#pp-grid').innerHTML = list.map(p => personCard(p, u)).join('') ||
         `<div style="grid-column:1/-1">${tab.people === 'friends' && !q ? emptyState(L('Друзей пока нет', 'No friends yet'), L('Откройте вкладку «Все люди» и добавьте тех, с кем ходите на кальян.', 'Open “Everyone” and add the people you go out with.'), `<button class="btn btn-primary btn-sm" data-action="switchTab" data-tabs="people" data-tab="all">${L('Все люди', 'Everyone')}</button>`) : `<p class="muted">${L('Никого не нашли.', 'Nobody found.')}</p>`}</div>`;
     };
@@ -2071,7 +2239,7 @@
       <div class="profile">
         <section class="panel profile-card">
           ${avatar(p, 'lg')}
-          <div><h2>${esc(p.name)}</h2><div class="mono" style="margin-top:6px">${canSeePhone(u, p) ? fmtPhone(p.phone) : maskedPhone(p.phone)}</div>
+          <div><h2>${esc(p.name)}</h2><div class="mono" style="margin-top:6px">${phoneShown(u, p)}</div>
             ${p.verified ? `<div class="verified" style="margin-top:6px">${ICON.check}${L('Номер подтверждён', 'Number verified')}</div>` : ''}</div>
           ${p.favVenue ? `<div class="fact" style="width:100%"><small>${L('Любимое место', 'Favourite place')}</small><b>${esc(p.favVenue)}</b></div>` : ''}
           <div class="btn-row" style="justify-content:center">${friendBtn(p, isFriend(u, p))}
@@ -2138,7 +2306,7 @@
           </div>
         </section>
         ${securityPanel(u)}
-        <section class="panel">
+        <section class="panel" ${SERVER ? 'hidden' : ''}>
           <div class="panel-head"><h2>${L('Демо-данные', 'Demo data')}</h2></div>
           <p class="muted" style="margin-bottom:14px">${L('Все данные этого шаблона хранятся в вашем браузере. Сброс вернёт тестовых пользователей, сборы, отзывы и миксы.', 'All template data lives in your browser. Resetting restores the test users, events, reviews and mixes.')}</p>
           <button class="btn btn-danger btn-sm" data-action="reset">${L('Сбросить демо-данные', 'Reset demo data')}</button>
@@ -2166,11 +2334,17 @@
           ${tabPanel('profile', panels[tab.profile])}
         </div>
       </div>`;
+    if (SERVER && $('#srv-log')) api('GET', '/security/log').then(r => {
+      const dt = t => `${fShort(new Date(t))}, ${fTime(new Date(t))}`, el = $('#srv-log'); if (!el) return;
+      $('#srv-sessions').textContent = L(`активных сессий: ${r.sessions}`, `active sessions: ${r.sessions}`);
+      el.innerHTML = r.log.length ? r.log.map(x => { const ev = SEC_EVENTS[x.type] || [x.type, x.type, '']; return `<li class="${ev[2]}"><i></i><span><b>${L(ev[0], ev[1])}</b><small>${esc([x.detail, x.ip].filter(Boolean).join(' · '))}</small></span><time class="mono">${dt(x.at)}</time></li>`; }).join('') : `<li class="muted">${L('Событий пока нет.', 'No events yet.')}</li>`;
+    }).catch(() => { const el = $('#srv-log'); if (el) el.innerHTML = `<li class="muted">${L('Не удалось загрузить журнал.', 'Could not load the log.')}</li>`; });
     $('#profile-form')?.addEventListener('submit', ev => {
       ev.preventDefault();
       const name = clean($('#pf-name').value, 40);
       if (!validName(name)) { $('#pf-err').textContent = L('Укажите имя буквами: от 2 до 40 символов.', 'Enter a name using letters: 2 to 40 characters.'); return; }
-      u.name = name; u.favVenue = clean($('#pf-venue').value, 60); save(); toast(L('Профиль сохранён', 'Profile saved')); render();
+      const favVenue = clean($('#pf-venue').value, 60);
+      act(() => { u.name = name; u.favVenue = favVenue; }, 'PATCH', '/me', { name, favVenue }).then(() => { toast(L('Профиль сохранён', 'Profile saved')); render(); }, quiet);
     });
   }
 
@@ -2180,14 +2354,15 @@
     logout: ['Выход из аккаунта', 'Signed out', ''], register: ['Создан аккаунт', 'Account created', 'ok'], sms_sent: ['Отправлен код', 'Code sent', ''],
     sms_fail: ['Неверный код', 'Wrong code', 'warn'], rate_limited: ['Сработало ограничение частоты', 'Rate limit hit', 'warn'], html_blocked: ['Заблокирован опасный фрагмент', 'Dangerous markup blocked', 'bad'],
     csp: ['Браузер заблокировал запрос (CSP)', 'Browser blocked a request (CSP)', 'bad'], bad_url: ['Подозрительная ссылка', 'Suspicious link', 'bad'],
-    session_expired: ['Сессия истекла', 'Session expired', ''], storage_repaired: ['Данные восстановлены после ошибки', 'Data repaired after an error', 'warn']
+    session_expired: ['Сессия истекла', 'Session expired', ''], storage_repaired: ['Данные восстановлены после ошибки', 'Data repaired after an error', 'warn'],
+    logout_all: ['Выход на всех устройствах', 'Signed out everywhere', 'warn'], csrf_blocked: ['Отклонён запрос с чужого сайта', 'Cross-site request blocked', 'bad']
   };
   function securityPanel(u) {
     const log = secRead(SEC_LOG, []).slice(0, 12), dt = t => `${fShort(new Date(t))}, ${fTime(new Date(t))}`;
     const rules = [
       L(`Политика безопасности браузера (CSP): скрипты только с этого сайта, без встроенного кода`, `Browser security policy (CSP): scripts only from this site, no inline code`),
       L('Фильтр разметки и экранирование всего, что вводят пользователи', 'Markup filter and escaping of everything users type'),
-      L(`Пароли хранятся хэшем PBKDF2 (150 000 итераций)`, `Passwords are stored as PBKDF2 hashes (150,000 iterations)`),
+      SERVER ? L('Пароли хранятся хэшем Argon2id, номера телефонов зашифрованы (AES-256-GCM)', 'Passwords are stored as Argon2id hashes, phone numbers are encrypted (AES-256-GCM)') : L(`Пароли хранятся хэшем PBKDF2 (150 000 итераций)`, `Passwords are stored as PBKDF2 hashes (150,000 iterations)`),
       L(`${SEC.failsBeforeLock} неверных паролей — блокировка номера на 5 минут`, `${SEC.failsBeforeLock} wrong passwords lock the number for 5 minutes`),
       L(`Не больше ${SEC.authPerHour} попыток входа и SMS в час, ${SEC.smsPer10Min} кодов на номер за 10 минут`, `At most ${SEC.authPerHour} sign-in and SMS attempts per hour, ${SEC.smsPer10Min} codes per number per 10 minutes`),
       L(`Не больше ${SEC.accountsPerDevice} аккаунтов с одного устройства`, `At most ${SEC.accountsPerDevice} accounts per device`),
@@ -2196,9 +2371,10 @@
     return `<section class="panel sec-panel">
       <div class="panel-head"><div><h2>${L('Безопасность', 'Security')}</h2>
         <p class="muted" style="font-size:13.5px;margin-top:4px">${L('Сессия', 'Session')}: ${db.sessionAt ? `${L('вход', 'since')} ${dt(db.sessionAt)} · ` : ''}${L('действует до', 'valid until')} ${dt(db.sessionExp || Date.now())}</p></div>
-        <button class="btn btn-sm" data-action="logout">${L('Завершить сессию', 'End session')}</button></div>
+        <div class="btn-row"><button class="btn btn-sm" data-action="logout">${L('Завершить сессию', 'End session')}</button>${SERVER ? `<button class="btn btn-danger btn-sm" data-action="logoutAll">${L('Выйти на всех устройствах', 'Sign out everywhere')}</button>` : ''}</div></div>
       <ul class="sec-rules">${rules.map(r => `<li>${ICON.shield}<span>${r}</span></li>`).join('')}</ul>
-      <div class="sec-log-head"><b>${L('Журнал безопасности', 'Security log')}</b>${log.length ? `<button class="link-btn" type="button" data-action="clearSecLog">${L('Очистить', 'Clear')}</button>` : ''}</div>
+      ${SERVER ? `<div class="sec-log-head"><b>${L('Журнал безопасности на сервере', 'Server security log')}</b><span class="muted" id="srv-sessions"></span></div><ul class="sec-log" id="srv-log"><li class="muted">${L('Загружаем…', 'Loading…')}</li></ul>` : ''}
+      <div class="sec-log-head"><b>${SERVER ? L('События в этом браузере', 'Events in this browser') : L('Журнал безопасности', 'Security log')}</b>${log.length ? `<button class="link-btn" type="button" data-action="clearSecLog">${L('Очистить', 'Clear')}</button>` : ''}</div>
       ${log.length ? `<ul class="sec-log">${log.map(x => { const ev = SEC_EVENTS[x.type] || [x.type, x.type, '']; return `<li class="${ev[2]}"><i></i><span><b>${L(ev[0], ev[1])}</b>${x.detail ? `<small>${esc(x.detail)}</small>` : ''}</span><time class="mono">${dt(x.at)}</time></li>`; }).join('')}</ul>`
         : `<p class="muted">${L('Событий пока нет.', 'No events yet.')}</p>`}
     </section>`;
@@ -2235,7 +2411,7 @@
         <button class="btn btn-primary" type="submit" id="lg-go">${L('Войти', 'Sign in')}</button>
         <button class="btn" type="button" id="lg-sms">${L('Войти по SMS-коду', 'Sign in with an SMS code')}</button>
       </form>
-      <div class="hint">${L('Демо-аккаунт', 'Demo account')}: <span class="mono">+996 700 000 001</span>, ${L('пароль', 'password')} <b>hookah</b></div>
+      <div class="hint">${L('Тестовый аккаунт', 'Test account')}: <span class="mono">+996 700 000 001</span>, ${L('пароль', 'password')} <b>hookah</b></div>
       <p class="sec-note">${ICON.shield}${L(`Защита входа: ${SEC.failsBeforeLock} неверных попыток — блокировка на 5 минут, не больше ${SEC.authPerHour} попыток в час с устройства.`, `Sign-in protection: ${SEC.failsBeforeLock} wrong attempts lock the number for 5 minutes, at most ${SEC.authPerHour} attempts per hour from a device.`)}</p>
       <p class="muted" style="text-align:center">${L('Нет аккаунта?', 'No account?')} <a href="#/register" style="color:var(--accent)">${L('Зарегистрируйтесь', 'Sign up')}</a></p>`;
     maskPhone($('#lg-phone'));
@@ -2245,6 +2421,13 @@
       err.textContent = '';
       const phone = normPhone($('#lg-phone').value), pass = $('#lg-pass').value;
       if (!validPhone(phone)) { err.textContent = L('Введите номер полностью, вместе с кодом страны.', 'Enter the full number including the country code.'); return; }
+      if (SERVER) {
+        go1.disabled = true; go1.textContent = L('Проверяем…', 'Checking…');
+        try { applyData((await api('POST', '/auth/login', { phone, password: pass })).data); toast(L(`Вы вошли как ${me().name}`, `Signed in as ${me().name}`)); go(''); }
+        catch (e) { err.textContent = apiMsg(e); }
+        finally { go1.disabled = false; go1.textContent = L('Войти', 'Sign in'); }
+        return;
+      }
       const lock = lockLeft(phone);
       if (lock) { err.textContent = L(`Слишком много неверных попыток. Вход для этого номера заблокирован ещё на ${waitText(lock)}.`, `Too many wrong attempts. Sign-in for this number is locked for ${waitText(lock)}.`); return; }
       const r = rateHit('auth', SEC.authPerHour, 3600e3);
@@ -2268,6 +2451,10 @@
     $('#lg-sms').addEventListener('click', () => {
       const phone = normPhone($('#lg-phone').value), user = userByPhone(phone);
       if (!validPhone(phone)) { err.textContent = L('Сначала введите номер телефона.', 'Enter your phone number first.'); return; }
+      if (SERVER) return void renderVerifyServer(card, phone, 'login', async code => {
+        applyData((await api('POST', '/auth/login-sms', { phone, code })).data);
+        toast(L(`Вы вошли как ${me().name}`, `Signed in as ${me().name}`)); go('');
+      });
       if (!user) { err.textContent = L('Этот номер ещё не зарегистрирован.', 'This number is not registered yet.'); return; }
       renderVerify(card, phone, () => { user.verified = true; clearFails(phone); signIn(user); });
     });
@@ -2286,7 +2473,7 @@
         <div class="error" id="rg-err" role="alert"></div>
         <button class="btn btn-primary" type="submit">${L('Получить код по SMS', 'Get an SMS code')}</button>
       </form>
-      <p class="sec-note">${ICON.shield}${L(`С одного устройства можно создать не больше ${SEC.accountsPerDevice} аккаунтов. Создано: ${regs.length}.`, `Up to ${SEC.accountsPerDevice} accounts can be created from one device. Created: ${regs.length}.`)}</p>
+      <p class="sec-note">${ICON.shield}${SERVER ? L('Номер подтверждается кодом из SMS. С одного адреса можно создать не больше 3 аккаунтов.', 'The number is confirmed by an SMS code. At most 3 accounts per address.') : L(`С одного устройства можно создать не больше ${SEC.accountsPerDevice} аккаунтов. Создано: ${regs.length}.`, `Up to ${SEC.accountsPerDevice} accounts can be created from one device. Created: ${regs.length}.`)}</p>
       <p class="muted" style="text-align:center">${L('Уже есть аккаунт?', 'Already have an account?')} <a href="#/login" style="color:var(--accent)">${L('Войти', 'Sign in')}</a></p>`;
     maskPhone($('#rg-phone'));
     const meter = $('.pass-meter'), strength = $('#rg-strength');
@@ -2306,6 +2493,10 @@
       const issue = passIssues(pass, phone);
       if (issue) return void (err.textContent = issue);
       if (!$('#rg-age').checked) return void (err.textContent = L('Сервис доступен только совершеннолетним.', 'The service is for adults only.'));
+      if (SERVER) return void renderVerifyServer(card, phone, 'register', async code => {
+        applyData((await api('POST', '/auth/register', { name, phone, password: pass, code, adult: true })).data);
+        renderAvatarStep(card, me());
+      }, L('Регистрация · шаг 2 из 3', 'Sign up · step 2 of 3'));
       if (secRead('hp.sec.regs', []).length >= SEC.accountsPerDevice) {
         secLog('rate_limited', 'register');
         return void (err.textContent = L(`С этого устройства уже создано ${SEC.accountsPerDevice} аккаунта. Это ограничение защищает от массовой регистрации.`, `${SEC.accountsPerDevice} accounts have already been created on this device. This limit prevents mass sign-ups.`));
@@ -2396,6 +2587,71 @@
     });
     $('#code-back').addEventListener('click', () => { clearInterval(timer); route(); });
   }
+  // Подтверждение номера на сервере: код приходит в SMS (в режиме разработки сервер показывает его здесь).
+  async function renderVerifyServer(card, phone, purpose, onCode, eyebrow = L('Подтверждение номера', 'Number verification')) {
+    let timer = null, left = 0;
+    const blocked = msg => {
+      clearInterval(timer);
+      card.innerHTML = `<div><span class="eyebrow">${eyebrow}</span><h1 style="margin-top:8px">${L('Код не отправлен', 'Code not sent')}</h1>
+        <p class="muted" style="margin-top:8px">${esc(msg)}</p></div><button class="btn" type="button" id="code-back">${L('Назад', 'Back')}</button>`;
+      $('#code-back').onclick = () => route();
+    };
+    const request = async () => {
+      try { const r = await api('POST', '/auth/sms', { phone, purpose }); return r.devCode || ''; }
+      catch (e) { blocked(apiMsg(e)); return null; }
+    };
+    card.innerHTML = `<div><span class="eyebrow">${eyebrow}</span><h1 style="margin-top:8px">${L('Отправляем код…', 'Sending the code…')}</h1></div>`;
+    let devCode = await request();
+    if (devCode === null) return;
+    card.innerHTML = `
+      <div><span class="eyebrow">${eyebrow}</span><h1 style="margin-top:8px">${L('Введите код из SMS', 'Enter the SMS code')}</h1>
+        <p class="muted" style="margin-top:8px">${L('Отправили 4 цифры на', 'We sent 4 digits to')} <span class="mono">${fmtPhone(phone)}</span>. ${L('Код действует 5 минут.', 'The code is valid for 5 minutes.')}</p></div>
+      <form class="form" id="code-form">
+        <div class="code-inputs">${[0, 1, 2, 3].map(i => `<input id="code-${i}" inputmode="numeric" autocomplete="${i === 0 ? 'one-time-code' : 'off'}" maxlength="1" aria-label="${L('Цифра', 'Digit')} ${i + 1}">`).join('')}</div>
+        <div class="hint" id="sms-hint"></div>
+        <div class="error" id="code-err" style="text-align:center" role="alert"></div>
+        <button class="btn btn-primary" type="submit" id="code-go">${L('Подтвердить', 'Confirm')}</button>
+        <div class="resend" id="resend"></div>
+        <button class="link-btn" type="button" id="code-back">${L('Изменить номер', 'Change number')}</button>
+      </form>`;
+    const boxes = $$('.code-inputs input', card);
+    const showHint = () => {
+      const h = $('#sms-hint');
+      h.innerHTML = devCode ? `${L('Режим разработки: SMS не отправляется. Ваш код:', 'Development mode: no SMS is sent. Your code:')} <b>${devCode}</b>`
+        : L('Если SMS не пришло за минуту, проверьте номер или запросите код ещё раз.', 'If the SMS does not arrive within a minute, check the number or request the code again.');
+    };
+    const tick = () => {
+      const r = $('#resend'); if (!r) return clearInterval(timer);
+      r.innerHTML = left > 0 ? `${L('Отправить код повторно через', 'Resend the code in')} <span class="mono">0:${pad(left)}</span>` : `<button class="link-btn" type="button" id="resend-btn">${L('Отправить код ещё раз', 'Send the code again')}</button>`;
+      if (left-- <= 0) {
+        clearInterval(timer);
+        $('#resend-btn').onclick = async () => { const c = await request(); if (c === null) return; devCode = c; showHint(); $('#code-err').textContent = ''; toast(L('Новый код отправлен', 'A new code has been sent')); start(); };
+      }
+    };
+    const start = () => { left = 30; clearInterval(timer); tick(); timer = setInterval(tick, 1000); };
+    showHint(); start();
+    boxes.forEach((b, i) => {
+      b.addEventListener('input', () => {
+        const v = digits(b.value);
+        if (v.length > 1) { v.split('').slice(0, 4 - i).forEach((c, k) => boxes[i + k].value = c); boxes[Math.min(i + v.length, 3)].focus(); }
+        else { b.value = v; if (v && i < 3) boxes[i + 1].focus(); }
+        if (boxes.every(x => x.value)) $('#code-form').requestSubmit();
+      });
+      b.addEventListener('keydown', e => { if (e.key === 'Backspace' && !b.value && i > 0) boxes[i - 1].focus(); });
+    });
+    boxes[0].focus();
+    let busy = false;
+    $('#code-form').addEventListener('submit', async ev => {
+      ev.preventDefault();
+      if (busy) return;
+      busy = true; $('#code-go').disabled = true;
+      try { await onCode(boxes.map(b => b.value).join('')); clearInterval(timer); }
+      catch (e) { $('#code-err').textContent = apiMsg(e); boxes.forEach(b => b.value = ''); boxes[0].focus(); }
+      finally { busy = false; const g = $('#code-go'); if (g) g.disabled = false; }
+    });
+    $('#code-back').addEventListener('click', () => { clearInterval(timer); route(); });
+  }
+
   function renderAvatarStep(card, user) {
     const draw = () => {
       card.innerHTML = `
@@ -2405,7 +2661,7 @@
           <div class="verified">${ICON.check}${L('Номер', 'Number')} ${fmtPhone(user.phone)} ${L('подтверждён', 'verified')}</div>
           <div class="avatar-actions"><button class="btn" type="button" id="av-up">${user.avatar ? L('Выбрать другое', 'Choose another') : L('Загрузить фото', 'Upload photo')}</button></div></div>
         <button class="btn btn-primary" type="button" id="av-done">${user.avatar ? L('Готово', 'Done') : L('Пропустить', 'Skip')}</button>`;
-      $('#av-up').onclick = () => pickAvatarFile(url => { user.avatar = url; save(); draw(); });
+      $('#av-up').onclick = () => pickAvatarFile(url => act(() => { user.avatar = url; }, 'PUT', '/me/avatar', { dataUrl: url }).then(() => { user = me() || user; draw(); }, quiet));
       $('#av-done').onclick = () => { toast(L(`Добро пожаловать, ${user.name}!`, `Welcome, ${user.name}!`)); go(''); };
     };
     draw();
@@ -2430,9 +2686,9 @@
       }).join('');
       const text = q.value.trim().toLowerCase(), qd = digits(text), t = taken();
       const found = db.users
-        .filter(p => !t.has(p.id) && (!text || p.name.toLowerCase().includes(text) || (qd.length >= 3 && p.phone.includes(qd))))
+        .filter(p => !t.has(p.id) && (!text || p.name.toLowerCase().includes(text) || (qd.length >= 3 && (p.phone || '').includes(qd))))
         .sort((a, b) => isFriend(u, b) - isFriend(u, a) || a.name.localeCompare(b.name, 'ru')).slice(0, 6);
-      let html = found.map(p => `<button type="button" data-u="${p.id}">${avatar(p, 'sm')}<span>${esc(p.name)}${isFriend(u, p) ? ` <em class="tag-friend">${L('друг', 'friend')}</em>` : ''}</span><small>${canSeePhone(u, p) ? fmtPhone(p.phone) : maskedPhone(p.phone)}</small></button>`).join('');
+      let html = found.map(p => `<button type="button" data-u="${p.id}">${avatar(p, 'sm')}<span>${esc(p.name)}${isFriend(u, p) ? ` <em class="tag-friend">${L('друг', 'friend')}</em>` : ''}</span><small>${phoneShown(u, p)}</small></button>`).join('');
       const np = normPhone(qd);
       if (validPhone(np) && !userByPhone(np) && !t.has(np)) html += `<button type="button" data-p="${np}"><span class="av av-sm av-ghost">+</span><span>${L('Пригласить по номеру', 'Invite by number')}</span><small>${fmtPhone(np)}</small></button>`;
       sug.innerHTML = html || `<p class="muted" style="padding:8px;font-size:13.5px">${text ? L('Никого не нашли. Введите номер полностью, чтобы пригласить по SMS.', 'Nobody found. Enter the full number to invite by SMS.') : L('Все ваши знакомые уже приглашены.', 'Everyone you know is already invited.')}</p>`;
@@ -2492,25 +2748,33 @@
         const hookahs = Math.max(0, Math.min(20, parseInt(val('#ev-hookahs'), 10) || 0));
         const price = Math.max(0, parseInt(val('#ev-price'), 10) || 0);
         const v = VENUES.find(x => x.name === venue);
-        onSave({ title: title.slice(0, 60), venue: venue.slice(0, 60), venueId: v ? v.id : null, address: val('#ev-address') || v?.addr || '', mapUrl: safeUrl(mapUrl), at: when.toISOString(), hookahs, price, desc: clean($('#ev-desc', m).value, 400, true) }, picker ? toInvites(picker.get()) : []);
+        onSave({ title: title.slice(0, 60), venue: venue.slice(0, 60), venueId: v ? v.id : null, address: val('#ev-address') || v?.addr || '', mapUrl: safeUrl(mapUrl), at: when.toISOString(), hookahs, price, desc: clean($('#ev-desc', m).value, 400, true) }, picker ? toInvites(picker.get()) : [], picker ? picker.get() : []);
       });
     });
   }
-  function createEvent(fields, invites) {
-    const e = { id: uid('e'), hostId: me().id, createdAt: new Date().toISOString(), ...fields, invites, picks: {}, bowls: {}, comments: [], paid: {}, remind: {}, notified: {} };
-    db.events.push(e); save(); closeModal();
+  async function createEvent(fields, invites, raw = invites) {
+    let newId;
+    if (SERVER) {
+      const r = await act(null, 'POST', '/events', { ...fields, invites: raw }).catch(() => null);
+      if (!r) return;
+      newId = r.id;
+    } else {
+      const e = { id: uid('e'), hostId: me().id, createdAt: new Date().toISOString(), ...fields, invites, picks: {}, bowls: {}, comments: [], paid: {}, remind: {}, notified: {} };
+      db.events.push(e); save(); newId = e.id;
+    }
+    closeModal();
     toast(invites.length ? L(`Сбор создан, приглашения отправлены: ${invites.length}`, `Event created, invitations sent: ${invites.length}`) : L('Сбор создан', 'Event created'));
-    go('event/' + e.id);
+    go('event/' + newId);
   }
 
   // Напоминания работают, пока сайт открыт. Надёжный вариант — файл .ics с будильником.
   function checkReminders() {
     const u = me(); if (!u) return;
     for (const e of db.events) {
-      if (!e.remind[u.id] || e.notified[u.id]) continue;
+      if (!remindOn(e, u) || secRead(REM, {})[u.id + ':' + e.id]?.done === e.at) continue;
       const left = new Date(e.at) - Date.now();
       if (left > 0 && left <= 3600e3) {
-        e.notified[u.id] = true; save();
+        remindSet(e, u, { done: e.at });
         const msg = L(`Через ${Math.ceil(left / 60000)} мин: ${e.title}, ${e.venue}`, `In ${Math.ceil(left / 60000)} min: ${e.title}, ${e.venue}`);
         toast(msg);
         try { if ('Notification' in window && Notification.permission === 'granted') new Notification('Hookah Party', { body: msg }); } catch (err) { /* уведомления недоступны */ }
@@ -2564,8 +2828,7 @@
       eventForm({
         heading: L('Изменить сбор', 'Edit event'), submitLabel: L('Сохранить', 'Save'), data: e, withPicker: false,
         onSave(fields) {
-          if (fields.at !== e.at) e.notified = {};
-          Object.assign(e, fields); save(); closeModal(); toast(L('Сбор обновлён', 'Event updated')); render();
+          act(() => Object.assign(e, fields), 'PATCH', `/events/${e.id}`, fields).then(() => { closeModal(); toast(L('Сбор обновлён', 'Event updated')); render(); }, quiet);
         }
       });
     },
@@ -2583,21 +2846,19 @@
         $$('input', m).forEach(i => i.addEventListener('input', upd)); upd();
         $('#bill-form', m).addEventListener('submit', ev => {
           ev.preventDefault();
-          e.hookahs = Math.max(0, Math.min(20, parseInt($('#bl-h', m).value, 10) || 0));
-          e.price = Math.max(0, parseInt($('#bl-p', m).value, 10) || 0);
-          save(); closeModal(); render();
+          const hookahs = Math.max(0, Math.min(20, parseInt($('#bl-h', m).value, 10) || 0)), price = Math.max(0, parseInt($('#bl-p', m).value, 10) || 0);
+          act(() => { e.hookahs = hookahs; e.price = price; }, 'PUT', `/events/${e.id}/bill`, { hookahs, price }).then(() => { closeModal(); render(); }, quiet);
         });
       });
     },
     togglePaid({ id, user }) {
       const e = eventById(id); if (!e || e.hostId !== me()?.id) return;
-      if (e.paid[user]) delete e.paid[user]; else e.paid[user] = true;
-      save(); render();
+      act(() => { if (e.paid[user]) delete e.paid[user]; else e.paid[user] = true; }, 'POST', `/events/${id}/paid/${user}`).then(() => render(), quiet);
     },
     toggleRemind({ id }) {
       const e = eventById(id), u = me(); if (!e || !u) return;
-      if (e.remind[u.id]) { delete e.remind[u.id]; save(); toast(L('Напоминание выключено', 'Reminder off')); render(); return; }
-      e.remind[u.id] = true; delete e.notified[u.id]; save(); render();
+      if (remindOn(e, u)) { remindSet(e, u, { on: false }); toast(L('Напоминание выключено', 'Reminder off')); render(); return; }
+      remindSet(e, u, { on: true, done: null }); render();
       toast(L('Напомним за час, пока сайт открыт. Надёжнее добавить сбор в календарь.', 'We will remind you an hour before while the site is open. Adding it to your calendar is more reliable.'));
       try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {}); } catch (err) { /* уведомления недоступны */ }
       checkReminders();
@@ -2605,7 +2866,7 @@
     ics({ id }) { const e = eventById(id); if (e) { downloadIcs(e); toast(L('Файл календаря скачан. Откройте его, чтобы добавить сбор.', 'Calendar file downloaded. Open it to add the event.')); } },
     deleteComment({ id, comment }) {
       const e = eventById(id); if (!e) return;
-      e.comments = e.comments.filter(c => c.id !== comment); save(); render();
+      act(() => { e.comments = e.comments.filter(c => c.id !== comment); }, 'DELETE', `/comments/${comment}`).then(() => render(), quiet);
     },
     invite({ id }) {
       const e = eventById(id); if (!e) return;
@@ -2616,15 +2877,17 @@
         $('#inv-send', m).onclick = () => {
           const list = toInvites(picker.get());
           if (!list.length) return toast(L('Выберите хотя бы одного человека', 'Choose at least one person'), 'err');
-          e.invites.push(...list); save(); closeModal(); toast(L(`Приглашения отправлены: ${list.length}`, `Invitations sent: ${list.length}`)); render();
+          act(() => { e.invites.push(...list); }, 'POST', `/events/${e.id}/invites`, { invites: picker.get() })
+            .then(() => { closeModal(); toast(L(`Приглашения отправлены: ${list.length}`, `Invitations sent: ${list.length}`)); render(); }, quiet);
         };
       });
     },
     rsvp({ id, status }) {
       const e = eventById(id), u = me(), inv = e && u && myInvite(e, u); if (!inv) return;
-      inv.status = status; inv.at = new Date().toISOString();
-      if (status !== 'going') { delete e.picks[u.id]; delete e.bowls[u.id]; delete e.paid[u.id]; }
-      save(); toast(status === 'going' ? L('Отлично, ждём вас! Выберите табаки.', 'Great, see you there! Pick your tobacco.') : L('Организатор узнает, что вы не придёте', 'The host will know you can’t make it')); render();
+      act(() => {
+        inv.status = status; inv.at = new Date().toISOString();
+        if (status !== 'going') { delete e.picks[u.id]; delete e.bowls[u.id]; delete e.paid[u.id]; }
+      }, 'POST', `/events/${id}/rsvp`, { status }).then(() => { toast(status === 'going' ? L('Отлично, ждём вас! Выберите табаки.', 'Great, see you there! Pick your tobacco.') : L('Организатор узнает, что вы не придёте', 'The host will know you can’t make it')); render(); }, quiet);
     },
     pickTobacco({ id }) {
       const e = eventById(id), u = me(); if (!e || !canVote(e, u)) return;
@@ -2650,8 +2913,8 @@
         });
         $('#pk-save', m).onclick = () => {
           const ids = boxes.filter(b => b.checked).map(b => b.value);
-          if (ids.length) e.picks[u.id] = ids; else delete e.picks[u.id];
-          save(); closeModal(); toast(L('Ваш выбор учтён', 'Your pick is saved')); render();
+          act(() => { if (ids.length) e.picks[u.id] = ids; else delete e.picks[u.id]; }, 'PUT', `/events/${e.id}/picks`, { ids })
+            .then(() => { closeModal(); toast(L('Ваш выбор учтён', 'Your pick is saved')); render(); }, quiet);
         };
       });
     },
@@ -2665,24 +2928,23 @@
         $('#bw-save', m).onclick = () => {
           const v = $('input[name=bowl]:checked', m)?.value;
           if (!v) return toast(L('Выберите чашу', 'Choose a bowl'), 'err');
-          e.bowls[u.id] = v; save(); closeModal(); render();
+          act(() => { e.bowls[u.id] = v; }, 'PUT', `/events/${e.id}/bowl`, { bowlId: v }).then(() => { closeModal(); render(); }, quiet);
         };
-        const c = $('#bw-clear', m); if (c) c.onclick = () => { delete e.bowls[u.id]; save(); closeModal(); render(); };
+        const c = $('#bw-clear', m); if (c) c.onclick = () => act(() => { delete e.bowls[u.id]; }, 'PUT', `/events/${e.id}/bowl`, { bowlId: null }).then(() => { closeModal(); render(); }, quiet);
       });
     },
     deleteEvent({ id }) {
       const e = eventById(id); if (!e) return;
       openModal(L('Отменить сбор?', 'Cancel the event?'), `<p class="muted">${L(`Сбор «${esc(e.title)}» исчезнет у всех приглашённых. Это действие нельзя отменить.`, `“${esc(e.title)}” will disappear for everyone invited. This cannot be undone.`)}</p>
         <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">${L('Оставить', 'Keep it')}</button><button class="btn btn-danger" type="button" id="del-ok">${L('Отменить сбор', 'Cancel event')}</button></div>`, m => {
-        $('#del-ok', m).onclick = () => { db.events = db.events.filter(x => x.id !== id); save(); closeModal(); toast(L('Сбор отменён', 'Event cancelled')); go('events'); };
+        $('#del-ok', m).onclick = () => act(() => { db.events = db.events.filter(x => x.id !== id); }, 'DELETE', `/events/${id}`).then(() => { closeModal(); toast(L('Сбор отменён', 'Event cancelled')); go('events'); }, quiet);
       });
     },
     tobacco({ id }) { openTobacco(id); },
-    fav({ id }, el) {
+    async fav({ id }, el) {
       const u = me(); if (!u) return;
       const adding = !u.favs.includes(id), t = tobacco(id);
-      u.favs = adding ? [...u.favs, id] : u.favs.filter(x => x !== id);
-      save();
+      try { await act(() => { u.favs = adding ? [...u.favs, id] : u.favs.filter(x => x !== id); }, 'POST', `/me/favs/${id}`); } catch (e) { return; }
       favPop = adding ? id : null;
       const inModal = el.closest('.modal');
       render();
@@ -2715,17 +2977,15 @@
           if (p.length < 2) return void (err.textContent = L('Выберите хотя бы два табака с долей больше нуля.', 'Choose at least two tobaccos with a share above zero.'));
           if (new Set(p.map(x => x.id)).size !== p.length) return void (err.textContent = L('Табаки в миксе не должны повторяться.', 'Each tobacco can appear only once.'));
           if (p.reduce((s, x) => s + x.pct, 0) !== 100) return void (err.textContent = L('Доли должны давать в сумме 100%.', 'Shares must add up to 100%.'));
-          db.mixes.push({ id: uid('m'), name, authorId: me().id, parts: p.sort((a, b) => b.pct - a.pct), likes: [], at: new Date().toISOString() });
-          save(); closeModal(); toast(L('Микс опубликован', 'Mix published')); tab.cat = 'mixes'; prefs.set('tab.cat', 'mixes');
-          if (location.hash !== '#/catalog') go('catalog'); else render();
+          act(() => { db.mixes.push({ id: uid('m'), name, authorId: me().id, parts: p.sort((a, b) => b.pct - a.pct), likes: [], at: new Date().toISOString() }); }, 'POST', '/mixes', { name, parts: p })
+            .then(() => { closeModal(); toast(L('Микс опубликован', 'Mix published')); tab.cat = 'mixes'; prefs.set('tab.cat', 'mixes'); if (location.hash !== '#/catalog') go('catalog'); else render(); }, quiet);
         });
       });
     },
     likeMix({ id }) {
       if (!requireUser()) return;
       const u = me(), m = db.mixes.find(x => x.id === id); if (!m) return;
-      m.likes = m.likes.includes(u.id) ? m.likes.filter(x => x !== u.id) : [...m.likes, u.id];
-      save(); render();
+      act(() => { m.likes = m.likes.includes(u.id) ? m.likes.filter(x => x !== u.id) : [...m.likes, u.id]; }, 'POST', `/mixes/${id}/like`).then(() => render(), quiet);
     },
     catTab({ tab: t }) { tab.cat = t; prefs.set('tab.cat', t); cat.q = ''; if (location.hash !== '#/catalog') go('catalog'); else { closeModal(); render(); } },
     catFilter(ds) {
@@ -2734,6 +2994,14 @@
       render();
     },
     switchTab({ tabs, tab: t }) { switchTo(tabs, t); },
+    bell(_, el) { openBell(el); },
+    async readAll() { closePop(); await markRead('all'); render(); },
+    async openNotif({ id, href, story }) {
+      closePop();
+      await markRead([id]);
+      if (story) { pendingStory = story; tab.history = 'all'; }
+      if (location.hash === href) route(); else location.hash = href;
+    },
     reactPick({ scope, id, comment }, el) { openEmojiPop(el, [[null, QUICK]], em => setReaction(scope, id, comment, em), 'r' + comment); },
     react({ scope, id, comment, emoji }) { if (requireUser()) setReaction(scope, id, comment, emoji); },
     emoji({ target }, el) {
@@ -2743,13 +3011,11 @@
     storyFire({ id }) {
       if (!requireUser()) return;
       const e = eventById(id), u = me(); if (!e?.story) return;
-      e.story.fire = e.story.fire.includes(u.id) ? e.story.fire.filter(x => x !== u.id) : [...e.story.fire, u.id];
-      save(); render();
+      act(() => { e.story.fire = e.story.fire.includes(u.id) ? e.story.fire.filter(x => x !== u.id) : [...e.story.fire, u.id]; }, 'POST', `/events/${id}/story/fire`).then(() => render(), quiet);
     },
     deleteStoryComment({ id, comment }) {
       const e = eventById(id), u = me(); if (!e?.story || !u) return;
-      e.story.comments = e.story.comments.filter(c => !(c.id === comment && c.userId === u.id));
-      save(); render();
+      act(() => { e.story.comments = e.story.comments.filter(c => !(c.id === comment && c.userId === u.id)); }, 'DELETE', `/comments/${comment}`).then(() => render(), quiet);
     },
     likeThis({ id }) {
       if (!requireUser()) return;
@@ -2763,9 +3029,11 @@
     toggleFriend({ id }) {
       const u = me(), p = userById(id); if (!u || !p) return;
       // В демо дружба взаимная сразу; на сервере здесь будет заявка в друзья.
-      if (isFriend(u, p)) { u.friends = u.friends.filter(x => x !== id); p.friends = p.friends.filter(x => x !== u.id); toast(L(`${p.name} удалён из друзей`, `${p.name} removed from friends`)); }
-      else { u.friends.push(id); if (!p.friends.includes(u.id)) p.friends.push(u.id); toast(L(`${p.name} теперь в друзьях`, `${p.name} is now your friend`)); }
-      save(); render();
+      const was = isFriend(u, p);
+      act(() => {
+        if (was) { u.friends = u.friends.filter(x => x !== id); p.friends = p.friends.filter(x => x !== u.id); }
+        else { u.friends.push(id); if (!p.friends.includes(u.id)) p.friends.push(u.id); }
+      }, 'POST', `/friends/${id}`).then(() => { toast(was ? L(`${p.name} удалён из друзей`, `${p.name} removed from friends`) : L(`${p.name} теперь в друзьях`, `${p.name} is now your friend`)); render(); }, quiet);
     },
     setLang({ lang: l }) { if (l === lang) return; lang = l; prefs.set('lang', l); applyLook(); render(); },
     cycleTheme() {
@@ -2777,9 +3045,15 @@
     setAccent({ accent }) { prefs.set('accent', accent); applyLook(); render(); },
     setSeason({ season }) { prefs.set('season', season); prefs.set('ribbonClosed', ''); applyLook(); render(); },
     closeRibbon({ key }) { prefs.set('ribbonClosed', key); seasonRibbon(); },
-    uploadAvatar() { const u = me(); pickAvatarFile(url => { u.avatar = url; save(); toast(L('Фото обновлено', 'Photo updated')); render(); }); },
-    removeAvatar() { const u = me(); u.avatar = null; save(); render(); },
-    logout() { secLog('logout'); db.session = null; db.sessionExp = null; save(); toast(L('Вы вышли из аккаунта', 'You have signed out')); go(''); },
+    uploadAvatar() { const u = me(); pickAvatarFile(url => act(() => { u.avatar = url; }, 'PUT', '/me/avatar', { dataUrl: url }).then(() => { toast(L('Фото обновлено', 'Photo updated')); render(); }, quiet)); },
+    removeAvatar() { const u = me(); act(() => { u.avatar = null; }, 'DELETE', '/me/avatar').then(() => render(), quiet); },
+    logout() {
+      act(() => { secLog('logout'); db.session = null; db.sessionExp = null; }, 'POST', '/auth/logout', {})
+        .then(() => { toast(L('Вы вышли из аккаунта', 'You have signed out')); go(''); }, quiet);
+    },
+    logoutAll() {
+      act(null, 'POST', '/auth/logout-all', {}).then(() => { toast(L('Все сессии завершены', 'All sessions ended')); go(''); }, quiet);
+    },
     clearSecLog() { secWrite(SEC_LOG, []); render(); },
     reset() { db = withStories(seed()); save(); toast(L('Демо-данные восстановлены', 'Demo data restored')); go(''); },
     info({ key }) {
@@ -2798,13 +3072,14 @@
     const el = e.target.closest('[data-action]');
     if (!el || !actions[el.dataset.action]) return;
     e.preventDefault();
-    actions[el.dataset.action]({ ...el.dataset }, el);
+    Promise.resolve(actions[el.dataset.action]({ ...el.dataset }, el)).catch(() => {});
   });
 
   // ---------- Роутер ----------
   const view = $('#view');
   // render() перерисовывает текущую страницу без прокрутки наверх; route() — полный переход.
-  const PAGES = new Set(['', 'venues', 'events', 'event', 'catalog', 'people', 'user', 'how', 'profile', 'login', 'register', 'history']);
+  const navFor = () => ({ notifications: 'notifications', history: 'history', venues: 'venues', catalog: 'catalog', events: 'events', event: 'events', people: 'people', user: 'people', profile: 'profile', login: 'profile', register: 'profile' })[location.hash.replace(/^#\/?/, '').split('/')[0]] || '';
+  const PAGES = new Set(['', 'venues', 'events', 'event', 'catalog', 'people', 'user', 'how', 'profile', 'login', 'register', 'history', 'notifications']);
   const NEEDS_ARG = new Set(['event', 'user']);
   function render() {
     const hash = location.hash.replace(/^#\/?/, '');
@@ -2814,10 +3089,10 @@
       if (/[<>"'`]|script|%3c/i.test(hash)) secLog('bad_url', hash.slice(0, 60));
       page = 'notfound';
     }
-    if (db.session && db.sessionExp && Date.now() > db.sessionExp) { secLog('session_expired'); db.session = null; save(); toast(L('Сессия истекла, войдите снова', 'Your session has expired, please sign in again')); }
-    const nav = { history: 'history', venues: 'venues', catalog: 'catalog', events: 'events', event: 'events', people: 'people', user: 'people', profile: 'profile', login: 'profile', register: 'profile' }[page] || '';
+    if (!SERVER && db.session && db.sessionExp && Date.now() > db.sessionExp) { secLog('session_expired'); db.session = null; save(); toast(L('Сессия истекла, войдите снова', 'Your session has expired, please sign in again')); }
+    const nav = navFor();
     renderChrome(nav);
-    document.title = 'Hookah Party';
+    updateTitle();
     switch (page) {
       case 'venues': pageVenues(); break;
       case 'events': pageEvents(); break;
@@ -2827,6 +3102,7 @@
       case 'user': pageUser(arg); break;
       case 'how': pageHow(); break;
       case 'history': pageHistory(); break;
+      case 'notifications': pageNotifications(); break;
       case 'notfound': view.innerHTML = emptyState(L('Такой страницы нет', 'Page not found'), L('Возможно, ссылка устарела или в ней опечатка.', 'The link may be outdated or contain a typo.'), `<a class="btn btn-primary btn-sm" href="#/">${L('На главную', 'Go home')}</a>`); break;
       case 'profile': pageProfile(); break;
       case 'login': pageAuth('login'); break;
@@ -2848,5 +3124,17 @@
   document.body.append(toTop);
   window.addEventListener('scroll', () => { toTop.hidden = window.scrollY < 700; toTop.setAttribute('aria-label', L('Наверх', 'Back to top')); }, { passive: true });
   window.addEventListener('hashchange', route);
-  route();
+  // На сервере раз в минуту подтягиваем новые уведомления, пока вкладка на экране.
+  setInterval(async () => {
+    if (!SERVER || !me() || document.visibilityState !== 'visible') return;
+    const before = (db.notifications || []).map(n => n.id + n.read).join();
+    try {
+      const d = await api('GET', '/bootstrap');
+      if ((d.notifications || []).map(n => n.id + n.read).join() !== before) { applyData(d); renderChrome(navFor()); updateTitle(); if (location.hash === '#/notifications') render(); }
+    } catch (e) { /* сеть недоступна — попробуем позже */ }
+  }, 60e3);
+  (async () => {
+    if (await detectServer()) { SERVER = true; document.documentElement.dataset.mode = 'server'; await refresh(); }
+    route();
+  })();
 })();

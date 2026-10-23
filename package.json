@@ -2,14 +2,16 @@
   "name": "hookah-party",
   "version": "1.0.0",
   "private": true,
-  "description": "Hookah Party — приглашения на кальянные сборы в Бишкеке",
+  "description": "Hookah Party — приглашения на кальянные сборы в Бишкеке (сайт + сервер без сторонних зависимостей)",
   "scripts": {
-    "test": "node tests/smoke.test.js"
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node tests/smoke.test.js && node --test tests/server.test.js"
   },
   "devDependencies": {
     "jsdom": "24.1.3"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24.7"
   }
 }
