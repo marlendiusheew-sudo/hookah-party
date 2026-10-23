@@ -75,6 +75,8 @@ async function seed(db) {
         .run(id, name, encrypt(phone), phoneIndex(phone), phone.slice(-3), pass, fv ? V(fv).name : '', ago(60 * 24 * 40));
       for (const t of favs) db.q('INSERT INTO favs VALUES (?, ?)').run(id, t);
     }
+    // Тестовый аккаунт «Алекс» — администратор (только в демо-базе; настоящему владельцу роль выдаётся командой server/admin.js).
+    db.q("UPDATE users SET role = 'admin' WHERE id = 'u1'").run();
     for (const [id, , , , , friends] of users) for (const f of friends) db.q('INSERT OR IGNORE INTO friends VALUES (?, ?)').run(id, f);
     for (const e of events) {
       const v = V(e.vid);

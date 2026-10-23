@@ -79,7 +79,8 @@ const tabTo = async (n, k) => { click($(`.utabs[data-tabs="${n}"] [data-tab="${k
     click($('[data-action="venueOpen"]')); await sleep(10);
     click($('.venue-item[data-vid="n6360868686"]')); await sleep(10);
     click($('#venues-map [data-action="gatherHere"]')); await sleep(10);
-    ok(!!$('#ev-venue') && /Holy Cow/.test($('#ev-venue').value) && /Саякбай/.test($('#ev-address').value), '«Собрать друзей здесь» подставляет место');
+    // У Алекса уже есть активный сбор — новый создать нельзя, пока этот не пройдёт или не будет отменён.
+    ok(/У вас уже есть активный сбор/.test($('.modal h2').textContent) && !!$('.modal [data-action="deleteEvent"]'), 'один активный сбор: вместо формы — предупреждение');
     click($('[data-action="closeModal"]'));
 
     click($('[data-action="setLang"][data-lang="en"]')); await sleep(10);
@@ -136,7 +137,7 @@ const tabTo = async (n, k) => { click($(`.utabs[data-tabs="${n}"] [data-tab="${k
     ok(!$('.story-form[data-story="e5"]') && /уже комментировали этот вечер сегодня/.test($('#story-e5').textContent), 'история: один комментарий в день');
     ok(!!$('.story-form[data-story="e6"]'), 'история: лимит считается для каждого вечера отдельно');
     click($('[data-action="likeThis"][data-id="e6"]')); await sleep(10);
-    ok(/Holy Cow/.test($('#ev-venue').value), 'история: «Хочу так же» создаёт сбор в том же месте');
+    ok(/У вас уже есть активный сбор/.test($('.modal h2').textContent), 'история: «Хочу так же» тоже проверяет активный сбор');
     click($('[data-action="closeModal"]'));
 
     await go('#/catalog');

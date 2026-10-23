@@ -129,3 +129,58 @@ test('выход завершает сессию', async () => {
   assert.equal((await c.call('POST', '/auth/logout', {})).status, 200);
   assert.equal((await c.call('GET', '/security/log')).status, 401);
 });
+
+test('один активный сбор на организатора', async () => {
+  const c = client(); await c.login('0700000001');
+  const at = new Date(Date.now() + 3 * 864e5).toISOString();
+  const r = await c.call('POST', '/events', { title: 'Ещё один', venue: 'Hookah', at });
+  assert.equal(r.status, 409);
+  assert.equal(r.data.error, 'active_exists');
+  assert.equal(r.data.eventId, 'e1');
+});
+
+test('отменить сбор может только организатор, отменённый сбор удаляется', async () => {
+  const guest = client(); await guest.login('0700000002');
+  assert.equal((await guest.call('DELETE', '/events/e1')).status, 403);
+  const host = client(); await host.login('0700000006');
+  const at = new Date(Date.now() + 2 * 864e5).toISOString();
+  const r = await host.call('POST', '/events', { title: 'Тест', venue: 'Hookah', at });
+  assert.equal(r.status, 200);
+  const del = await host.call('DELETE', `/events/${r.data.id}`);
+  assert.equal(del.status, 200);
+  assert.ok(!del.data.data.events.some(e => e.id === r.data.id), 'сбора больше нет');
+});
+
+test('не больше 12 созданий и отмен в сутки', async () => {
+  const c = client(); await c.login('0700000005');
+  const at = new Date(Date.now() + 2 * 864e5).toISOString();
+  for (let i = 0; i < 12; i++) {
+    const r = await c.call('POST', '/events', { title: 'Сбор ' + i, venue: 'Hookah', at });
+    assert.equal(r.status, 200, 'создание ' + i);
+    assert.equal((await c.call('DELETE', `/events/${r.data.id}`)).status, 200, 'отмена ' + i);
+  }
+  const over = await c.call('POST', '/events', { title: 'Тринадцатый', venue: 'Hookah', at });
+  assert.equal(over.status, 429);
+  assert.equal(over.data.error, 'events_limit');
+});
+
+test('администратор: скрыт от обычных, требует пароль, удаляет комментарии и сборы', async () => {
+  const user = client(); await user.login('0700000003');
+  assert.equal((await user.call('GET', '/admin/overview')).status, 404, 'обычный пользователь даже не видит адрес');
+  assert.equal((await fetch(base + '/admin.js', { headers: { Cookie: '' } })).status, 404, 'код панели не отдаётся гостю');
+
+  const admin = client(); const login = await admin.login('0700000001');
+  assert.equal(login.data.data.role, 'admin');
+  assert.equal((await admin.call('GET', '/admin/overview')).data.error, 'step_up', 'без подтверждения пароля нельзя');
+  assert.equal((await admin.call('POST', '/admin/unlock', { password: 'wrong' })).status, 401);
+  assert.equal((await admin.call('POST', '/admin/unlock', { password: 'hookah' })).status, 200);
+  const ov = await admin.call('GET', '/admin/overview');
+  assert.equal(ov.status, 200);
+  assert.ok(ov.data.comments.length > 0 && ov.data.events.length > 0);
+  assert.equal((await admin.call('DELETE', '/admin/comments/c4')).status, 200, 'чужой комментарий в чужом сборе');
+  assert.equal((await admin.call('DELETE', '/admin/events/e2')).status, 200, 'чужой сбор');
+  const after = await admin.call('GET', '/admin/overview');
+  assert.ok(!after.data.comments.some(x => x.id === 'c4') && !after.data.events.some(x => x.id === 'e2'));
+  assert.ok(after.data.audit.some(x => x.type === 'admin_delete_event'), 'действие в журнале');
+  assert.equal((await user.call('DELETE', '/admin/comments/c1')).status, 404, 'обычный пользователь не может удалять');
+});

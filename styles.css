@@ -1475,3 +1475,25 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
   background-image: radial-gradient(420px circle at var(--mx, -999px) var(--my, -999px), var(--hl), transparent 60%),
     radial-gradient(420px 200px at 0% 100%, color-mix(in srgb, var(--ember) 18%, transparent), transparent 70%);
 }
+
+/* ================= Панель администратора ================= */
+.adm-timer { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); padding: 7px 12px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line)); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); }
+.adm-timer svg { width: 16px; height: 16px; stroke: var(--warn); fill: none; stroke-width: 2; }
+.adm-timer b { color: var(--fg); }
+.adm-stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.adm-stats span { padding: 8px 14px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line); font-size: 13px; color: var(--muted); box-shadow: var(--elev); }
+.adm-stats b { color: var(--fg); font: 700 16px var(--f-display); margin-left: 6px; }
+.adm-panel { padding: 6px 16px; }
+.adm-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.adm-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 14px 0; }
+.adm-row + .adm-row { border-top: 1px solid var(--line); }
+.adm-main { display: grid; gap: 5px; min-width: 0; flex: 1; }
+.adm-main p { overflow-wrap: anywhere; font-size: 14.5px; }
+.adm-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.adm-meta a { color: var(--accent); text-decoration: none; }
+.adm-meta a:hover { text-decoration: underline; }
+.adm-meta time { color: var(--muted); font-size: 12px; }
+@media (max-width: 560px) { .adm-row { flex-direction: column; } }
+#adm-body { display: grid; gap: 16px; min-width: 0; }
+#adm-body > .utabs-wrap { margin-bottom: 0; }
+#adm-body .adm-stats { margin-bottom: 0; }

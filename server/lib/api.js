@@ -61,7 +61,7 @@ function bootstrap(db, me, session) {
   const notifications = meId ? db.q('SELECT * FROM notifications WHERE user_id = ? ORDER BY at DESC LIMIT 100').all(meId)
     .map(n => ({ id: n.id, type: n.type, actorId: n.actor_id, eventId: n.event_id, ref: n.ref, at: n.at, read: !!n.read })) : [];
   return {
-    session: meId, sessionAt: session?.created_at || null, sessionExp: session?.expires_at || null, csrf: session?.csrf || null,
+    session: meId, role: me?.role || null, adminUntil: me?.role === 'admin' ? (session?.admin_until || 0) : 0, sessionAt: session?.created_at || null, sessionExp: session?.expires_at || null, csrf: session?.csrf || null,
     users, events, reviews, mixes, notifications, storiesSeeded: true
   };
 }
@@ -84,7 +84,7 @@ function notify(db, userId, type, actorId, eventId = null, ref = null) {
 // ---------- Сессии ----------
 function startSession(db, ctx, user) {
   const token = require('./secure').token(), csrf = require('./secure').token(), now = Date.now();
-  db.q('INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(sha256(token), user.id, csrf, now, now + LIMITS.sessionMs, now, ctx.ip, String(ctx.req.headers['user-agent'] || '').slice(0, 160));
+  db.q('INSERT INTO sessions (token_hash, user_id, csrf, created_at, expires_at, last_seen, ip, ua) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(sha256(token), user.id, csrf, now, now + LIMITS.sessionMs, now, ctx.ip, String(ctx.req.headers['user-agent'] || '').slice(0, 160));
   ctx.setCookie(token, LIMITS.sessionMs);
   ctx.session = db.q('SELECT * FROM sessions WHERE token_hash = ?').get(sha256(token));
   ctx.user = user;
@@ -299,12 +299,25 @@ on('POST', '/api/friends/:uid', ctx => {
 }, { auth: true, data: true });
 
 // ---------- Сборы ----------
+function eventQuota(db, me, action) {
+  const n = db.q('SELECT COUNT(*) AS n FROM event_log WHERE user_id = ? AND action = ? AND at > ?').get(me.id, action, Date.now() - 864e5).n;
+  if (n >= LIMITS.eventsPerDay) {
+    audit(db, { type: 'rate_limited', userId: me.id, detail: 'event ' + action });
+    fail(429, 'events_limit', action === 'create' ? `За сутки можно создать не больше ${LIMITS.eventsPerDay} сборов.` : `За сутки можно отменить не больше ${LIMITS.eventsPerDay} сборов.`,
+      action === 'create' ? `You can create at most ${LIMITS.eventsPerDay} events per day.` : `You can cancel at most ${LIMITS.eventsPerDay} events per day.`);
+  }
+}
 on('POST', '/api/events', ctx => {
+  // Один активный сбор на организатора: новый — после завершения текущего или после его отмены.
+  const active = ctx.db.q('SELECT id, title FROM events WHERE host_id = ? AND at > ?').get(ctx.user.id, new Date(Date.now() - 4 * 3600e3).toISOString());
+  if (active) fail(409, 'active_exists', `У вас уже есть активный сбор «${active.title}». Новый можно создать после его завершения или отменив этот.`, `You already have an active event “${active.title}”. Create a new one after it ends or cancel it.`, { eventId: active.id });
+  eventQuota(ctx.db, ctx.user, 'create');
   const f = eventFields(ctx.body), eid = id('e');
   ctx.db.tx(() => {
     ctx.db.q('INSERT INTO events (id, title, venue, venue_id, address, map_url, at, host_id, descr, hookahs, price, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run(eid, f.title, f.venue, f.venue_id, f.address, f.map_url, f.at, ctx.user.id, f.descr, f.hookahs, f.price, nowIso());
     addInvites(ctx.db, getEvent(ctx.db, eid), ctx.user, ctx.body.invites);
+    ctx.db.q("INSERT INTO event_log VALUES (?, 'create', ?)").run(ctx.user.id, Date.now());
   });
   return { id: eid, data: bootstrap(ctx.db, ctx.user, ctx.session) };
 }, { auth: true });
@@ -315,8 +328,14 @@ on('PATCH', '/api/events/:id', ctx => {
 }, { auth: true, data: true });
 on('DELETE', '/api/events/:id', ctx => {
   const e = getEvent(ctx.db, ctx.params.id); needHost(e, ctx.user);
-  for (const u of goingIds(ctx.db, e)) notify(ctx.db, u, 'cancelled', ctx.user.id, null, e.title.slice(0, 60));
-  ctx.db.q('DELETE FROM events WHERE id = ?').run(e.id);
+  eventQuota(ctx.db, ctx.user, 'delete');
+  // Отменённый сбор удаляется целиком (сообщения, голоса, приглашения — каскадом), остаётся только счётчик для лимита.
+  ctx.db.tx(() => {
+    for (const u of goingIds(ctx.db, e)) notify(ctx.db, u, 'cancelled', ctx.user.id, null, e.title.slice(0, 60));
+    ctx.db.q('DELETE FROM events WHERE id = ?').run(e.id);
+    ctx.db.q("INSERT INTO event_log VALUES (?, 'delete', ?)").run(ctx.user.id, Date.now());
+  });
+  audit(ctx.db, { type: 'event_cancelled', userId: ctx.user.id, ip: ctx.ip, detail: e.id });
 }, { auth: true, data: true });
 on('POST', '/api/events/:id/invites', ctx => {
   const e = getEvent(ctx.db, ctx.params.id); needUpcoming(e);
@@ -431,6 +450,70 @@ on('POST', '/api/mixes/:id/like', ctx => {
   const m = isId(ctx.params.id) && ctx.db.q('SELECT * FROM mixes WHERE id = ?').get(ctx.params.id) || fail(404, 'not_found', 'Микс не найден.', 'Mix not found.');
   if (!ctx.db.q('DELETE FROM mix_likes WHERE mix_id = ? AND user_id = ?').run(m.id, ctx.user.id).changes) ctx.db.q('INSERT INTO mix_likes VALUES (?, ?)').run(m.id, ctx.user.id);
 }, { auth: true, data: true });
+
+// ---------- Администратор ----------
+// Роль выдаётся только командой на сервере (server/admin.js). Каждое действие требует свежего подтверждения
+// паролем (15 минут) и записывается в журнал.
+const needAdmin = ctx => {
+  if (ctx.user?.role !== 'admin') { audit(ctx.db, { type: 'admin_denied', userId: ctx.user?.id, ip: ctx.ip, detail: ctx.req.url }); fail(404, 'not_found', 'Неизвестный адрес API.', 'Unknown API endpoint.'); }
+};
+const needStepUp = ctx => {
+  needAdmin(ctx);
+  if (!(ctx.session.admin_until > Date.now())) fail(403, 'step_up', 'Подтвердите пароль, чтобы открыть панель администратора.', 'Confirm your password to open the admin panel.');
+};
+on('POST', '/api/admin/unlock', async ctx => {
+  needAdmin(ctx);
+  const lock = lockLeft('admin:' + ctx.user.id);
+  if (lock) fail(429, 'locked', `Слишком много неверных попыток. Подождите ${minutes(lock / 1000)} мин.`, `Too many wrong attempts. Wait ${minutes(lock / 1000)} min.`);
+  if (!(await verifyPassword(ctx.body.password, ctx.user.pass))) {
+    const left = failAttempt('admin:' + ctx.user.id);
+    audit(ctx.db, { type: 'admin_unlock_fail', userId: ctx.user.id, ip: ctx.ip });
+    fail(401, 'bad_password', `Неверный пароль. Осталось попыток: ${left}.`, `Wrong password. Attempts left: ${left}.`);
+  }
+  clearFails('admin:' + ctx.user.id);
+  const until = Date.now() + LIMITS.adminStepUpMs;
+  ctx.db.q('UPDATE sessions SET admin_until = ? WHERE token_hash = ?').run(until, ctx.session.token_hash);
+  ctx.session.admin_until = until;
+  audit(ctx.db, { type: 'admin_unlock', userId: ctx.user.id, ip: ctx.ip });
+  return { ok: true, adminUntil: until };
+}, { auth: true });
+on('POST', '/api/admin/lock', ctx => {
+  needAdmin(ctx);
+  ctx.db.q('UPDATE sessions SET admin_until = 0 WHERE token_hash = ?').run(ctx.session.token_hash);
+  return { ok: true };
+}, { auth: true });
+on('GET', '/api/admin/overview', ctx => {
+  needStepUp(ctx);
+  const names = Object.fromEntries(ctx.db.q('SELECT id, name FROM users').all().map(u => [u.id, u.name]));
+  const titles = Object.fromEntries(ctx.db.q('SELECT id, title FROM events').all().map(e => [e.id, e.title]));
+  return {
+    adminUntil: ctx.session.admin_until,
+    comments: ctx.db.q('SELECT * FROM comments ORDER BY at DESC LIMIT 500').all().map(c => ({ id: c.id, kind: c.kind, text: c.text, at: c.at, userId: c.user_id, author: names[c.user_id] || '—', eventId: c.event_id, eventTitle: titles[c.event_id] || '—' })),
+    events: ctx.db.q('SELECT e.*, (SELECT COUNT(*) FROM invites i WHERE i.event_id = e.id) AS guests, (SELECT COUNT(*) FROM comments c WHERE c.event_id = e.id) AS msgs FROM events e ORDER BY at DESC LIMIT 500').all()
+      .map(e => ({ id: e.id, title: e.title, venue: e.venue, at: e.at, hostId: e.host_id, host: names[e.host_id] || '—', guests: e.guests, msgs: e.msgs, past: isPast(e.at) })),
+    audit: ctx.db.q('SELECT a.at, a.type, a.detail, a.ip, u.name FROM audit a LEFT JOIN users u ON u.id = a.user_id ORDER BY a.id DESC LIMIT 100').all()
+      .map(r => ({ ...r, ip: r.ip ? r.ip.replace(/(\d+)\.(\d+)$/, '•.•') : null })),
+    stats: { users: ctx.db.q('SELECT COUNT(*) AS n FROM users').get().n, events: ctx.db.q('SELECT COUNT(*) AS n FROM events').get().n, comments: ctx.db.q('SELECT COUNT(*) AS n FROM comments').get().n }
+  };
+}, { auth: true });
+on('DELETE', '/api/admin/comments/:cid', ctx => {
+  needStepUp(ctx);
+  const c = isId(ctx.params.cid) && ctx.db.q('SELECT * FROM comments WHERE id = ?').get(ctx.params.cid) || fail(404, 'not_found', 'Сообщение не найдено.', 'Message not found.');
+  ctx.db.q('DELETE FROM comments WHERE id = ?').run(c.id);
+  notify(ctx.db, c.user_id, 'admin_removed_comment', ctx.user.id, c.event_id, c.text.slice(0, 60));
+  audit(ctx.db, { type: 'admin_delete_comment', userId: ctx.user.id, ip: ctx.ip, detail: `${c.id} (${c.user_id})` });
+  return { ok: true };
+}, { auth: true });
+on('DELETE', '/api/admin/events/:id', ctx => {
+  needStepUp(ctx);
+  const e = getEvent(ctx.db, ctx.params.id);
+  ctx.db.tx(() => {
+    for (const u of goingIds(ctx.db, e)) notify(ctx.db, u, 'admin_removed_event', ctx.user.id, null, e.title.slice(0, 60));
+    ctx.db.q('DELETE FROM events WHERE id = ?').run(e.id);
+  });
+  audit(ctx.db, { type: 'admin_delete_event', userId: ctx.user.id, ip: ctx.ip, detail: `${e.id} (${e.host_id})` });
+  return { ok: true };
+}, { auth: true });
 
 function match(method, path) {
   for (const r of routes) { if (r.method !== method) continue; const m = r.re.exec(path); if (m) return { route: r, params: m.groups || {} }; }

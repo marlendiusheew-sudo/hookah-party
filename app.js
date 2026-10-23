@@ -65,7 +65,14 @@
   // В остальных браузерах тот же фильтр встроен в установку innerHTML.
   (() => {
     try {
-      if (window.trustedTypes?.createPolicy) { window.trustedTypes.createPolicy('default', { createHTML: sanitizeHTML }); return; }
+      if (window.trustedTypes?.createPolicy) {
+        window.trustedTypes.createPolicy('default', {
+          createHTML: sanitizeHTML,
+          // Скрипт можно подключить только один: панель администратора с нашего сайта.
+          createScriptURL: u => { if (/^admin\.js\?v=\d+$/.test(u)) return u; secLog('html_blocked', 'script ' + String(u).slice(0, 40)); throw new TypeError('Скрипт запрещён'); }
+        });
+        return;
+      }
       const d = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
       if (d?.set) Object.defineProperty(Element.prototype, 'innerHTML', { ...d, set(v) { d.set.call(this, sanitizeHTML(v)); } });
     } catch (e) { /* политика уже создана или браузер не позволяет */ }
@@ -377,7 +384,7 @@
     return {
       session: 'u1',
       users: [
-        u('u1', 'Алекс', '996700000001', { favs: ['ds-supernova', 'mh-pinkman'], friends: ['u2', 'u3', 'u5'], favVenue: savor.name }),
+        u('u1', 'Алекс', '996700000001', { favs: ['ds-supernova', 'mh-pinkman'], friends: ['u2', 'u3', 'u5'], favVenue: savor.name, role: 'admin' }),
         u('u2', 'Дина', '996700000002', { friends: ['u1', 'u3', 'u6'], favVenue: hydra.name, favs: ['ad-love66'] }),
         u('u3', 'Тимур', '996700000003', { friends: ['u1', 'u2', 'u4'], favVenue: holy.name, favs: ['tg-canemint', 'af-twoapples'] }),
         u('u4', 'Сабина', '996700000004', { friends: ['u3'], favs: ['fu-gummi'] }),
@@ -509,7 +516,7 @@
   function migrate(d) {
     const s = seed();
     if (!d.storiesSeeded) withStories(d);
-    d.users.forEach(u => { u.favs ||= []; u.friends ||= []; u.favVenue ??= ''; });
+    d.users.forEach(u => { u.favs ||= []; u.friends ||= []; u.favVenue ??= ''; u.role ??= u.id === 'u1' ? 'admin' : 'user'; });
     d.events.forEach(e => {
       e.picks ||= {}; e.bowls ||= {}; e.comments ||= []; e.paid ||= {}; e.remind ||= {}; e.notified ||= {};
       e.hookahs ??= 1; e.price ??= 0; e.mapUrl ??= '';
@@ -827,6 +834,7 @@
   function renderChrome(page) {
     const u = me(), theme = prefs.get('theme', 'auto'), themeName = tr(THEMES[theme][0]);
     const navItems = [['venues', L('Заведения', 'Venues')], ['catalog', L('Кальян', 'Hookah')], ['events', L('События', 'Events')], ['history', L('История', 'History')], ['people', L('Люди', 'People')]];
+    if (isAdmin()) navItems.push(['admin', L('Админ', 'Admin')]);
     $('#nav').innerHTML = navItems.map(([k, t]) => `<a href="#/${k}" data-nav="${k}">${t}</a>`).join('');
     $('#nav').setAttribute('aria-label', L('Основное меню', 'Main menu'));
     $('#topbar-actions').innerHTML = `
@@ -1951,9 +1959,9 @@
   // ---------- Уведомления ----------
   // На сервере уведомления создаёт сам сервер. В демо-режиме они собираются из данных в браузере.
   const NOTIF_GROUPS = {
-    invites: { types: ['invite', 'cancelled'], label: ['Приглашения', 'Invitations'] },
+    invites: { types: ['invite', 'cancelled', 'admin_removed_event'], label: ['Приглашения', 'Invitations'] },
     replies: { types: ['rsvp_going', 'rsvp_declined'], label: ['Ответы', 'Replies'] },
-    messages: { types: ['comment', 'story_comment'], label: ['Сообщения', 'Messages'] },
+    messages: { types: ['comment', 'story_comment', 'admin_removed_comment'], label: ['Сообщения', 'Messages'] },
     reactions: { types: ['reaction', 'fire', 'friend'], label: ['Реакции и друзья', 'Reactions & friends'] }
   };
   const groupOf = type => Object.keys(NOTIF_GROUPS).find(g => NOTIF_GROUPS[g].types.includes(type));
@@ -2000,11 +2008,13 @@
       story_comment: L(`${who} комментирует ваш вечер ${ev}: `, `${who} commented on your evening ${ev}: `) + snip,
       reaction: L(`${who} реагирует ${String(n.ref || '').split(':')[1] || ''} на ваше сообщение `, `${who} reacted ${String(n.ref || '').split(':')[1] || ''} to your message `) + snip,
       fire: L(`${who} ставит огонь вашему вечеру ${ev}`, `${who} gave your evening ${ev} some fire`),
-      friend: L(`${who} добавляет вас в друзья`, `${who} added you as a friend`)
+      friend: L(`${who} добавляет вас в друзья`, `${who} added you as a friend`),
+      admin_removed_event: L(`Администратор удалил сбор «${esc(n.ref || '')}»`, `An administrator removed the event “${esc(n.ref || '')}”`),
+      admin_removed_comment: L(`Администратор удалил ваше сообщение «${esc(n.ref || '')}»`, `An administrator removed your message “${esc(n.ref || '')}”`)
     }[n.type] || esc(n.type);
   }
   const notifHref = n => n.type === 'friend' ? `#/user/${n.actorId}` : n.type === 'story_comment' || n.type === 'fire' ? '#/history' : n.eventId && eventById(n.eventId) ? `#/event/${n.eventId}` : '#/events';
-  const NOTIF_ICON = { invite: 'mail', cancelled: 'x', rsvp_going: 'check', rsvp_declined: 'x', comment: 'chat', story_comment: 'chat', reaction: 'heart', fire: 'smoke', friend: 'users' };
+  const NOTIF_ICON = { admin_removed_event: 'shield', admin_removed_comment: 'shield', invite: 'mail', cancelled: 'x', rsvp_going: 'check', rsvp_declined: 'x', comment: 'chat', story_comment: 'chat', reaction: 'heart', fire: 'smoke', friend: 'users' };
   function notifItem(n) {
     return `<li><button type="button" class="notif ${n.read ? '' : 'unread'}" data-action="openNotif" data-id="${esc(n.id)}" data-href="${esc(notifHref(n))}" data-story="${n.type === 'story_comment' || n.type === 'fire' ? esc(n.eventId || '') : ''}">
       <span class="feed-av">${avatar(userById(n.actorId), 'sm')}<span class="feed-ic ic-${NOTIF_ICON[n.type] || 'chat'} nt-${groupOf(n.type)}">${ICON[NOTIF_ICON[n.type]] || ICON.chat}</span></span>
@@ -2071,6 +2081,32 @@
     pop.style.top = r.bottom + 8 + window.scrollY + 'px';
   }
   function updateTitle() { const n = me() ? unreadCount() : 0; document.title = n ? `(${n}) Hookah Party` : 'Hookah Party'; }
+
+  // ---------- Администратор ----------
+  // Код панели лежит в отдельном файле admin.js. На сервере его получает только вошедший администратор,
+  // а каждое действие сервер ещё раз проверяет (роль + подтверждение паролем).
+  const isAdmin = () => !!me() && (SERVER ? db.role === 'admin' : me().role === 'admin');
+  const ADMIN_V = 23;
+  let adminLoading = null;
+  function loadAdmin() {
+    if (window.HP_ADMIN) return Promise.resolve(window.HP_ADMIN);
+    return adminLoading ||= new Promise((resolve, reject) => {
+      const sc = document.createElement('script');
+      sc.src = `admin.js?v=${ADMIN_V}`;
+      sc.onload = () => window.HP_ADMIN ? resolve(window.HP_ADMIN) : reject(new Error('admin'));
+      sc.onerror = () => { adminLoading = null; reject(new Error('admin')); };
+      document.body.append(sc);
+    });
+  }
+  function pageAdmin() {
+    if (!isAdmin()) { view.innerHTML = emptyState(L('Такой страницы нет', 'Page not found'), L('Возможно, ссылка устарела или в ней опечатка.', 'The link may be outdated or contain a typo.'), `<a class="btn btn-primary btn-sm" href="#/">${L('На главную', 'Go home')}</a>`); return; }
+    view.innerHTML = `<p class="muted">${L('Загружаем панель…', 'Loading the panel…')}</p>`;
+    loadAdmin().then(A => {
+      if (location.hash !== '#/admin') return;
+      A.render({ view, L, esc, api, apiMsg, act, SERVER, getDb: () => db, setDb: applyData, save, me, userById, eventById, toast, openModal, closeModal, uTabs, tabPanel, tab, emptyState, avatar, fShort, fTime, timeAgo, plural, pl, ICON, secRead, secLog, checkPass, render, isPast, SEC_EVENTS });
+      inkAll();
+    }).catch(() => { view.innerHTML = emptyState(L('Панель недоступна', 'Panel unavailable'), L('Не удалось загрузить панель администратора. Обновите страницу.', 'Could not load the admin panel. Reload the page.')); });
+  }
 
   // ---------- Каталог ----------
   const cat = { q: '', strength: 'all', tag: '', sort: 'rating' };
@@ -2355,7 +2391,11 @@
     sms_fail: ['Неверный код', 'Wrong code', 'warn'], rate_limited: ['Сработало ограничение частоты', 'Rate limit hit', 'warn'], html_blocked: ['Заблокирован опасный фрагмент', 'Dangerous markup blocked', 'bad'],
     csp: ['Браузер заблокировал запрос (CSP)', 'Browser blocked a request (CSP)', 'bad'], bad_url: ['Подозрительная ссылка', 'Suspicious link', 'bad'],
     session_expired: ['Сессия истекла', 'Session expired', ''], storage_repaired: ['Данные восстановлены после ошибки', 'Data repaired after an error', 'warn'],
-    logout_all: ['Выход на всех устройствах', 'Signed out everywhere', 'warn'], csrf_blocked: ['Отклонён запрос с чужого сайта', 'Cross-site request blocked', 'bad']
+    logout_all: ['Выход на всех устройствах', 'Signed out everywhere', 'warn'], csrf_blocked: ['Отклонён запрос с чужого сайта', 'Cross-site request blocked', 'bad'],
+    event_cancelled: ['Сбор отменён', 'Event cancelled', ''], admin_unlock: ['Вход в панель администратора', 'Admin panel unlocked', 'warn'],
+    admin_unlock_fail: ['Неверный пароль в панели администратора', 'Wrong admin password', 'bad'], admin_denied: ['Попытка открыть панель без прав', 'Admin access denied', 'bad'],
+    admin_delete_comment: ['Администратор удалил сообщение', 'Admin removed a message', 'warn'], admin_delete_event: ['Администратор удалил сбор', 'Admin removed an event', 'warn'],
+    admin_granted: ['Выданы права администратора', 'Admin rights granted', 'warn'], admin_revoked: ['Сняты права администратора', 'Admin rights revoked', 'warn']
   };
   function securityPanel(u) {
     const log = secRead(SEC_LOG, []).slice(0, 12), dt = t => `${fShort(new Date(t))}, ${fTime(new Date(t))}`;
@@ -2760,7 +2800,7 @@
       newId = r.id;
     } else {
       const e = { id: uid('e'), hostId: me().id, createdAt: new Date().toISOString(), ...fields, invites, picks: {}, bowls: {}, comments: [], paid: {}, remind: {}, notified: {} };
-      db.events.push(e); save(); newId = e.id;
+      db.events.push(e); save(); evLog(me(), 'create'); newId = e.id;
     }
     closeModal();
     toast(invites.length ? L(`Сбор создан, приглашения отправлены: ${invites.length}`, `Event created, invitations sent: ${invites.length}`) : L('Сбор создан', 'Event created'));
@@ -2801,7 +2841,23 @@
   // ---------- Действия ----------
   function go(path) { const h = '#/' + path; if (location.hash === h) route(); else location.hash = h; }
   function requireUser() { if (me()) return true; toast(L('Войдите, чтобы продолжить', 'Sign in to continue')); go('login'); return false; }
-  const newEventForm = (extra = {}) => eventForm({ heading: L('Новый сбор', 'New event'), submitLabel: L('Создать и пригласить', 'Create and invite'), onSave: createEvent, ...extra });
+  // Один активный сбор на организатора, не больше 12 созданий и 12 отмен в сутки (на сервере — то же самое, обязательно).
+  const EV_LIMIT = 12;
+  const evCount = (u, a) => secRead('hp.evlog', []).filter(x => x.u === u.id && x.a === a && Date.now() - x.at < 864e5).length;
+  const evLog = (u, a) => secWrite('hp.evlog', [...secRead('hp.evlog', []).filter(x => Date.now() - x.at < 864e5), { u: u.id, a, at: Date.now() }]);
+  function createBlocked() {
+    const u = me(), active = u && db.events.find(e => e.hostId === u.id && !isPast(e));
+    if (active) {
+      openModal(L('У вас уже есть активный сбор', 'You already have an active event'), `
+        <p class="muted" style="max-width:52ch">${L(`«${esc(active.title)}» — ${esc(whenLabel(active))}. Новый сбор можно создать после того, как этот пройдёт, или отменив его.`, `“${esc(active.title)}” — ${esc(whenLabel(active))}. You can create a new one after this event ends, or by cancelling it.`)}</p>
+        <div class="modal-foot"><button class="btn btn-danger" type="button" data-action="deleteEvent" data-id="${active.id}">${L('Отменить этот сбор', 'Cancel this event')}</button>
+          <a class="btn btn-primary" href="#/event/${active.id}">${L('Открыть сбор', 'Open event')}</a></div>`);
+      return true;
+    }
+    if (!SERVER && u && evCount(u, 'create') >= EV_LIMIT) { toast(L(`За сутки можно создать не больше ${EV_LIMIT} сборов.`, `You can create at most ${EV_LIMIT} events per day.`), 'err'); return true; }
+    return false;
+  }
+  const newEventForm = (extra = {}) => createBlocked() || eventForm({ heading: L('Новый сбор', 'New event'), submitLabel: L('Создать и пригласить', 'Create and invite'), onSave: createEvent, ...extra });
 
   const actions = {
     closeModal,
@@ -2816,7 +2872,7 @@
     venueOpen() { venueOpenOnly = !venueOpenOnly; render(); },
     openInvites() { tab.home = 'invites'; prefs.set('tab.home', 'invites'); go('events'); },
     repeatEvent({ id }) {
-      const e = eventById(id), u = me(); if (!e || !u) return;
+      const e = eventById(id), u = me(); if (!e || !u || createBlocked()) return;
       const next = new Date(e.at);
       do next.setDate(next.getDate() + 7); while (next < Date.now());
       const preset = [...(e.hostId !== u.id ? [{ userId: e.hostId }] : []),
@@ -2934,10 +2990,13 @@
       });
     },
     deleteEvent({ id }) {
-      const e = eventById(id); if (!e) return;
+      const e = eventById(id), u = me();
+      // Отменить сбор может только его организатор (сервер проверяет это ещё раз).
+      if (!e || !u || e.hostId !== u.id) return;
+      if (!SERVER && evCount(u, 'delete') >= EV_LIMIT) return toast(L(`За сутки можно отменить не больше ${EV_LIMIT} сборов.`, `You can cancel at most ${EV_LIMIT} events per day.`), 'err');
       openModal(L('Отменить сбор?', 'Cancel the event?'), `<p class="muted">${L(`Сбор «${esc(e.title)}» исчезнет у всех приглашённых. Это действие нельзя отменить.`, `“${esc(e.title)}” will disappear for everyone invited. This cannot be undone.`)}</p>
         <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">${L('Оставить', 'Keep it')}</button><button class="btn btn-danger" type="button" id="del-ok">${L('Отменить сбор', 'Cancel event')}</button></div>`, m => {
-        $('#del-ok', m).onclick = () => act(() => { db.events = db.events.filter(x => x.id !== id); }, 'DELETE', `/events/${id}`).then(() => { closeModal(); toast(L('Сбор отменён', 'Event cancelled')); go('events'); }, quiet);
+        $('#del-ok', m).onclick = () => act(() => { db.events = db.events.filter(x => x.id !== id); evLog(u, 'delete'); }, 'DELETE', `/events/${id}`).then(() => { closeModal(); toast(L('Сбор отменён', 'Event cancelled')); go('events'); }, quiet);
       });
     },
     tobacco({ id }) { openTobacco(id); },
@@ -3078,8 +3137,8 @@
   // ---------- Роутер ----------
   const view = $('#view');
   // render() перерисовывает текущую страницу без прокрутки наверх; route() — полный переход.
-  const navFor = () => ({ notifications: 'notifications', history: 'history', venues: 'venues', catalog: 'catalog', events: 'events', event: 'events', people: 'people', user: 'people', profile: 'profile', login: 'profile', register: 'profile' })[location.hash.replace(/^#\/?/, '').split('/')[0]] || '';
-  const PAGES = new Set(['', 'venues', 'events', 'event', 'catalog', 'people', 'user', 'how', 'profile', 'login', 'register', 'history', 'notifications']);
+  const navFor = () => ({ admin: 'admin', notifications: 'notifications', history: 'history', venues: 'venues', catalog: 'catalog', events: 'events', event: 'events', people: 'people', user: 'people', profile: 'profile', login: 'profile', register: 'profile' })[location.hash.replace(/^#\/?/, '').split('/')[0]] || '';
+  const PAGES = new Set(['', 'venues', 'events', 'event', 'catalog', 'people', 'user', 'how', 'profile', 'login', 'register', 'history', 'notifications', 'admin']);
   const NEEDS_ARG = new Set(['event', 'user']);
   function render() {
     const hash = location.hash.replace(/^#\/?/, '');
@@ -3103,6 +3162,7 @@
       case 'how': pageHow(); break;
       case 'history': pageHistory(); break;
       case 'notifications': pageNotifications(); break;
+      case 'admin': pageAdmin(); break;
       case 'notfound': view.innerHTML = emptyState(L('Такой страницы нет', 'Page not found'), L('Возможно, ссылка устарела или в ней опечатка.', 'The link may be outdated or contain a typo.'), `<a class="btn btn-primary btn-sm" href="#/">${L('На главную', 'Go home')}</a>`); break;
       case 'profile': pageProfile(); break;
       case 'login': pageAuth('login'); break;

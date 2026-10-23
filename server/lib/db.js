@@ -65,6 +65,13 @@ function open(file) {
     );
     CREATE INDEX IF NOT EXISTS audit_user ON audit(user_id, at);
   `);
+  // Журнал созданий и отмен сборов: сами отменённые сборы удаляются, а счётчик для лимита остаётся.
+  db.exec(`CREATE TABLE IF NOT EXISTS event_log (user_id TEXT NOT NULL, action TEXT NOT NULL, at INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS event_log_user ON event_log(user_id, action, at);`);
+  // Миграции старых баз: роль пользователя и время подтверждения прав администратора в сессии.
+  for (const sql of ["ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'", 'ALTER TABLE sessions ADD COLUMN admin_until INTEGER NOT NULL DEFAULT 0']) {
+    try { db.exec(sql); } catch (e) { /* колонка уже есть */ }
+  }
   // Короткие помощники: q(sql).all(...)/get/run. Кешируем подготовленные запросы.
   const cache = new Map();
   db.q = sql => { let st = cache.get(sql); if (!st) { st = db.prepare(sql); cache.set(sql, st); } return st; };

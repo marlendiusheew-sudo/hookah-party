@@ -5,13 +5,16 @@
 const LIMITS = {
   apiPerIp: [600, 10 * 60e3],       // любые запросы к API с одного IP: 600 за 10 минут
   writePerUser: [120, 10 * 60e3],   // изменения от одного пользователя: 120 за 10 минут
-  authPerIp: [17, 3600e3],          // вход, SMS, регистрация с одного IP: 17 в час
+  // вход, SMS, регистрация с одного IP: 17 в час (в автотестах все запросы идут с одного адреса — там лимит выше)
+  authPerIp: [process.env.NODE_ENV === 'test' ? 1000 : 17, 3600e3],
   authPerPhone: [17, 3600e3],       // то же для одного номера
   smsPerPhone: [3, 10 * 60e3],      // кодов на номер: 3 за 10 минут
   accountsPerIp: 3,                 // аккаунтов с одного IP
   failsBeforeLock: 5, lockMs: 5 * 60e3,
   codeTtlMs: 5 * 60e3, codeAttempts: 5,
   sessionMs: 30 * 864e5,
+  eventsPerDay: 12,                 // созданий сборов за сутки (и отдельно 12 отмен)
+  adminStepUpMs: 15 * 60e3,         // доступ к панели администратора после ввода пароля
   chatCooldownMs: 3 * 60e3, chatPerEvent: [10, 864e5], chatGlobal: [144, 7 * 3600e3]
 };
 

@@ -79,7 +79,7 @@ function createServer(db) {
     const url = new URL(req.url, 'http://local');
     const ip = clientIp(req);
     try {
-      if (!url.pathname.startsWith('/api/')) return serveStatic(req, res, url);
+      if (!url.pathname.startsWith('/api/')) return serveStatic(req, res, url, db);
       const lim = hit('api:' + ip, LIMITS.apiPerIp);
       if (!lim.ok) { res.setHeader('Retry-After', lim.retryAfter); throw new ApiError(429, 'rate_limited', 'Слишком много запросов. Подождите немного.', 'Too many requests. Please wait a moment.', { retryAfter: lim.retryAfter }); }
       const found = match(req.method, url.pathname);
@@ -89,7 +89,8 @@ function createServer(db) {
         // Запросы на изменение — только с нашего сайта: проверяем Origin и тип содержимого.
         const origin = req.headers.origin, host = req.headers.host;
         if (origin && new URL(origin).host !== host) throw new ApiError(403, 'bad_origin', 'Запрос с чужого сайта отклонён.', 'Cross-site request rejected.');
-        if (!/^application\/json\b/.test(req.headers['content-type'] || '')) throw new ApiError(415, 'bad_type', 'Нужен JSON.', 'JSON required.');
+        const hasBody = +(req.headers['content-length'] || 0) > 0 || !!req.headers['transfer-encoding'];
+        if (hasBody && !/^application\/json\b/.test(req.headers['content-type'] || '')) throw new ApiError(415, 'bad_type', 'Нужен JSON.', 'JSON required.');
       }
       const ctx = { db, req, res, ip, params: found.params, body: write ? await readBody(req) : {} };
       ctx.setCookie = (value, maxAgeMs) => res.setHeader('Set-Cookie', `hp_sid=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(maxAgeMs / 1000)}${PROD ? '; Secure' : ''}`);
@@ -123,8 +124,23 @@ function createServer(db) {
   });
 }
 
-function serveStatic(req, res, url) {
+// Код панели администратора отдаётся только вошедшему администратору — остальным его просто нет.
+function isAdminRequest(req, db) {
+  const sid = cookies(req).hp_sid;
+  if (!sid) return false;
+  const s = db.q('SELECT s.expires_at, u.role FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?').get(sha256(sid));
+  return !!s && s.expires_at > Date.now() && s.role === 'admin';
+}
+function serveStatic(req, res, url, db) {
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
+  if (url.pathname === '/admin.js') {
+    if (!isAdminRequest(req, db)) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Not found'); }
+    return fs.readFile(path.join(ROOT, 'admin.js'), (err, data) => {
+      if (err) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'private, no-store' });
+      res.end(data);
+    });
+  }
   const entry = STATIC[url.pathname];
   if (!entry) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Not found'); }
   const [file, type] = entry;

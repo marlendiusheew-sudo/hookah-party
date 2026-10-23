@@ -22,7 +22,7 @@ pages:
   image: alpine:3.20
   script:
     - mkdir -p public
-    - cp index.html styles.css app.js map-data.js art.js public/
+    - cp index.html styles.css app.js map-data.js art.js admin.js public/
   artifacts:
     paths:
       - public
