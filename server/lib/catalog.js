@@ -6,7 +6,7 @@ const path = require('node:path');
 
 const TOBACCOS = new Set(['ds-supernova', 'ds-bananapapa', 'ds-fallingstar', 'mh-pinkman', 'mh-raspberry', 'bb-cherry', 'el-grapefruit', 'tg-canemint',
   'af-twoapples', 'af-mint', 'ad-love66', 'fu-gummi', 'sb-bluemist', 'se-watermelon', 'du-pear', 'od-cola', 'ch-icemint']);
-const BOWLS = new Set(['b-phunnel', 'b-turka', 'b-killer', 'b-harmony', 'b-fruit']);
+const BOWLS = new Set(['b-phunnel', 'b-turka', 'b-killer', 'b-harmony', 'b-fruit', 'b-silicone']);
 const EMOJI = new Set('👍 ❤️ 😂 🔥 😮 😢 💨 🎉'.split(' '));
 
 let VENUES = [];

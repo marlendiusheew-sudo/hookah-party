@@ -57,9 +57,6 @@
     color-scheme: light;
   }
 }
-:root[data-accent="mint"]  { --acc-d: #6cc9a8; --acc-d2: #8ddcbf; --acc-l: #23785a; --acc-l2: #1a5f47; }
-:root[data-accent="plum"]  { --acc-d: #c58ad8; --acc-d2: #d8a8e8; --acc-l: #7d3f93; --acc-l2: #652f78; }
-:root[data-accent="ember"] { --acc-d: #f07a55; --acc-d2: #ff9b7b; --acc-l: #c0431c; --acc-l2: #9f3412; }
 
 :root[data-theme="light"] {
   --bg: #f3f2f6; --surface: #ffffff; --surface-2: #f0eef4; --line: #e3e0ea;
@@ -568,10 +565,6 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 .sw { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: 500 13px var(--f-body); cursor: pointer; }
 .sw i { width: 22px; height: 22px; border-radius: 50%; }
 .sw.on { border-color: var(--fg); }
-.sw-copper i { background: linear-gradient(135deg, #eaa36b, #a9592a); }
-.sw-mint i { background: linear-gradient(135deg, #8ddcbf, #23785a); }
-.sw-plum i { background: linear-gradient(135deg, #d8a8e8, #7d3f93); }
-.sw-ember i { background: linear-gradient(135deg, #ff9b7b, #c0431c); }
 
 @media (max-width: 960px) {
   .features { grid-template-columns: 1fr 1fr; }
@@ -1078,12 +1071,6 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
   --acc-d: #f28b30; --acc-d2: #ffad66; --acc-l: #c2560c; --acc-l2: #9c430a;
   --season: #9a63e6; --web: color-mix(in srgb, var(--fg) 28%, transparent);
 }
-:root[data-season="newyear"] {
-  --acc-d: #e3b04f; --acc-d2: #f2cd7d; --acc-l: #946512; --acc-l2: #77500c;
-  --season: #d8453b; --pine: #2f9461; --snowcap: #eef4fb;
-}
-@media (prefers-color-scheme: light) { :root[data-season="newyear"]:not([data-theme="dark"]) { --snowcap: #dfe9f4; } }
-:root[data-theme="light"][data-season="newyear"] { --snowcap: #dfe9f4; }
 
 [data-season] .tile-label { background-image: linear-gradient(90deg, var(--accent), var(--season)); }
 .tile-box { position: relative; overflow: hidden; }
@@ -1200,7 +1187,6 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 @keyframes drift2 { 50% { transform: translate(-5vw, 5vh) scale(.94); } }
 /* В праздники свечение берёт цвета праздника */
 :root[data-season="halloween"] { --a1t: rgba(242, 139, 48, .20); --a1b: rgba(242, 110, 30, .18); --a2t: rgba(154, 99, 230, .20); --a2b: rgba(120, 70, 210, .18); --a3t: rgba(242, 139, 48, .10); --a3b: rgba(154, 99, 230, .14); --hl: rgba(242, 139, 48, .12); }
-:root[data-season="newyear"] { --a1t: rgba(227, 176, 79, .20); --a1b: rgba(240, 200, 110, .18); --a2t: rgba(120, 170, 255, .16); --a2b: rgba(216, 69, 59, .12); --a3t: rgba(216, 69, 59, .10); --a3b: rgba(47, 148, 97, .12); --hl: rgba(227, 176, 79, .14); }
 
 /* Свечение под курсором на карточках */
 .tile-box, .ev-card, .cat-card, .vcard, .quote, .spot, .feature, .person-card, .panel, .step {
@@ -1695,3 +1681,165 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 .admin-entry svg { width: 22px; height: 22px; flex: none; stroke: var(--accent); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .admin-entry span:not(.next-go) { display: grid; gap: 2px; margin-right: auto; }
 .admin-entry small { color: var(--muted); font-size: 12px; }
+
+/* ================= Каталог: подробности о чашах, аксессуарах и миксах ================= */
+.more-link { font-size: 13px; font-weight: 600; color: var(--accent); margin-top: 2px; transition: transform .4s var(--ease-out); justify-self: start; }
+.t-card:hover .more-link { transform: translateX(4px); }
+.mini-specs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
+.mini-specs div, .specs div { display: grid; gap: 2px; min-width: 0; }
+.mini-specs dt, .specs dt { font: 500 10px/1.2 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.mini-specs dd, .specs dd { margin: 0; font-size: 13.5px; font-weight: 600; }
+.specs { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 0; }
+.specs div { padding: 10px 12px; border-radius: var(--r-sm); background: var(--surface-2); }
+.tip-box { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: var(--r); background: color-mix(in srgb, var(--accent) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line)); }
+.tip-box > svg { width: 24px; height: 24px; flex: none; stroke: var(--accent); fill: none; stroke-width: 1.6; stroke-linecap: round; }
+.tip-box b { font-size: 14.5px; }
+.tip-box p { margin: 3px 0 0; color: var(--muted); line-height: 1.55; font-size: 14px; }
+.pros-cons { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.pc-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }
+.pc-list li { display: flex; gap: 8px; align-items: flex-start; }
+.pc-list svg { width: 16px; height: 16px; flex: none; margin-top: 2px; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.pc-list.plus svg { stroke: var(--ok); }
+.pc-list.minus svg { stroke: var(--warn); }
+.fit-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.fit-chip {
+  display: inline-flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface);
+  color: var(--fg); font: 500 13px var(--f-body); cursor: pointer; text-align: left;
+  transition: transform .4s var(--ease-spring), border-color var(--dur) var(--ease-out);
+}
+.fit-chip:hover { transform: translateY(-2px); border-color: var(--accent); }
+.fit-chip .flavor-thumb { width: 30px; height: 30px; }
+.fit-chip.wide { width: 100%; border-radius: var(--r); padding: 10px 14px 10px 10px; }
+.fit-chip.wide .flavor-thumb { width: 44px; height: 44px; }
+.fit-chip.wide span:not(.flavor-thumb):not(.next-go) { display: grid; gap: 1px; margin-right: auto; }
+.fit-chip small { color: var(--muted); font-size: 12px; }
+
+/* Миксы: миниатюры вкусов на карточке и раскрытие в окне */
+.mix-thumbs { display: flex; padding-left: 8px; }
+.mix-thumbs .flavor-thumb { width: 44px; height: 44px; margin-left: -8px; border: 2px solid var(--surface); box-shadow: 0 4px 12px -6px rgba(0, 0, 0, .5); transition: transform .45s var(--ease-spring); }
+.mix-card:hover .mix-thumbs .flavor-thumb:nth-child(1) { transform: translateX(-4px) rotate(-6deg); }
+.mix-card:hover .mix-thumbs .flavor-thumb:nth-child(3) { transform: translateX(4px) rotate(6deg); }
+.mix-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mix-detail { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 20px; align-items: center; }
+.mix-ring { width: 170px; height: 170px; animation: ringIn .8s var(--ease-out); }
+.mix-ring circle + circle { transition: stroke-width .3s var(--ease-out); }
+.mr-num { font: 700 26px var(--f-display); fill: var(--fg); }
+.mr-cap { font: 500 9px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; fill: var(--muted); }
+@keyframes ringIn { from { transform: rotate(-60deg) scale(.85); opacity: 0; } }
+.mix-parts { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.mix-parts button {
+  width: 100%; display: flex; align-items: center; gap: 12px; padding: 8px 12px 8px 8px; border-radius: var(--r); border: 1px solid var(--line);
+  background: var(--surface); color: var(--fg); font: 400 14px var(--f-body); text-align: left; cursor: pointer;
+  transition: border-color var(--dur) var(--ease-out), transform .4s var(--ease-spring);
+}
+.mix-parts button:hover { border-color: var(--accent); transform: translateX(3px); }
+.mix-parts .flavor-thumb { width: 44px; height: 44px; }
+.mix-parts span:not(.flavor-thumb) { display: grid; gap: 2px; margin-right: auto; min-width: 0; }
+.mix-parts small { color: var(--muted); font-size: 12px; }
+.mix-parts .mono { font-size: 15px; color: var(--accent); }
+@media (max-width: 560px) { .mix-detail { grid-template-columns: 1fr; justify-items: center; } .mix-ring { width: 150px; height: 150px; } }
+
+/* ================= Цвет акцента и фонарик ================= */
+/* Палитры. Вторая строка селектора — цвет, выбранный вручную: он сильнее праздничного. */
+:root[data-accent="copper"], :root[data-accent-user][data-accent="copper"] { --acc-d: #d4894f; --acc-d2: #eaa36b; --acc-l: #a9592a; --acc-l2: #8c461b; }
+:root[data-accent="ember"], :root[data-accent-user][data-accent="ember"] { --acc-d: #f07a55; --acc-d2: #ff9b7b; --acc-l: #c0431c; --acc-l2: #9f3412; }
+:root[data-accent="gold"], :root[data-accent-user][data-accent="gold"] { --acc-d: #e2b84a; --acc-d2: #f0d07a; --acc-l: #8a6410; --acc-l2: #6e500c; }
+:root[data-accent="rose"], :root[data-accent-user][data-accent="rose"] { --acc-d: #ec7ca4; --acc-d2: #f6a3c0; --acc-l: #b23a66; --acc-l2: #8f2d51; }
+:root[data-accent="plum"], :root[data-accent-user][data-accent="plum"] { --acc-d: #c58ad8; --acc-d2: #d8a8e8; --acc-l: #7d3f93; --acc-l2: #652f78; }
+:root[data-accent="blue"], :root[data-accent-user][data-accent="blue"] { --acc-d: #5b9cf0; --acc-d2: #86b8ff; --acc-l: #1f5fbf; --acc-l2: #184c99; }
+:root[data-accent="mint"], :root[data-accent-user][data-accent="mint"] { --acc-d: #6cc9a8; --acc-d2: #8ddcbf; --acc-l: #23785a; --acc-l2: #1a5f47; }
+:root[data-accent="green"], :root[data-accent-user][data-accent="green"] { --acc-d: #6cc46f; --acc-d2: #93da95; --acc-l: #2c7a33; --acc-l2: #225f28; }
+.sw-copper i { background: linear-gradient(135deg, #eaa36b, #a9592a); }
+.sw-ember i { background: linear-gradient(135deg, #ff9b7b, #c0431c); }
+.sw-gold i { background: linear-gradient(135deg, #f0d07a, #8a6410); }
+.sw-rose i { background: linear-gradient(135deg, #f6a3c0, #b23a66); }
+.sw-plum i { background: linear-gradient(135deg, #d8a8e8, #7d3f93); }
+.sw-blue i { background: linear-gradient(135deg, #86b8ff, #1f5fbf); }
+.sw-mint i { background: linear-gradient(135deg, #8ddcbf, #23785a); }
+.sw-green i { background: linear-gradient(135deg, #93da95, #2c7a33); }
+.sw-season i { background: conic-gradient(from 30deg, #ff5a64, #4f9dff, #f2c14e, #ff5a64); }
+.sw { transition: border-color var(--dur) var(--ease-out), transform .35s var(--ease-spring), background-color var(--dur) var(--ease-out); }
+.sw:hover { transform: translateY(-2px); }
+.sw.on { border-color: var(--accent); background: var(--smoke); }
+.sw.on i { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+
+/* Фонарик по цвету акцента: сила свечения своя для тёмной и светлой темы */
+:root { --lk: .26; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --lk: .44; } }
+:root[data-theme="light"] { --lk: .44; }
+:root[data-lamp="accent"]:not([data-season]), :root[data-lamp="accent"][data-accent-user] {
+  --a1t: color-mix(in srgb, var(--acc-d) calc(var(--lk) * 100%), transparent);
+  --a1b: color-mix(in srgb, var(--acc-d2) calc(var(--lk) * 90%), transparent);
+  --a2t: color-mix(in srgb, var(--acc-d2) calc(var(--lk) * 60%), transparent);
+  --a2b: color-mix(in srgb, var(--acc-d) calc(var(--lk) * 70%), transparent);
+  --a3t: color-mix(in srgb, var(--acc-d2) calc(var(--lk) * 45%), transparent);
+  --a3b: color-mix(in srgb, var(--acc-d) calc(var(--lk) * 60%), transparent);
+  --hl: color-mix(in srgb, var(--acc-d) calc(var(--lk) * 55%), transparent);
+}
+:root[data-lamp="off"] .ambient { display: none; }
+.lamp-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.lamp-accent { background: radial-gradient(circle, var(--acc-d2), var(--acc-d) 60%, transparent 72%); box-shadow: 0 0 10px var(--acc-d); }
+.lamp-warm { background: radial-gradient(circle, #ffd28a, #ff9a40 60%, transparent 72%); box-shadow: 0 0 10px #ffb060; }
+.lamp-off { border: 1.5px solid var(--muted); }
+.segmented button { display: inline-flex; align-items: center; gap: 7px; }
+
+/* ================= Новый год: красный и синий ================= */
+/* Тёмная тема — ночное синее небо и красные огни */
+:root[data-season="newyear"] {
+  --bg: #0c1120; --surface: #141b2f; --surface-2: #1b2440; --line: #28324f; --fg: #eef3ff; --muted: #9aa6c4;
+  --acc-d: #ff5a64; --acc-d2: #ff8d93; --acc-l: #d01f2e; --acc-l2: #a8141f;
+  --season: #4f9dff; --pine: #2fa66a; --snowcap: #f1f6fd; --gold: #f2c14e; --ember: #ff5a64;
+  --a1t: rgba(255, 90, 100, .24); --a1b: rgba(79, 157, 255, .24); --a2t: rgba(79, 157, 255, .22); --a2b: rgba(255, 90, 100, .18);
+  --a3t: rgba(242, 193, 78, .10); --a3b: rgba(79, 157, 255, .16); --hl: rgba(255, 110, 120, .16);
+}
+/* Светлая тема — морозное утро: голубоватый фон, насыщенные красный и синий */
+@media (prefers-color-scheme: light) {
+  :root[data-season="newyear"]:not([data-theme="dark"]) {
+    --bg: #eef3fb; --surface: #ffffff; --surface-2: #e9eff9; --line: #d6dfee; --fg: #131a2e; --muted: #56617e;
+    --season: #1f63d6; --snowcap: #dde8f6; --ember: #d01f2e;
+    --a1t: rgba(255, 96, 110, .34); --a1b: rgba(80, 150, 255, .36); --a2t: rgba(80, 150, 255, .34); --a2b: rgba(255, 96, 110, .26);
+    --a3t: rgba(242, 193, 78, .26); --a3b: rgba(80, 150, 255, .26); --hl: rgba(255, 96, 110, .16);
+  }
+}
+:root[data-theme="light"][data-season="newyear"] {
+  --bg: #eef3fb; --surface: #ffffff; --surface-2: #e9eff9; --line: #d6dfee; --fg: #131a2e; --muted: #56617e;
+  --season: #1f63d6; --snowcap: #dde8f6; --ember: #d01f2e;
+  --a1t: rgba(255, 96, 110, .34); --a1b: rgba(80, 150, 255, .36); --a2t: rgba(80, 150, 255, .34); --a2b: rgba(255, 96, 110, .26);
+  --a3t: rgba(242, 193, 78, .26); --a3b: rgba(80, 150, 255, .26); --hl: rgba(255, 96, 110, .16);
+}
+/* Лента: красно-синяя с полоской как у леденца */
+[data-season="newyear"] .season-ribbon {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 24%, var(--surface)), color-mix(in srgb, var(--season) 24%, var(--surface)));
+  border-bottom: 0; position: relative;
+}
+[data-season="newyear"] .season-ribbon::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4px;
+  background: repeating-linear-gradient(-45deg, var(--accent) 0 8px, #fff 8px 16px, var(--season) 16px 24px, #fff 24px 32px);
+  animation: candy 3s linear infinite;
+}
+@keyframes candy { to { background-position: 45px 0; } }
+/* Гирлянда: красный, синий, золотой, белый */
+[data-season="newyear"] .topbar::after {
+  background-image:
+    radial-gradient(circle at 50% 70%, var(--accent) 0 3.4px, transparent 4px),
+    radial-gradient(circle at 50% 70%, var(--season) 0 3.4px, transparent 4px),
+    radial-gradient(circle at 50% 70%, var(--gold) 0 3.4px, transparent 4px),
+    radial-gradient(circle at 50% 70%, #ffffff 0 3.4px, transparent 4px),
+    radial-gradient(ellipse 50% 70% at 50% 0, transparent 60%, color-mix(in srgb, var(--fg) 30%, transparent) 62% 66%, transparent 68%);
+}
+/* Шарики на ниточках над плитками */
+[data-season="newyear"] .tiles::after {
+  content: ""; position: absolute; right: 7%; top: -6px; width: 70px; height: 96px; z-index: 2; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 70 96'%3E%3Cdefs%3E%3CradialGradient id='r' cx='.35' cy='.35' r='.7'%3E%3Cstop offset='0' stop-color='%23ffb3b8'/%3E%3Cstop offset='.5' stop-color='%23e8323f'/%3E%3Cstop offset='1' stop-color='%238e101b'/%3E%3C/radialGradient%3E%3CradialGradient id='b' cx='.35' cy='.35' r='.7'%3E%3Cstop offset='0' stop-color='%23b8d6ff'/%3E%3Cstop offset='.5' stop-color='%232f78e8'/%3E%3Cstop offset='1' stop-color='%23123d8f'/%3E%3C/radialGradient%3E%3C/defs%3E%3Cpath d='M18 0v58M52 0v34' stroke='%23c9ccd6' stroke-width='1'/%3E%3Crect x='14' y='56' width='8' height='6' rx='1.5' fill='%23d9b44a'/%3E%3Ccircle cx='18' cy='76' r='15' fill='url(%23r)'/%3E%3Cpath d='M6 74q12 6 24 0' stroke='%23fff' stroke-opacity='.5' stroke-width='1.6' fill='none'/%3E%3Crect x='48' y='32' width='8' height='6' rx='1.5' fill='%23d9b44a'/%3E%3Ccircle cx='52' cy='50' r='12' fill='url(%23b)'/%3E%3Cpath d='M43 52l18-4' stroke='%23fff' stroke-opacity='.5' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat top / contain;
+  transform-origin: 50% 0; animation: baubles 5s ease-in-out infinite;
+}
+@keyframes baubles { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+@media (max-width: 760px) { [data-season="newyear"] .tiles::after { right: 4%; width: 44px; height: 60px; } }
+/* Кнопки и карточки в праздник */
+[data-season="newyear"] .btn-primary { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, var(--season))); border-color: transparent; }
+[data-season="newyear"] .tile:hover .tile-box { border-color: color-mix(in srgb, var(--season) 60%, var(--line)); box-shadow: 0 18px 40px -18px color-mix(in srgb, var(--season) 70%, transparent), 0 10px 30px -20px var(--accent); }
+[data-season="newyear"] .eyebrow { color: var(--season); }
+@media (prefers-reduced-motion: reduce) { [data-season="newyear"] .season-ribbon::after, [data-season="newyear"] .tiles::after{ animation: none; } }
+.mix-thumbs .flavor-thumb, .fit-chip .flavor-thumb, .mix-parts .flavor-thumb { margin-right: 0; }
+/* Выбранный вручную цвет красит и «уголёк»: полоску ближайшего сбора, точки и стрелки */
+:root[data-accent-user] { --ember: var(--accent); }

@@ -6,10 +6,12 @@
   let seq = 0;
 
   // Смешивание цветов #rrggbb: mix('#ff0000', '#ffffff', .3) — на 30% ближе к белому.
-  const hex = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
+  const full = c => c.length === 4 ? '#' + [...c.slice(1)].map(x => x + x).join('') : c; // #fff → #ffffff
+  const hex = c => [1, 3, 5].map(i => parseInt(full(c).slice(i, i + 2), 16));
   const mix = (a, b, t) => '#' + hex(a).map((v, i) => Math.round(v + (hex(b)[i] - v) * t).toString(16).padStart(2, '0')).join('');
 
-  function flavor(t, { thumb = false } = {}) {
+  // Общие кисти: градиенты (с уникальными id на каждую картинку), блики и звёздочки.
+  function kit() {
     const k = 'fa' + (++seq), defs = [];
     const lin = (stops, x2 = 0, y2 = 1) => {
       const id = `${k}-${defs.length}`;
@@ -23,6 +25,11 @@
     };
     const shine = (x, y, rx, ry, rot = -30, o = .55) => `<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" transform="rotate(${rot} ${x} ${y})" fill="#fff" opacity="${o}"/>`;
     const sparkle = (x, y, s, o = .9) => `<path d="M${x} ${y - s}C${x + s * .15} ${y - s * .15} ${x + s * .15} ${y - s * .15} ${x + s} ${y}C${x + s * .15} ${y + s * .15} ${x + s * .15} ${y + s * .15} ${x} ${y + s}C${x - s * .15} ${y + s * .15} ${x - s * .15} ${y + s * .15} ${x - s} ${y}C${x - s * .15} ${y - s * .15} ${x - s * .15} ${y - s * .15} ${x} ${y - s}Z" fill="#fff" opacity="${o}"/>`;
+    return { defs, lin, rad, shine, sparkle };
+  }
+
+  function flavor(t, { thumb = false } = {}) {
+    const { defs, lin, rad, shine, sparkle } = kit();
     const leaf = (x, y, rot, s = 1, c1 = '#8be08f', c2 = '#2f8f4c') => `<g transform="translate(${x} ${y}) rotate(${rot}) scale(${s})">
       <path d="M0 0C10-8 26-10 34-4C26 4 10 6 0 0Z" fill="${lin([c1, c2], 1, 1)}"/><path d="M2 0L30-4" stroke="${c2}" stroke-width="1.2" opacity=".6" fill="none"/></g>`;
 
@@ -152,5 +159,97 @@
     </svg>`.replace('<defs></defs>', `<defs>${defs.join('')}</defs>`);
   }
 
-  window.HP_ART = { flavor };
+  // ---------- Чаши и аксессуары ----------
+  // HP_ART.item(kind, color, { thumb }) — те же рамка и свет, что у табаков, но с предметом для кальяна.
+  function item(kind, c = '#8a6a5a', { thumb = false } = {}) {
+    const { defs, lin, rad, shine, sparkle } = kit();
+    const metal = (a = '#e6e9ee', b = '#6f7680') => lin([a, mix(a, b, .5), b], 1, 0);
+    const coal = (x, y, sc = 1, r = 0) => `<g transform="translate(${x} ${y}) rotate(${r}) scale(${sc})">
+      <rect x="-9" y="-9" width="18" height="18" rx="3.5" fill="${lin(['#4d4446', '#1b1514'], 1, 1)}"/>
+      <rect x="-9" y="-9" width="18" height="18" rx="3.5" fill="none" stroke="#ff8a3d" stroke-width="1.7" opacity=".9"/>
+      <path d="M-5 5L5-5M-6-1L-1-6" stroke="#ffc07a" stroke-width="1.5" stroke-linecap="round" opacity=".95"/></g>`;
+    const heat = (x, y, r) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${rad('rgba(255,150,70,.8)', 'rgba(255,120,40,0)', .5, .5)}"/>`;
+    const coalsOn = y => heat(2, y - 6, 46) + coal(-17, y, .9, -8) + coal(3, y - 3, .92, 7) + coal(22, y + 1, .85, -4);
+    const stem = (y = 20) => `<rect x="-6" y="${y}" width="12" height="20" rx="3" fill="${metal()}"/><rect x="-10" y="${y + 16}" width="20" height="6" rx="2" fill="#575c64"/>`;
+
+    // Чаша: тело с глазурью, табак сверху, угли и жар.
+    const bowl = ({ top = 40, bottom = 25, depth = 32, holes = 0, spire = false, ribs = false, clay = false }) => {
+      const y0 = -12, y1 = y0 + depth;
+      let b = stem(y1 - 2);
+      b += `<path d="M${-top} ${y0}L${top} ${y0}L${bottom} ${y1}Q0 ${y1 + 7} ${-bottom} ${y1}Z" fill="${lin([mix(c, '#fff', .3), c, mix(c, '#000', .45)], 1, 0)}"/>`;
+      if (clay) b += `<path d="M${-top + 6} ${y0 + 8}Q0 ${y0 + 13} ${top - 6} ${y0 + 8}" stroke="${mix(c, '#000', .25)}" stroke-width="1.4" fill="none" opacity=".6"/>`;
+      if (ribs) for (let i = -2; i <= 2; i++) b += `<path d="M${i * 14} ${y0 + 3}Q${i * 12} ${y0 + depth / 2} ${i * 9} ${y1 - 1}" stroke="${mix(c, '#fff', .35)}" stroke-width="2.4" fill="none" opacity=".55" stroke-linecap="round"/>`;
+      for (let i = 0; i < holes; i++) b += `<circle cx="${(i - (holes - 1) / 2) * 11}" cy="${y0 + depth * .58}" r="2.4" fill="${mix(c, '#000', .6)}"/>`;
+      b += shine(-top * .55, y0 + depth * .45, 4, depth * .3, 10, .35);
+      b += `<ellipse cy="${y0}" rx="${top}" ry="8.5" fill="${mix(c, '#fff', .38)}"/><ellipse cy="${y0 + .5}" rx="${top - 5}" ry="6.2" fill="${lin(['#7a4428', '#2c160c'])}"/>`;
+      if (spire) b += `<path d="M-5 ${y0 + 1}L0 ${y0 - 7}L5 ${y0 + 1}Z" fill="${mix(c, '#fff', .2)}"/>`;
+      return b + coalsOn(y0 - 9);
+    };
+    const D = {
+      phunnel: () => bowl({ spire: true }),
+      harmony: () => bowl({ spire: true, clay: true, top: 38, bottom: 27 }),
+      turka: () => bowl({ holes: 3, top: 42, bottom: 24, depth: 28 }),
+      killer: () => bowl({ holes: 1, top: 34, bottom: 22, depth: 42 }),
+      silicone: () => bowl({ spire: true, ribs: true, top: 39, bottom: 27 }),
+      fruit: () => {
+        let f = stem(26);
+        f += `<path d="M-46-4A46 36 0 0 0 46-4Z" fill="${rad(mix('#f6b24a', '#fff', .2), '#e0702d', .4, .2)}"/>`;
+        f += `<ellipse cy="-4" rx="46" ry="11" fill="#fff1dc"/><ellipse cy="-4" rx="42" ry="9" fill="${rad('#ff9a86', '#e2504a', .5, .5)}"/>`;
+        for (let i = 0; i < 12; i++) f += `<path d="M0-4L${Math.cos(i * Math.PI / 6) * 41} ${-4 + Math.sin(i * Math.PI / 6) * 8.6}" stroke="#ffe3d6" stroke-width="1.4" opacity=".8"/>`;
+        f += `<ellipse cy="-6" rx="17" ry="5" fill="${mix(c, '#000', .2)}"/><ellipse cy="-6" rx="13" ry="3.6" fill="#3a1d10"/>`;
+        return f + shine(-28, 10, 5, 12, 30, .3) + heat(0, -16, 34) + coal(-8, -14, .8, -6) + coal(9, -16, .8, 8);
+      },
+      kaloud: () => {
+        let s2 = heat(0, -6, 48);
+        s2 += `<rect x="38" y="-2" width="14" height="6" rx="3" fill="${metal('#cfd3d9', '#5e646d')}"/>`;
+        s2 += `<path d="M-38-8H38V14Q0 24-38 14Z" fill="${metal()}"/>`;
+        for (let i = -3; i <= 3; i++) s2 += `<rect x="${i * 10 - 2}" y="-2" width="4" height="13" rx="2" fill="#ff8a3d"/><rect x="${i * 10 - 1}" y="0" width="2" height="9" rx="1" fill="#ffd08a"/>`;
+        s2 += `<ellipse cy="-8" rx="38" ry="9" fill="${metal('#f4f6f9', '#9aa1aa')}"/><ellipse cy="-9" rx="20" ry="5" fill="${metal('#dfe3e8', '#7c838c')}"/>`;
+        return s2 + `<rect x="-4" y="-22" width="8" height="12" rx="3" fill="${lin([mix(c, '#fff', .2), mix(c, '#000', .3)])}"/><ellipse cy="-22" rx="7" ry="3" fill="${mix(c, '#fff', .3)}"/>` + shine(-24, 4, 3, 8, 0, .5);
+      },
+      coal: () => heat(0, 4, 52) + coal(-22, 18, 1.15, -6) + coal(4, 20, 1.15, 4) + coal(28, 16, 1.1, -10) + coal(-10, -2, 1.1, 12) + coal(16, -4, 1.05, -4) + sparkle(-30, -24, 5) + sparkle(30, -22, 4, .7),
+      hose: () => {
+        const path = 'M-44 34C-44-6 6 24 6-6S36-36 38-26';
+        return `<path d="${path}" stroke="${mix(c, '#000', .35)}" stroke-width="12" fill="none" stroke-linecap="round"/><path d="${path}" stroke="${c}" stroke-width="9" fill="none" stroke-linecap="round"/>
+          <path d="${path}" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".35" transform="translate(-2 -2)"/>
+          <g transform="translate(38 -26) rotate(-55)"><rect x="-5" y="-4" width="34" height="9" rx="4" fill="${metal()}"/><rect x="22" y="-3" width="10" height="7" rx="3" fill="${metal('#f2f4f7', '#8b929b')}"/></g>
+          <rect x="-50" y="30" width="12" height="16" rx="3" fill="${metal()}"/>`;
+      },
+      mouth: () => `<g transform="rotate(-22)"><path d="M-44 4L26-3H40Q44 3 40 9H26L-44 14Z" fill="${lin([mix(c, '#fff', .45), c, mix(c, '#000', .35)])}"/>
+          <rect x="14" y="-5" width="6" height="16" rx="2" fill="${mix(c, '#000', .3)}"/><path d="M-40 6L24 1" stroke="#fff" stroke-width="2" opacity=".55" stroke-linecap="round"/></g>`,
+      tongs: () => `<path d="M-46 34L28-12" stroke="${mix(c, '#000', .2)}" stroke-width="5" stroke-linecap="round"/><path d="M-46 38L32-4" stroke="${c}" stroke-width="5" stroke-linecap="round"/>
+          <path d="M-46 34L28-12M-46 38L32-4" stroke="#fff" stroke-width="1.2" opacity=".45"/>${heat(36, -12, 26)}${coal(36, -12, .95, 18)}
+          <rect x="-50" y="31" width="10" height="10" rx="3" fill="${mix(c, '#000', .35)}"/>`,
+      stove: () => {
+        let s2 = `<rect x="-44" y="-2" width="88" height="34" rx="8" fill="${lin([mix(c, '#fff', .15), mix(c, '#000', .35)])}"/><circle cx="32" cy="18" r="5" fill="#2a2a2e"/><circle cx="32" cy="18" r="2" fill="#ffb066"/>`;
+        s2 += `<ellipse cy="-2" rx="40" ry="9" fill="#2b2b30"/>`;
+        for (let r = 6; r <= 30; r += 6) s2 += `<ellipse cy="-2" rx="${r}" ry="${r * .22}" stroke="#ff7a2e" stroke-width="1.8" fill="none" opacity="${.5 + r / 60}"/>`;
+        return s2 + heat(0, -10, 44) + coal(-14, -12, .9, -8) + coal(10, -14, .9, 8) + shine(-30, 14, 3, 8, 0, .3);
+      },
+      brush: () => {
+        let s2 = `<g transform="rotate(-28)"><rect x="-46" y="-4" width="60" height="8" rx="4" fill="${lin([mix(c, '#fff', .3), mix(c, '#000', .3)])}"/><path d="M14 0H48" stroke="#9aa1aa" stroke-width="2"/>`;
+        for (let x = 18; x <= 46; x += 2.6) s2 += `<path d="M${x} -9L${x} 9" stroke="#e8e4dc" stroke-width="1.3" opacity=".9"/>`;
+        return s2 + '</g>';
+      },
+      flask: () => `<path d="M-8-40H8V-20C30-12 38 4 34 20 30 36 14 42 0 42S-30 36-34 20C-38 4-30-12-8-20Z" fill="#fff" opacity=".22"/>
+          <path d="M-35 10C-30 28-14 40 0 40S30 28 35 10Z" fill="${lin([mix(c, '#fff', .35), c])}" opacity=".85"/>
+          ${[[-14, 24, 3], [6, 30, 2.4], [16, 18, 2], [-4, 14, 1.8]].map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff" opacity=".7"/>`).join('')}
+          <path d="M-8-40H8V-20C30-12 38 4 34 20 30 36 14 42 0 42S-30 36-34 20C-38 4-30-12-8-20Z" fill="none" stroke="#fff" stroke-width="2" opacity=".8"/>
+          <rect x="-11" y="-46" width="22" height="7" rx="2" fill="${metal()}"/>${shine(-22, 2, 4, 14, 15, .55)}`
+    };
+    const draw = D[kind] || D.turka;
+    const [x, y, sc] = [226, 90, 1.12];
+    const bg = lin([mix(c, '#fff', .28), c, mix(c, '#140a0c', .45)], 1, 1);
+    const glow = rad('rgba(255,255,255,.4)', 'rgba(255,255,255,0)', .5, .5);
+    const box = thumb ? 'viewBox="150 10 160 160" preserveAspectRatio="xMidYMid slice"' : 'viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice"';
+    const scene = `<ellipse cx="${x}" cy="${y + 50 * sc}" rx="${46 * sc}" ry="${7 * sc}" fill="#000" opacity=".2"/><g transform="translate(${x} ${y}) scale(${sc})">${draw()}</g>`;
+    return `<svg class="${thumb ? 'thumb-art' : 'pack-art'}" ${box} aria-hidden="true">
+      <rect x="-10" y="-10" width="340" height="200" fill="${bg}"/>
+      <circle cx="226" cy="84" r="118" fill="${glow}"/>
+      <path d="M40 170C20 130 70 120 46 84S70 40 52 8M96 176C80 140 122 128 100 96" stroke="#fff" stroke-opacity=".13" stroke-width="7" fill="none" stroke-linecap="round"/>
+      ${scene}${sparkle(150, 30, 4, .55)}${sparkle(300, 150, 3, .5)}
+    </svg>`.replace('<svg ', `<svg `).replace(/^/, '').replace('aria-hidden="true">', `aria-hidden="true"><defs>${defs.join('')}</defs>`);
+  }
+
+  window.HP_ART = { flavor, item };
 })();

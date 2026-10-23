@@ -309,24 +309,91 @@
       { id: 'od-cola', brand: 'Overdose', flavor: 'Cola', note: ['Кола', 'Cola'], strength: 7, tags: ['напитки'], color: '#6b3420', art: ['cola'] },
       { id: 'ch-icemint', brand: 'Chabacco', flavor: 'Ice Mint', note: ['Бестабачная смесь: мята со льдом', 'Tobacco-free blend: iced mint'], strength: 1, tags: ['бестабачное', 'мята'], color: '#4bb8b0', art: ['mint', 'ice'] }
     ],
+    // Чаши: у каждой своя картинка (art), цвет глазури и подробности для карточки.
     bowls: [
-      { id: 'b-phunnel', name: 'Oblako Phunnel M', type: 'phunnel', note: ['Табак не проваливается в шахту, жар держится ровно', 'Tobacco stays out of the stem, heat stays even'] },
-      { id: 'b-turka', name: 'Kong Turkish', type: 'turka', note: ['Классика с отверстиями на дне', 'Classic bowl with holes in the base'] },
-      { id: 'b-killer', name: 'Cosmo Bowl Killer', type: 'killer', note: ['Глубокая чаша для плотной забивки', 'Deep bowl for dense packing'] },
-      { id: 'b-harmony', name: 'HookahJohn Harmony', type: 'phunnel', note: ['Глина, мягкий прогрев', 'Clay, gentle heat-up'] },
-      { id: 'b-fruit', name: ['Чаша на грейпфруте', 'Grapefruit bowl'], type: 'fruit', note: ['Половинка грейпфрута вместо чаши', 'Half a grapefruit instead of a bowl'] }
+      { id: 'b-phunnel', name: 'Oblako Phunnel M', type: 'phunnel', art: 'phunnel', color: '#b86a48',
+        note: ['Табак не проваливается в шахту, жар держится ровно', 'Tobacco stays out of the stem, heat stays even'],
+        material: ['Глина с глазурью', 'Glazed clay'], capacity: ['15–18 г', '15–18 g'], heat: ['Ровный, разогрев 5–7 минут', 'Even, 5–7 minutes to warm up'],
+        best: ['Сочные и сладкие табаки: Fumari, Starbuzz, Darkside', 'Juicy and sweet tobacco: Fumari, Starbuzz, Darkside'],
+        pack: ['Насыпьте табак пушисто вокруг центральной шахты, на 2 мм ниже края. Не утрамбовывайте.', 'Sprinkle tobacco loosely around the central spire, 2 mm below the rim. Do not press it down.'],
+        pros: [['Сок не стекает в кальян', 'Juice does not drip into the hookah'], ['Ровный вкус до конца', 'Steady flavour to the end']], cons: [['Нужен калауд или аккуратная фольга', 'Needs a heat manager or careful foil']] },
+      { id: 'b-turka', name: 'Kong Turkish', type: 'turka', art: 'turka', color: '#2f6f8f',
+        note: ['Классика с отверстиями на дне', 'Classic bowl with holes in the base'],
+        material: ['Глина', 'Clay'], capacity: ['12–15 г', '12–15 g'], heat: ['Быстрый, разогрев 3–5 минут', 'Fast, 3–5 minutes to warm up'],
+        best: ['Сухие и классические табаки: Al Fakher, Adalya', 'Dry and classic tobacco: Al Fakher, Adalya'],
+        pack: ['Не закрывайте отверстия на дне: сначала крупные листья, сверху — мелкие. Табак не выше края.', 'Keep the holes clear: larger leaves first, finer ones on top. Do not go above the rim.'],
+        pros: [['Простая и недорогая', 'Simple and inexpensive'], ['Быстро раскуривается', 'Quick to get going']], cons: [['Сироп может стечь в шахту', 'Syrup may drip into the stem']] },
+      { id: 'b-killer', name: 'Cosmo Bowl Killer', type: 'killer', art: 'killer', color: '#7a4a8c',
+        note: ['Глубокая чаша для плотной забивки', 'Deep bowl for dense packing'],
+        material: ['Глина с глазурью внутри', 'Clay glazed inside'], capacity: ['18–22 г', '18–22 g'], heat: ['Медленный, но долгий', 'Slow but long-lasting'],
+        best: ['Крепкие табаки на тёмном листе: Tangiers, Black Burn', 'Strong dark-leaf tobacco: Tangiers, Black Burn'],
+        pack: ['Плотная забивка «с горкой» или «внакладку»: табак слегка выше края, по центру не придавливать.', 'Dense “overpack”: tobacco slightly above the rim, do not press the centre.'],
+        pros: [['Курится 1,5–2 часа', 'Lasts 1.5–2 hours'], ['Яркий плотный дым', 'Rich, dense smoke']], cons: [['Новичку легко перегреть', 'Easy for beginners to overheat']] },
+      { id: 'b-harmony', name: 'HookahJohn Harmony', type: 'phunnel', art: 'harmony', color: '#c79a6a',
+        note: ['Глина, мягкий прогрев', 'Clay, gentle heat-up'],
+        material: ['Неглазурованная глина', 'Unglazed clay'], capacity: ['16–18 г', '16–18 g'], heat: ['Мягкий и равномерный', 'Gentle and even'],
+        best: ['Десертные и нежные вкусы, бестабачные смеси', 'Dessert and delicate flavours, tobacco-free blends'],
+        pack: ['Пушистая забивка, как в фанел. Перед первым раскуром прогрейте пустую чашу с углями 10 минут.', 'Loose packing as for a phunnel. Before first use, heat the empty bowl with coals for 10 minutes.'],
+        pros: [['Глина бережно раскрывает вкус', 'Clay brings out flavour gently'], ['Почти не бывает горечи', 'Rarely gets harsh']], cons: [['Впитывает запахи — лучше держать для одной группы вкусов', 'Absorbs aromas — keep it for one flavour family']] },
+      { id: 'b-silicone', name: ['Силиконовая чаша', 'Silicone bowl'], type: 'phunnel', art: 'silicone', color: '#2fa37c',
+        note: ['Не бьётся, удобно брать с собой', 'Unbreakable, easy to take along'],
+        material: ['Пищевой силикон', 'Food-grade silicone'], capacity: ['14–16 г', '14–16 g'], heat: ['Быстрый — следите за углями', 'Fast — watch the coals'],
+        best: ['Поездки, дача и сборы на природе', 'Trips, summer houses and outdoor meet-ups'],
+        pack: ['Как в фанел, но углей на один меньше: силикон греется быстрее глины.', 'As in a phunnel, but one coal fewer: silicone heats faster than clay.'],
+        pros: [['Не разобьётся', 'Won’t break'], ['Легко моется', 'Easy to clean']], cons: [['Вкус чуть менее яркий, чем на глине', 'Flavour slightly less vivid than on clay']] },
+      { id: 'b-fruit', name: ['Чаша на грейпфруте', 'Grapefruit bowl'], type: 'fruit', art: 'fruit', color: '#e9784a',
+        note: ['Половинка грейпфрута вместо чаши', 'Half a grapefruit instead of a bowl'],
+        material: ['Грейпфрут и глиняная вставка', 'Grapefruit with a clay insert'], capacity: ['15–20 г', '15–20 g'], heat: ['Мягкий, фрукт охлаждает дым', 'Soft, the fruit cools the smoke'],
+        best: ['Цитрусовые и ягодные вкусы, праздник', 'Citrus and berry flavours, a special occasion'],
+        pack: ['Срежьте верх, выньте мякоть, вставьте глиняную вставку. Табак пушисто, сверху фольга или калауд.', 'Cut off the top, scoop the flesh, fit the clay insert. Pack loosely, foil or a heat manager on top.'],
+        pros: [['Свежий фруктовый аромат', 'Fresh fruity aroma'], ['Эффектно на столе', 'Looks great on the table']], cons: [['Одноразовая', 'Single use'], ['Нужно время на подготовку', 'Takes time to prepare']] }
     ],
     gear: [
-      { id: 'g-lotus', name: 'Kaloud Lotus I+', type: ['Калауд', 'Heat manager'], note: ['Контроль жара без фольги', 'Heat control without foil'] },
-      { id: 'g-coal', name: ['Кокосовый уголь 25 мм', 'Coconut coals 25 mm'], type: ['Уголь', 'Coals'], note: ['72 кубика, разжиг 8–10 минут на плитке', '72 cubes, 8–10 minutes on a heater'] },
-      { id: 'g-hose', name: ['Силиконовый шланг', 'Silicone hose'], type: ['Шланг', 'Hose'], note: ['Моется и не впитывает вкус', 'Washable, keeps no flavour'] },
-      { id: 'g-mouth', name: ['Личный мундштук', 'Personal mouthpiece'], type: ['Мундштук', 'Mouthpiece'], note: ['Гигиена на общих сборах', 'Hygiene at group sessions'] },
-      { id: 'g-tongs', name: ['Щипцы для угля', 'Coal tongs'], type: ['Инструмент', 'Tool'], note: ['Длина 20 см', '20 cm long'] },
-      { id: 'g-stove', name: ['Плитка для угля', 'Coal heater'], type: ['Розжиг', 'Heater'], note: ['Электрическая, 800 Вт', 'Electric, 800 W'] }
+      { id: 'g-lotus', name: 'Kaloud Lotus I+', type: ['Калауд', 'Heat manager'], art: 'kaloud', color: '#5a6470',
+        note: ['Контроль жара без фольги', 'Heat control without foil'],
+        about: ['Металлическая крышка на чашу, в неё кладут угли. Регулятор сбоку открывает и закрывает прорези — так меняется жар.', 'A metal lid for the bowl that holds the coals. A slider opens and closes the vents to change the heat.'],
+        tip: ['Если дым стал горьким — прикройте прорези и снимите один уголь на минуту.', 'If the smoke turns harsh, close the vents and take one coal off for a minute.'],
+        specs: [[['Углей', 'Coals'], ['3 кубика 25 мм', '3 cubes, 25 mm']], [['Подходит', 'Fits'], ['Фанел и турка до 9 см', 'Phunnel and Turkish bowls up to 9 cm']], [['Материал', 'Material'], ['Алюминий', 'Aluminium']]] },
+      { id: 'g-coal', name: ['Кокосовый уголь 25 мм', 'Coconut coals 25 mm'], type: ['Уголь', 'Coals'], art: 'coal', color: '#7a5340',
+        note: ['72 кубика, разжиг 8–10 минут на плитке', '72 cubes, 8–10 minutes on a heater'],
+        about: ['Прессованная скорлупа кокоса: без запаха и химии, горит ровно около часа.', 'Pressed coconut shell: no smell or chemicals, burns evenly for about an hour.'],
+        tip: ['Уголь готов, когда весь покрыт серым пеплом. Недожжённый уголь даёт привкус и головную боль.', 'Coal is ready when fully covered with grey ash. Under-lit coal gives an off taste and a headache.'],
+        specs: [[['В упаковке', 'Per box'], ['72 кубика, 1 кг', '72 cubes, 1 kg']], [['На кальян', 'Per session'], ['3–4 кубика', '3–4 cubes']], [['Горит', 'Burns'], ['50–70 минут', '50–70 minutes']]] },
+      { id: 'g-hose', name: ['Силиконовый шланг', 'Silicone hose'], type: ['Шланг', 'Hose'], art: 'hose', color: '#3d7bd9',
+        note: ['Моется и не впитывает вкус', 'Washable, keeps no flavour'],
+        about: ['Шланг из пищевого силикона с металлической ручкой. Его можно промывать водой после каждого раза.', 'A food-grade silicone hose with a metal handle. Rinse it with water after every session.'],
+        tip: ['После мытья просушите шланг, подвесив его вертикально, — иначе внутри останется вода.', 'Hang the hose vertically to dry after washing, or water stays inside.'],
+        specs: [[['Длина', 'Length'], ['1,5 м', '1.5 m']], [['Материал', 'Material'], ['Силикон, нержавейка', 'Silicone, stainless steel']], [['Уход', 'Care'], ['Промывать водой', 'Rinse with water']]] },
+      { id: 'g-mouth', name: ['Личный мундштук', 'Personal mouthpiece'], type: ['Мундштук', 'Mouthpiece'], art: 'mouth', color: '#c9a14a',
+        note: ['Гигиена на общих сборах', 'Hygiene at group sessions'],
+        about: ['Свой наконечник для общего шланга. В заведениях часто дают одноразовые — личный удобнее и приятнее.', 'Your own tip for a shared hose. Venues often hand out disposable ones — your own is nicer.'],
+        tip: ['Носите в чехле и мойте тёплой водой с мылом после сбора.', 'Keep it in a case and wash with warm soapy water after each meet-up.'],
+        specs: [[['Длина', 'Length'], ['9 см', '9 cm']], [['Материал', 'Material'], ['Смола или металл', 'Resin or metal']], [['Подходит', 'Fits'], ['Почти все шланги', 'Most hoses']]] },
+      { id: 'g-tongs', name: ['Щипцы для угля', 'Coal tongs'], type: ['Инструмент', 'Tool'], art: 'tongs', color: '#6c7a89',
+        note: ['Длина 20 см', '20 cm long'],
+        about: ['Чтобы переносить горячие угли и сбивать с них пепел, не обжигая пальцы.', 'For moving hot coals and tapping ash off them without burning your fingers.'],
+        tip: ['Сбивайте пепел над пепельницей лёгким постукиванием — так жар станет ровнее.', 'Tap the ash off over an ashtray — the heat becomes more even.'],
+        specs: [[['Длина', 'Length'], ['20 см', '20 cm']], [['Материал', 'Material'], ['Нержавеющая сталь', 'Stainless steel']]] },
+      { id: 'g-stove', name: ['Плитка для угля', 'Coal heater'], type: ['Розжиг', 'Heater'], art: 'stove', color: '#b5482c',
+        note: ['Электрическая, 800 Вт', 'Electric, 800 W'],
+        about: ['Электроплитка с открытой спиралью: разжигает угли без газа и запаха.', 'An electric heater with an open coil: lights coals without gas or smell.'],
+        tip: ['Переворачивайте угли через 4–5 минут, чтобы разгорелись со всех сторон.', 'Turn the coals after 4–5 minutes so they light on all sides.'],
+        specs: [[['Мощность', 'Power'], ['800 Вт', '800 W']], [['Разжиг', 'Lighting'], ['8–10 минут', '8–10 minutes']], [['Углей за раз', 'Coals at once'], ['до 6', 'up to 6']]] },
+      { id: 'g-flask', name: ['Колба', 'Base'], type: ['Колба', 'Base'], art: 'flask', color: '#3a8fb0',
+        note: ['Стекло, вода охлаждает дым', 'Glass, water cools the smoke'],
+        about: ['Нижняя часть кальяна. Вода в колбе охлаждает и смягчает дым.', 'The lower part of the hookah. Water in the base cools and softens the smoke.'],
+        tip: ['Шахта должна быть в воде на 2–3 см. Больше — тяжёлая тяга, меньше — горячий дым. Летом можно добавить лёд.', 'The stem should sit 2–3 cm in the water. Deeper means a heavy draw, shallower means hot smoke. Add ice in summer.'],
+        specs: [[['Материал', 'Material'], ['Стекло', 'Glass']], [['Вода', 'Water'], ['Шахта в воде на 2–3 см', 'Stem 2–3 cm under water']]] },
+      { id: 'g-brush', name: ['Ёршики для чистки', 'Cleaning brushes'], type: ['Уход', 'Care'], art: 'brush', color: '#8a6d3b',
+        note: ['Шахта, колба и шланг без налёта', 'Stem, base and hose free of residue'],
+        about: ['Набор из трёх ёршиков разной длины для шахты, колбы и чаши.', 'A set of three brushes of different lengths for the stem, base and bowl.'],
+        tip: ['Чистите кальян после каждого сбора: старый налёт портит вкус нового табака.', 'Clean the hookah after every meet-up: old residue spoils the taste of new tobacco.'],
+        specs: [[['В наборе', 'In the set'], ['3 ёршика', '3 brushes']], [['Длина', 'Length'], ['15–60 см', '15–60 cm']]] }
     ]
   };
   const tr = v => Array.isArray(v) ? L(v[0], v[1]) : v;
   const BOWL_TYPE = { phunnel: ['Фанел', 'Phunnel'], turka: ['Турка', 'Turkish'], killer: ['Киллер', 'Killer'], fruit: ['На фрукте', 'Fruit bowl'] };
+  const gearItem = id => CATALOG.gear.find(g => g.id === id);
   const tobacco = id => CATALOG.tobaccos.find(t => t.id === id);
   const bowl = id => CATALOG.bowls.find(b => b.id === id);
   const ALL_TAGS = [...new Set(CATALOG.tobaccos.flatMap(t => t.tags))];
@@ -654,15 +721,13 @@
   }
   // Миниатюра вкуса для списков: тот же рисунок, крупным планом.
   const flavorThumb = t => window.HP_ART && t ? `<span class="flavor-thumb" aria-hidden="true">${HP_ART.flavor(t, { thumb: true })}</span>` : `<span class="swatch" style="--pc:${t?.color}"></span>`;
-  function bowlArt(type) {
-    const shapes = {
-      phunnel: '<path d="M14 26h36l-6 16H20z"/><path d="M28 26v-6h8v6" class="a2"/><rect x="29" y="42" width="6" height="10"/>',
-      turka: '<path d="M12 24h40l-8 18H20z"/><circle cx="26" cy="33" r="1.6" class="a2"/><circle cx="32" cy="33" r="1.6" class="a2"/><circle cx="38" cy="33" r="1.6" class="a2"/><rect x="29" y="42" width="6" height="10"/>',
-      killer: '<path d="M16 14h32l-5 30H21z"/><rect x="29" y="44" width="6" height="8"/>',
-      fruit: '<path d="M10 28h44a22 18 0 0 1-44 0z"/><path d="M14 28h36" class="a2" stroke-width="3"/><rect x="29" y="44" width="6" height="8"/>'
-    };
-    return `<svg class="art-svg" viewBox="0 0 64 60" aria-hidden="true">${shapes[type] || shapes.turka}</svg>`;
+  // Чаши и аксессуары: картинка в стиле упаковки табака (HP_ART.item) и миниатюра для списков.
+  function itemArt(x, size = '') {
+    const kind = Array.isArray(x.type) ? tr(x.type) : tr(BOWL_TYPE[x.type] || '');
+    return `<div class="pack ${size}" style="--pc:${x.color}" aria-hidden="true">${window.HP_ART?.item ? HP_ART.item(x.art, x.color) : ''}
+      <span class="pack-brand">${esc(kind)}</span><span class="pack-flavor">${esc(tr(x.name))}</span></div>`;
   }
+  const itemThumb = x => window.HP_ART?.item && x ? `<span class="flavor-thumb" aria-hidden="true">${HP_ART.item(x.art, x.color, { thumb: true })}</span>` : '';
   function stars(v, cls = '') {
     const full = Math.round(v);
     return `<span class="stars ${cls}" aria-label="${L('Оценка', 'Rating')} ${v ? v.toFixed(1) : '—'} / 5">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= full ? 'on' : ''}">★</i>`).join('')}</span>`;
@@ -735,7 +800,9 @@
 
   // ---------- Оформление ----------
   const THEMES = { auto: [['Как в системе', 'System'], ICON.auto], light: [['Светлая', 'Light'], ICON.sun], dark: [['Тёмная', 'Dark'], ICON.moon] };
-  const ACCENTS = { copper: ['Медь', 'Copper'], mint: ['Мята', 'Mint'], plum: ['Слива', 'Plum'], ember: ['Уголь', 'Ember'] };
+  const ACCENTS = { copper: ['Медь', 'Copper'], ember: ['Уголь', 'Ember'], gold: ['Золото', 'Gold'], rose: ['Роза', 'Rose'], plum: ['Слива', 'Plum'], blue: ['Синий', 'Blue'], mint: ['Мята', 'Mint'], green: ['Зелёный', 'Green'] };
+  // Фонарик — свечение фона: по цвету акцента, классическая тёплая лампа или выключен.
+  const LAMPS = { accent: ['Цвет акцента', 'Accent colour'], warm: ['Тёплая лампа', 'Warm lamp'], off: ['Выключить', 'Off'] };
   // Праздничное оформление включается само по датам: Хэллоуин 23.10–03.11, Новый год 22.12–10.01.
   const SEASONS = { auto: ['По датам', 'By date'], halloween: ['Хэллоуин', 'Halloween'], newyear: ['Новый год', 'New Year'], off: ['Выключить', 'Off'] };
   function seasonByDate(d = new Date()) {
@@ -752,6 +819,9 @@
     const root = document.documentElement, theme = prefs.get('theme', 'auto'), accent = prefs.get('accent', 'copper');
     if (theme === 'auto') delete root.dataset.theme; else root.dataset.theme = theme;
     root.dataset.accent = ACCENTS[accent] ? accent : 'copper';
+    // Цвет, выбранный вручную, сильнее праздничного; «как в празднике» — снять выбор.
+    if (prefs.get('accentUser') === '1') root.dataset.accentUser = ''; else delete root.dataset.accentUser;
+    const lamp = prefs.get('lamp', 'accent'); root.dataset.lamp = LAMPS[lamp] ? lamp : 'accent';
     const season = activeSeason();
     if (season) root.dataset.season = season; else delete root.dataset.season;
     root.lang = lang;
@@ -1639,7 +1709,7 @@
         const lead = i === 0 && (rank.length === 1 || rank[1].users.length < n);
         let name, sub, art = '';
         if (kind === 't') { const t = tobacco(r.id); art = flavorThumb(t); name = `<b>${esc(t?.brand)}</b> ${esc(t?.flavor)}`; sub = `${esc(tr(t?.note))} · ${L('крепость', 'strength')} ${t?.strength}/10`; }
-        else { const bw = bowl(r.id); name = `<b>${esc(tr(bw?.name))}</b><small>${tr(BOWL_TYPE[bw?.type] || ['', ''])}</small>`; sub = esc(tr(bw?.note)); }
+        else { const bw = bowl(r.id); art = itemThumb(bw); name = `<b>${esc(tr(bw?.name))}</b><small>${tr(BOWL_TYPE[bw?.type] || ['', ''])}</small>`; sub = esc(tr(bw?.note)); }
         return `<li class="rank-row ${lead ? 'is-top' : ''}">
           <div class="rank-pos">${i + 1}</div>
           <div class="rank-body">
@@ -2177,14 +2247,73 @@
   }
   function mixCard(m, u) {
     const author = userById(m.authorId), liked = !!u && m.likes.includes(u.id);
-    return `<article class="cat-card mix-card">
+    return `<article class="cat-card mix-card t-card" data-action="mixInfo" data-id="${m.id}" role="button" tabindex="0" aria-label="${esc(m.name)}">
+      <div class="mix-thumbs" aria-hidden="true">${m.parts.map(p => flavorThumb(tobacco(p.id))).join('')}</div>
       <div class="cat-top"><span class="cat-brand">${L('Микс', 'Mix')} · ${m.parts.length} ${pl(m.parts.length, ['вкус', 'вкуса', 'вкусов'], ['flavour', 'flavours'])}</span>
         <button class="like-btn ${liked ? 'on' : ''}" type="button" data-action="likeMix" data-id="${m.id}" aria-pressed="${liked}" aria-label="${L('Нравится', 'Like')}">${ICON.heart}<span>${m.likes.length}</span></button></div>
       <h3>${esc(m.name)}</h3>
       <div class="mix-bar">${m.parts.map(p => `<span style="flex:${p.pct};--pc:${tobacco(p.id)?.color || 'gray'}" title="${esc(tobaccoName(p.id))} ${p.pct}%"></span>`).join('')}</div>
       <ul class="mix-legend">${m.parts.map(p => `<li><i style="--pc:${tobacco(p.id)?.color || 'gray'}"></i><span>${esc(tobaccoName(p.id))}</span><b class="mono">${p.pct}%</b></li>`).join('')}</ul>
-      <div class="ev-venue">${avatar(author, 'xs')}<span>${esc(author?.name || '—')}</span></div>
+      <div class="mix-foot"><div class="ev-venue">${avatar(author, 'xs')}<span>${esc(author?.name || '—')}</span></div><span class="more-link">${L('Подробнее', 'Details')} →</span></div>
     </article>`;
+  }
+
+  // ---------- Подробности: чаша, аксессуар, микс ----------
+  const bowlVotes = id => db.events.reduce((n, e) => n + Object.values(e.bowls || {}).filter(b => b === id).length, 0);
+  const specsHtml = rows => `<dl class="specs">${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
+  const prosCons = (pros = [], cons = []) => `<div class="pros-cons">
+    ${pros.length ? `<div><span class="label">${L('Плюсы', 'Pros')}</span><ul class="pc-list plus">${pros.map(x => `<li>${ICON.check}<span>${esc(tr(x))}</span></li>`).join('')}</ul></div>` : ''}
+    ${cons.length ? `<div><span class="label">${L('Учесть', 'Keep in mind')}</span><ul class="pc-list minus">${cons.map(x => `<li>${ICON.x}<span>${esc(tr(x))}</span></li>`).join('')}</ul></div>` : ''}</div>`;
+  const tipBox = (title, text) => `<div class="tip-box">${ICON.smoke}<div><b>${title}</b><p>${esc(text)}</p></div></div>`;
+  function openBowl(id) {
+    const b = bowl(id); if (!b) return;
+    const votes = bowlVotes(id);
+    const fits = CATALOG.tobaccos.filter(t => b.type === 'killer' ? t.strength >= 7 : b.type === 'turka' ? t.tags.includes('классика') || t.strength <= 4 : b.type === 'fruit' ? t.tags.some(x => ['цитрус', 'ягоды', 'фрукты'].includes(x)) : t.strength <= 7).slice(0, 4);
+    openModal(tr(b.name), `
+      <div class="t-detail">${itemArt(b, 'lg')}
+        <div class="t-info"><span class="cat-brand">${tr(BOWL_TYPE[b.type])}</span><p>${esc(tr(b.note))}</p>
+          ${specsHtml([[L('Материал', 'Material'), tr(b.material)], [L('Вмещает', 'Holds'), tr(b.capacity)], [L('Жар', 'Heat'), tr(b.heat)], [L('В сборах', 'In events'), votes ? `${votes} ${pl(votes, ['голос', 'голоса', 'голосов'], ['vote', 'votes'])}` : L('пока не выбирали', 'not picked yet')]])}
+        </div></div>
+      <div><span class="label">${L('Лучше всего для', 'Best for')}</span><p style="margin:4px 0 0">${esc(tr(b.best))}</p></div>
+      ${tipBox(L('Как забивать', 'How to pack'), tr(b.pack))}
+      ${prosCons(b.pros, b.cons)}
+      ${fits.length ? `<div><span class="label">${L('Табаки из каталога, которые хорошо на ней раскрываются', 'Catalogue tobacco that suits this bowl')}</span>
+        <div class="fit-row">${fits.map(t => `<button class="fit-chip" type="button" data-action="tobacco" data-id="${t.id}">${flavorThumb(t)}<span><b>${esc(t.brand)}</b> ${esc(t.flavor)}</span></button>`).join('')}</div></div>` : ''}`);
+  }
+  function openGear(id) {
+    const g = gearItem(id); if (!g) return;
+    openModal(tr(g.name), `
+      <div class="t-detail">${itemArt(g, 'lg')}
+        <div class="t-info"><span class="cat-brand">${esc(tr(g.type))}</span><p>${esc(tr(g.about))}</p>
+          ${specsHtml(g.specs.map(([k, v]) => [tr(k), tr(v)]))}</div></div>
+      ${tipBox(L('Совет', 'Tip'), tr(g.tip))}`);
+  }
+  function openMix(id) {
+    const m = db.mixes.find(x => x.id === id), u = me(); if (!m) return;
+    const parts = m.parts.map(p => ({ ...p, t: tobacco(p.id) })).filter(p => p.t);
+    const total = parts.reduce((n, p) => n + p.pct, 0) || 1;
+    const strength = Math.round(parts.reduce((n, p) => n + p.t.strength * p.pct, 0) / total * 10) / 10;
+    const tags = [...new Set(parts.flatMap(p => p.t.tags))];
+    const recBowl = bowl(strength >= 7 ? 'b-killer' : tags.some(x => ['фрукты', 'ягоды', 'цитрус', 'тропики', 'сладкое'].includes(x)) ? 'b-phunnel' : 'b-turka');
+    const author = userById(m.authorId), liked = !!u && m.likes.includes(u.id);
+    // Кольцевая диаграмма долей: у каждого вкуса свой цвет.
+    let acc = 0; const R = 42, C = 2 * Math.PI * R;
+    const ring = parts.map(p => { const len = p.pct / total * C, seg = `<circle r="${R}" cx="60" cy="60" fill="none" stroke="${p.t.color}" stroke-width="16" stroke-dasharray="${Math.max(len - 2, 1)} ${C}" stroke-dashoffset="${-acc}" transform="rotate(-90 60 60)"/>`; acc += len; return seg; }).join('');
+    const howTo = parts.length > 2 ? L('Смешайте вкусы в миске до однородности или забейте секторами — тогда вкус будет меняться по ходу курения.', 'Mix the flavours evenly in a bowl, or pack them in sectors so the taste changes as you smoke.')
+      : L('Перемешайте табаки в нужной пропорции и забейте пушисто. Если один вкус перебивает — уменьшите его долю на 10%.', 'Mix the tobacco in the right proportion and pack loosely. If one flavour dominates, cut its share by 10%.');
+    openModal(m.name, `
+      <div class="mix-detail">
+        <svg class="mix-ring" viewBox="0 0 120 120" aria-hidden="true"><circle r="${R}" cx="60" cy="60" fill="none" stroke="var(--line)" stroke-width="16"/>${ring}
+          <text x="60" y="58" text-anchor="middle" class="mr-num">${strength}</text><text x="60" y="74" text-anchor="middle" class="mr-cap">${L('крепость', 'strength')}</text></svg>
+        <div class="t-info">
+          <ul class="mix-parts">${parts.map(p => `<li><button type="button" data-action="tobacco" data-id="${p.t.id}">${flavorThumb(p.t)}<span><b>${esc(p.t.brand)}</b> ${esc(p.t.flavor)}<small>${esc(tr(p.t.note))} · ${p.t.strength}/10</small></span><b class="mono">${p.pct}%</b></button></li>`).join('')}</ul>
+          <div class="cat-tags">${tags.map(x => `<span class="chip">${esc(tagName(x))}</span>`).join('')}</div>
+        </div>
+      </div>
+      ${tipBox(L('Как забить', 'How to pack'), howTo)}
+      ${recBowl ? `<button class="fit-chip wide" type="button" data-action="bowlInfo" data-id="${recBowl.id}">${itemThumb(recBowl)}<span><small>${L('Подойдёт чаша', 'Suggested bowl')}</small><b>${esc(tr(recBowl.name))}</b> · ${tr(BOWL_TYPE[recBowl.type])}</span><span class="next-go">→</span></button>` : ''}
+      <div class="modal-foot" style="justify-content:space-between;align-items:center"><div class="ev-venue">${avatar(author, 'xs')}<span>${L('Автор', 'By')} ${esc(author?.name || '—')}</span></div>
+        <button class="like-btn ${liked ? 'on' : ''}" type="button" data-action="likeMix" data-id="${m.id}" data-reopen="1" aria-pressed="${liked}">${ICON.heart}<span>${m.likes.length}</span></button></div>`);
   }
 
   function pageCatalog() {
@@ -2227,13 +2356,21 @@
         html = [...db.mixes].filter(m => !q || (m.name + ' ' + m.parts.map(p => tobaccoName(p.id)).join(' ')).toLowerCase().includes(q))
           .sort((a, b) => b.likes.length - a.likes.length).map(m => mixCard(m, u)).join('');
       } else if (tab.cat === 'bowls') {
-        html = CATALOG.bowls.filter(x => !q || `${tr(x.name)} ${BOWL_TYPE[x.type].join(' ')} ${x.note.join(' ')}`.toLowerCase().includes(q)).map(x => `
-          <article class="cat-card"><div class="art-tile">${bowlArt(x.type)}</div>
-            <span class="cat-brand">${tr(BOWL_TYPE[x.type])}</span><h3>${esc(tr(x.name))}</h3><p>${esc(tr(x.note))}</p></article>`).join('');
+        html = CATALOG.bowls.filter(x => !q || `${[].concat(x.name).join(' ')} ${BOWL_TYPE[x.type].join(' ')} ${x.note.join(' ')} ${x.best.join(' ')}`.toLowerCase().includes(q)).map(x => {
+          const votes = bowlVotes(x.id);
+          return `<article class="cat-card t-card" data-action="bowlInfo" data-id="${x.id}" role="button" tabindex="0" aria-label="${esc(tr(x.name))}">
+            ${itemArt(x)}
+            <div class="cat-top"><span class="cat-brand">${tr(BOWL_TYPE[x.type])}</span>${votes ? `<span class="pill">${votes} ${pl(votes, ['голос', 'голоса', 'голосов'], ['vote', 'votes'])}</span>` : ''}</div>
+            <h3>${esc(tr(x.name))}</h3><p>${esc(tr(x.note))}</p>
+            <dl class="mini-specs"><div><dt>${L('Вмещает', 'Holds')}</dt><dd>${tr(x.capacity)}</dd></div><div><dt>${L('Материал', 'Material')}</dt><dd>${tr(x.material)}</dd></div></dl>
+            <span class="more-link">${L('Подробнее', 'Details')} →</span></article>`;
+        }).join('');
       } else {
-        html = CATALOG.gear.filter(x => !q || `${[].concat(x.name).join(' ')} ${x.type.join(' ')} ${x.note.join(' ')}`.toLowerCase().includes(q)).map(x => `
-          <article class="cat-card"><div class="art-tile"><span class="art-word">${esc(tr(x.type))}</span></div>
-            <span class="cat-brand">${esc(tr(x.type))}</span><h3>${esc(tr(x.name))}</h3><p>${esc(tr(x.note))}</p></article>`).join('');
+        html = CATALOG.gear.filter(x => !q || `${[].concat(x.name).join(' ')} ${x.type.join(' ')} ${x.note.join(' ')} ${x.about.join(' ')}`.toLowerCase().includes(q)).map(x => `
+          <article class="cat-card t-card" data-action="gearInfo" data-id="${x.id}" role="button" tabindex="0" aria-label="${esc(tr(x.name))}">
+            ${itemArt(x)}
+            <span class="cat-brand">${esc(tr(x.type))}</span><h3>${esc(tr(x.name))}</h3><p>${esc(tr(x.note))}</p>
+            <span class="more-link">${L('Подробнее', 'Details')} →</span></article>`).join('');
       }
       grid.innerHTML = html || `<div style="grid-column:1/-1"><p class="muted">${L('Ничего не нашлось. Измените поиск или фильтры.', 'Nothing found. Change the search or filters.')}</p></div>`;
     };
@@ -2350,6 +2487,7 @@
     const friends = u.friends.map(userById).filter(Boolean);
     const venues = [...new Set([...VENUES.map(v => v.name), ...db.events.map(e => e.venue)])];
     const theme = prefs.get('theme', 'auto'), accent = prefs.get('accent', 'copper'), seasonPref = prefs.get('season', 'auto');
+    const accentUser = prefs.get('accentUser') === '1', lampPref = prefs.get('lamp', 'accent');
     const panels = {
       about: `<section class="panel">
           <div class="panel-head"><h2>${L('Личные данные', 'Personal details')}</h2></div>
@@ -2387,8 +2525,13 @@
               <button role="radio" aria-checked="${lang === 'en'}" class="${lang === 'en' ? 'on' : ''}" data-action="setLang" data-lang="en">English</button></div></div>
             <div class="field"><span class="label">${L('Тема', 'Theme')}</span><div class="segmented" role="radiogroup" aria-label="${L('Тема', 'Theme')}">${Object.entries(THEMES).map(([k, [label, ic]]) => `<button role="radio" aria-checked="${theme === k}" class="${theme === k ? 'on' : ''}" data-action="setTheme" data-theme="${k}">${ic}${tr(label)}</button>`).join('')}</div></div>
             <div class="field"><span class="label">${L('Праздничное оформление', 'Holiday look')}</span><div class="segmented" role="radiogroup" aria-label="${L('Праздничное оформление', 'Holiday look')}">${Object.entries(SEASONS).map(([k, label]) => `<button role="radio" aria-checked="${seasonPref === k}" class="${seasonPref === k ? 'on' : ''}" data-action="setSeason" data-season="${k}">${tr(label)}</button>`).join('')}</div>
-              <small class="muted">${L('По датам: Хэллоуин с 23 октября по 3 ноября, Новый год с 22 декабря по 10 января. На время праздника цвет акцента меняется.', 'By date: Halloween from 23 October to 3 November, New Year from 22 December to 10 January. The accent colour changes during the holiday.')}</small></div>
-            <div class="field"><span class="label">${L('Цвет акцента', 'Accent colour')}</span><div class="swatches" role="radiogroup" aria-label="${L('Цвет акцента', 'Accent colour')}">${Object.entries(ACCENTS).map(([k, label]) => `<button role="radio" aria-checked="${accent === k}" class="sw sw-${k} ${accent === k ? 'on' : ''}" data-action="setAccent" data-accent="${k}"><i></i>${tr(label)}</button>`).join('')}</div></div>
+              <small class="muted">${L('По датам: Хэллоуин с 23 октября по 3 ноября, Новый год с 22 декабря по 10 января.', 'By date: Halloween from 23 October to 3 November, New Year from 22 December to 10 January.')}</small></div>
+            <div class="field"><span class="label">${L('Цвет акцента', 'Accent colour')}</span><div class="swatches" role="radiogroup" aria-label="${L('Цвет акцента', 'Accent colour')}">
+              ${activeSeason() ? `<button role="radio" aria-checked="${!accentUser}" class="sw sw-season ${!accentUser ? 'on' : ''}" data-action="setAccent" data-accent="season"><i></i>${L('Как в празднике', 'Holiday colours')}</button>` : ''}
+              ${Object.entries(ACCENTS).map(([k, label]) => { const on = accent === k && (accentUser || !activeSeason()); return `<button role="radio" aria-checked="${on}" class="sw sw-${k} ${on ? 'on' : ''}" data-action="setAccent" data-accent="${k}"><i></i>${tr(label)}</button>`; }).join('')}</div>
+              <small class="muted">${L('Цвет кнопок, ссылок и подсветки. Выбранный цвет сохраняется и в праздники.', 'Colour of buttons, links and highlights. Your choice stays during holidays too.')}</small></div>
+            <div class="field"><span class="label">${L('Фонарик', 'Lamp')}</span><div class="segmented" role="radiogroup" aria-label="${L('Фонарик', 'Lamp')}">${Object.entries(LAMPS).map(([k, label]) => `<button role="radio" aria-checked="${lampPref === k}" class="${lampPref === k ? 'on' : ''}" data-action="setLamp" data-lamp="${k}"><span class="lamp-dot lamp-${k}"></span>${tr(label)}</button>`).join('')}</div>
+              <small class="muted">${L('Мягкое свечение фона, которое плывёт при прокрутке. «Цвет акцента» красит его в выбранный цвет.', 'The soft background glow that drifts as you scroll. “Accent colour” tints it with your chosen colour.')}</small></div>
           </div>
         </section>
         <section class="panel" ${IN_APP ? 'hidden' : ''}>
@@ -3261,7 +3404,7 @@
     pickBowl({ id }) {
       const e = eventById(id), u = me(); if (!e || !canVote(e, u)) return;
       const cur = e.bowls[u.id];
-      openModal(L('Чаша', 'Bowl'), `<div class="pick-list">${CATALOG.bowls.map(b => `<label class="pick-item"><input type="radio" name="bowl" value="${b.id}" ${cur === b.id ? 'checked' : ''}>
+      openModal(L('Чаша', 'Bowl'), `<div class="pick-list">${CATALOG.bowls.map(b => `<label class="pick-item"><input type="radio" name="bowl" value="${b.id}" ${cur === b.id ? 'checked' : ''}>${itemThumb(b)}
           <span><b>${esc(tr(b.name))}</b><small>${tr(BOWL_TYPE[b.type])} · ${esc(tr(b.note))}</small></span></label>`).join('')}</div>
         <div class="modal-foot">${cur ? `<button class="btn btn-ghost" type="button" id="bw-clear" style="margin-right:auto">${L('Снять голос', 'Remove vote')}</button>` : ''}
           <button class="btn btn-ghost" type="button" data-action="closeModal">${L('Отмена', 'Cancel')}</button><button class="btn btn-primary" type="button" id="bw-save">${L('Сохранить', 'Save')}</button></div>`, m => {
@@ -3284,6 +3427,9 @@
       });
     },
     tobacco({ id }) { openTobacco(id); },
+    bowlInfo({ id }) { openBowl(id); },
+    gearInfo({ id }) { openGear(id); },
+    mixInfo({ id }) { openMix(id); },
     async fav({ id }, el) {
       const u = me(); if (!u) return;
       const adding = !u.favs.includes(id), t = tobacco(id);
@@ -3325,10 +3471,10 @@
         });
       });
     },
-    likeMix({ id }) {
+    likeMix({ id, reopen }) {
       if (!requireUser()) return;
       const u = me(), m = db.mixes.find(x => x.id === id); if (!m) return;
-      act(() => { m.likes = m.likes.includes(u.id) ? m.likes.filter(x => x !== u.id) : [...m.likes, u.id]; }, 'POST', `/mixes/${id}/like`).then(() => render(), quiet);
+      act(() => { m.likes = m.likes.includes(u.id) ? m.likes.filter(x => x !== u.id) : [...m.likes, u.id]; }, 'POST', `/mixes/${id}/like`).then(() => { render(); if (reopen) openMix(id); }, quiet);
     },
     catTab({ tab: t }) { tab.cat = t; prefs.set('tab.cat', t); cat.q = ''; if (location.hash !== '#/catalog') go('catalog'); else { closeModal(); render(); } },
     catFilter(ds) {
@@ -3385,7 +3531,11 @@
       prefs.set('theme', next); applyLook(); render(); toast(`${L('Тема', 'Theme')}: ${tr(THEMES[next][0]).toLowerCase()}`);
     },
     setTheme({ theme }) { prefs.set('theme', theme); applyLook(); render(); },
-    setAccent({ accent }) { prefs.set('accent', accent); applyLook(); render(); },
+    setAccent({ accent }) {
+      if (accent === 'season') prefs.set('accentUser', ''); else { prefs.set('accent', accent); prefs.set('accentUser', '1'); }
+      applyLook(); render();
+    },
+    setLamp({ lamp }) { prefs.set('lamp', lamp); applyLook(); render(); },
     setSeason({ season }) { prefs.set('season', season); prefs.set('ribbonClosed', ''); applyLook(); render(); },
     closeRibbon({ key }) { prefs.set('ribbonClosed', key); seasonRibbon(); },
     uploadAvatar() { const u = me(); pickAvatarFile(url => act(() => { u.avatar = url; }, 'PUT', '/me/avatar', { dataUrl: url }).then(() => { toast(L('Фото обновлено', 'Photo updated')); render(); }, quiet)); },
