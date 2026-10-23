@@ -898,7 +898,7 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
   border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: inherit;
 }
 .venue-item:hover { border-color: var(--accent); }
-.venue-item.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.venue-item.sel { border-color: var(--accent); background-color: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
 .venue-item small { color: var(--muted); font-size: 12.5px; }
 .vi-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .vi-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
@@ -1427,8 +1427,8 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
   padding: 11px 12px; border-radius: var(--r); border: 1px solid transparent; background: none; color: var(--fg); font: inherit; cursor: pointer;
   transition: background .15s, border-color .15s;
 }
-.notif:hover { background: var(--surface-2); }
-.notif.unread { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+.notif:hover { background-color: var(--surface-2); }
+.notif.unread { background-color: color-mix(in srgb, var(--accent) 8%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 22%, transparent); }
 .notif-text { display: grid; gap: 3px; font-size: 14px; line-height: 1.45; min-width: 0; overflow-wrap: anywhere; }
 .notif-text time { font-size: 12px; color: var(--muted); }
 .nt-quote { color: var(--muted); }
@@ -1451,4 +1451,27 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 @media (max-width: 440px) {
   .topbar-actions [data-action="cycleTheme"] { display: none; }
   .topbar-actions { gap: 8px; }
+}
+
+/* ---------- Свет под курсором: остальные блоки ---------- */
+/* Тот же «фонарик», что на карточках людей: светится только место под мышкой. */
+.story-card, .venue-item, .next-strip, .history-stats > div, .notif, .feed-item, .map-card {
+  background-image: radial-gradient(380px circle at var(--mx, -999px) var(--my, -999px), var(--hl), transparent 60%);
+}
+/* У этих блоков уже есть свой мягкий градиент — свет кладём поверх него отдельным слоем. */
+.next-card {
+  background-image: radial-gradient(380px circle at var(--mx, -999px) var(--my, -999px), var(--hl), transparent 60%),
+    radial-gradient(520px 220px at 100% 0%, color-mix(in srgb, var(--ember) 16%, transparent), transparent 70%);
+}
+.ev-hero {
+  background-image: radial-gradient(420px circle at var(--mx, -999px) var(--my, -999px), var(--hl), transparent 60%),
+    radial-gradient(420px 220px at 100% 0%, color-mix(in srgb, var(--ember) 14%, transparent), transparent 70%);
+}
+.stats-band {
+  background-image: radial-gradient(380px circle at var(--mx, -999px) var(--my, -999px), var(--hl), transparent 60%),
+    radial-gradient(600px 160px at 50% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%);
+}
+.cta-band {
+  background-image: radial-gradient(420px circle at var(--mx, -999px) var(--my, -999px), var(--hl), transparent 60%),
+    radial-gradient(420px 200px at 0% 100%, color-mix(in srgb, var(--ember) 18%, transparent), transparent 70%);
 }

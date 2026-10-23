@@ -811,7 +811,7 @@
   window.addEventListener('resize', syncScroll);
   syncScroll();
   // Свечение под курсором: координаты мыши внутри карточки.
-  const GLOW = '.tile-box, .ev-card, .cat-card, .vcard, .quote, .spot, .feature, .person-card, .panel, .step';
+  const GLOW = '.tile-box, .ev-card, .cat-card, .vcard, .quote, .spot, .feature, .person-card, .step, .story-card, .venue-item, .next-card, .next-strip, .ev-hero, .stats-band, .cta-band, .history-stats > div, .notif, .feed-item, .map-card, .panel';
   let glowEl = null;
   document.addEventListener('pointermove', e => {
     if (e.pointerType !== 'mouse') return;
