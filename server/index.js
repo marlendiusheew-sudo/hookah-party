@@ -30,7 +30,9 @@ const STATIC = {
   '/': ['index.html', 'text/html; charset=utf-8'], '/index.html': ['index.html', 'text/html; charset=utf-8'],
   '/styles.css': ['styles.css', 'text/css; charset=utf-8'], '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
   '/art.js': ['art.js', 'text/javascript; charset=utf-8'], '/map-data.js': ['map-data.js', 'text/javascript; charset=utf-8'],
-  '/.well-known/security.txt': ['.well-known/security.txt', 'text/plain; charset=utf-8']
+  '/.well-known/security.txt': ['.well-known/security.txt', 'text/plain; charset=utf-8'],
+  '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icon-192.png': ['icon-192.png', 'image/png'],
+  '/icon-512.png': ['icon-512.png', 'image/png'], '/apple-touch-icon.png': ['apple-touch-icon.png', 'image/png']
 };
 
 const CSP = ["default-src 'none'", "script-src 'self'", "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'",

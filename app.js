@@ -21,6 +21,8 @@
 
   // Режим: SERVER = true, если сайт открыт с нашего сервера (тогда данные и вход идут через API).
   let SERVER = false, CSRF = null;
+  // Открыт ли сайт внутри iOS-приложения (оно добавляет метку HookahPartyApp к User-Agent).
+  const IN_APP = location.protocol === 'hookah:' || /HookahPartyApp/.test(navigator.userAgent);
 
   // Настройки вида и языка живут только в этом браузере.
   const prefs = {
@@ -865,7 +867,8 @@
           <a href="#/" data-action="info" data-key="rules">${L('Правила сервиса', 'Terms of use')}</a>
           <a href="#/" data-action="info" data-key="privacy">${L('Конфиденциальность', 'Privacy')}</a>
           <a href="#/" data-action="info" data-key="venues">${L('Заведениям', 'For venues')}</a>
-          <a href="#/" data-action="info" data-key="faq">${L('Вопросы и ответы', 'FAQ')}</a></div>
+          <a href="#/" data-action="info" data-key="faq">${L('Вопросы и ответы', 'FAQ')}</a>
+          ${IN_APP ? '' : `<a href="#/" data-action="installApp">${L('Установить приложение', 'Install the app')}</a>`}</div>
         <div class="footer-col"><h4>${L('Контакты', 'Contacts')}</h4>
           <span class="mono">hello@hookahparty.app</span><span class="mono">+996 700 000 000</span>
           <span>Telegram: <span class="mono">@hookahparty</span></span><span class="muted">${L('Ежедневно 12:00–02:00', 'Daily 12:00–02:00')}</span></div>
@@ -2341,6 +2344,10 @@
             <div class="field"><span class="label">${L('Цвет акцента', 'Accent colour')}</span><div class="swatches" role="radiogroup" aria-label="${L('Цвет акцента', 'Accent colour')}">${Object.entries(ACCENTS).map(([k, label]) => `<button role="radio" aria-checked="${accent === k}" class="sw sw-${k} ${accent === k ? 'on' : ''}" data-action="setAccent" data-accent="${k}"><i></i>${tr(label)}</button>`).join('')}</div></div>
           </div>
         </section>
+        <section class="panel" ${IN_APP ? 'hidden' : ''}>
+          <div class="panel-head"><div><h2>${L('Приложение', 'App')}</h2><p class="muted" style="font-size:13.5px;margin-top:4px">${L('Hookah Party можно поставить на экран «Домой»: откроется на весь экран, со своей иконкой.', 'Add Hookah Party to your Home Screen: it opens full screen with its own icon.')}</p></div>
+            <button class="btn btn-sm" type="button" data-action="installApp">${L('Установить', 'Install')}</button></div>
+        </section>
         ${securityPanel(u)}
         <section class="panel" ${SERVER ? 'hidden' : ''}>
           <div class="panel-head"><h2>${L('Демо-данные', 'Demo data')}</h2></div>
@@ -3113,6 +3120,20 @@
     logoutAll() {
       act(null, 'POST', '/auth/logout-all', {}).then(() => { toast(L('Все сессии завершены', 'All sessions ended')); go(''); }, quiet);
     },
+    async installApp() {
+      // Android и компьютеры: системное окно установки. iPhone: инструкция «Поделиться → На экран „Домой“».
+      if (installPrompt) { installPrompt.prompt(); try { await installPrompt.userChoice; } catch (e) { /* закрыли окно */ } installPrompt = null; return; }
+      const standalone = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone;
+      if (standalone) return toast(L('Приложение уже установлено и открыто', 'The app is already installed and open'));
+      const step = (n, t) => `<li><b class="mono">${n}</b><span>${t}</span></li>`;
+      openModal(L('Установить на iPhone', 'Install on iPhone'), `<ol class="install-steps">
+          ${step(1, L('Откройте этот сайт в Safari.', 'Open this site in Safari.'))}
+          ${step(2, L('Нажмите «Поделиться» — квадрат со стрелкой вверх внизу экрана.', 'Tap Share — the square with an arrow at the bottom of the screen.'))}
+          ${step(3, L('Выберите «На экран „Домой“» и нажмите «Добавить».', 'Choose “Add to Home Screen” and tap Add.'))}
+        </ol>
+        <p class="muted">${L('На Android: меню Chrome (⋮) → «Установить приложение».', 'On Android: Chrome menu (⋮) → “Install app”.')}</p>
+        <div class="modal-foot"><button class="btn btn-primary" type="button" data-action="closeModal">${L('Понятно', 'Got it')}</button></div>`);
+    },
     clearSecLog() { secWrite(SEC_LOG, []); render(); },
     reset() { db = withStories(seed()); save(); toast(L('Демо-данные восстановлены', 'Demo data restored')); go(''); },
     info({ key }) {
@@ -3183,6 +3204,8 @@
   toTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
   document.body.append(toTop);
   window.addEventListener('scroll', () => { toTop.hidden = window.scrollY < 700; toTop.setAttribute('aria-label', L('Наверх', 'Back to top')); }, { passive: true });
+  let installPrompt = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; });
   window.addEventListener('hashchange', route);
   // На сервере раз в минуту подтягиваем новые уведомления, пока вкладка на экране.
   setInterval(async () => {

@@ -53,12 +53,29 @@ node server/admin.js list                   # список администра�
 - `TRUST_PROXY=1`, если сервер стоит за nginx или Cloudflare;
 - примеры настроек — в папке `deploy/` (systemd и nginx с HTTPS и ограничением частоты).
 
+## Приложение для iPhone
+
+**Без App Store, прямо сейчас.** Откройте сайт в Safari → «Поделиться» → «На экран „Домой“». Сайт откроется на весь экран со своей иконкой. Этой ссылкой можно делиться: https://marlendiusheew-sudo.github.io/hookah-party/
+
+**Нативное приложение** — папка `ios/` (SwiftUI + WKWebView). Сайт встроен в приложение и работает без интернета в демо-режиме; если в `ios/HookahParty/Info.plist` указать `HPServerURL` (адрес сервера на https), приложение работает с настоящими данными. Ссылки на карты открываются в приложениях, календарь — через «Поделиться», обновление — потянуть экран вниз.
+
+```
+ios/build.sh sim              # собрать и открыть в симуляторе (подпись не нужна)
+ios/build.sh ipa ВАШ_TEAM_ID  # подписанный .ipa для TestFlight / App Store
+```
+
+- **На свой iPhone:** откройте `ios/HookahParty.xcodeproj` в Xcode → Settings → Accounts → войдите с Apple ID → у цели HookahParty выберите Team → подключите iPhone → Run. С бесплатным Apple ID приложение работает 7 дней, потом нужно поставить заново.
+- **Раздать другим:** нужна программа Apple Developer (99 $ в год). Затем `ios/build.sh ipa TEAM_ID` и загрузка в App Store Connect → TestFlight: друзья ставят приложение по ссылке-приглашению.
+- **Неподписанный .ipa** собирается так же, как для iPhone, но с `CODE_SIGNING_ALLOWED=NO`; поставить его можно только после подписи своим Apple ID (например, через Sideloadly).
+
 ## Файлы
 
 - `index.html` — разметка, шапка и подвал
 - `styles.css` — стили, светлая и тёмная тема
 - `app.js` — данные, вход, сборы, каталог, карта, переводы `L('рус', 'eng')`
 - `server/` — сервер: `index.js` (HTTP, заголовки, сессии, CSRF), `lib/api.js` (все действия и проверка прав), `lib/db.js` (схема SQLite), `lib/secure.js` (Argon2id, шифрование AES-256-GCM, токены), `lib/guard.js` (лимиты и журнал), `lib/sms.js` (провайдеры SMS)
+- `ios/` — приложение для iPhone (проект Xcode, иконка, экран запуска, `build.sh`)
+- `manifest.webmanifest`, `icon-*.png` — установка сайта на экран «Домой»
 - `art.js` — иллюстрации вкусов табака (SVG, рисуются кодом; набор предметов — поле `art` у табака)
 - `map-data.js` — подложка карты и заведения (© участники OpenStreetMap, ODbL)
 

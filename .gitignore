@@ -3,3 +3,7 @@ dist/
 node_modules/
 server/data/
 .env
+ios/build/
+ios/build-export.plist
+*.xcuserstate
+xcuserdata/

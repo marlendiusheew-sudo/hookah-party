@@ -78,6 +78,8 @@
   color-scheme: light;
 }
 
+/* Отступ под вырез экрана и строку состояния (в приложении и при запуске с экрана «Домой») */
+:root { padding-top: env(safe-area-inset-top, 0px); }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
@@ -1497,3 +1499,6 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 #adm-body { display: grid; gap: 16px; min-width: 0; }
 #adm-body > .utabs-wrap { margin-bottom: 0; }
 #adm-body .adm-stats { margin-bottom: 0; }
+.install-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.install-steps li { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; }
+.install-steps b { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--smoke); color: var(--accent); flex: none; }
