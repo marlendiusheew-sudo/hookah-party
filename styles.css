@@ -1382,3 +1382,25 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 .emoji-pop:not(:has(.ep-title)) .ep-grid { display: flex; gap: 2px; }
 .emoji-pop:not(:has(.ep-title)) .ep-grid button { width: 38px; height: 38px; border-radius: 50%; padding: 0; }
 .story-form .cf-box textarea { background: var(--surface); }
+
+/* ================= Безопасность ================= */
+.sec-note { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--muted); }
+.sec-note svg, .sec-rules svg { width: 16px; height: 16px; stroke: var(--ok); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; margin-top: 1px; }
+.pass-meter { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 4px; }
+.pass-meter i { height: 4px; border-radius: 2px; background: var(--line); transition: background .2s; }
+.pass-meter[data-score="0"] i:nth-child(1) { background: var(--danger); }
+.pass-meter[data-score="1"] i:nth-child(-n+1), .pass-meter[data-score="2"] i:nth-child(-n+2) { background: var(--warn); }
+.pass-meter[data-score="3"] i { background: var(--ok); }
+.sec-rules { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 8px; font-size: 13.5px; }
+.sec-rules li { display: flex; gap: 9px; align-items: flex-start; }
+.sec-log-head { display: flex; justify-content: space-between; align-items: center; padding-top: 14px; border-top: 1px solid var(--line); margin-bottom: 8px; }
+.sec-log { list-style: none; margin: 0; padding: 0; display: grid; }
+.sec-log li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; font-size: 13px; }
+.sec-log li + li { border-top: 1px dashed var(--line); }
+.sec-log i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.sec-log li.ok i { background: var(--ok); }
+.sec-log li.warn i { background: var(--warn); }
+.sec-log li.bad i { background: var(--danger); }
+.sec-log span { display: grid; min-width: 0; }
+.sec-log small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sec-log time { color: var(--muted); font-size: 11.5px; }

@@ -25,6 +25,134 @@
     set(k, v) { try { localStorage.setItem('hp.' + k, v); } catch (e) { /* хранилище недоступно */ } }
   };
 
+  // ================= Безопасность (клиентская часть) =================
+  // Всё здесь — защита на стороне браузера. Когда появится сервер, те же правила нужно повторить на нём:
+  // браузерные проверки можно обойти, серверные — нет.
+
+  // Журнал событий безопасности (последние 100), виден в профиле → Настройки → Безопасность.
+  const SEC_LOG = 'hp.sec.log';
+  function secRead(key, d) { try { return JSON.parse(localStorage.getItem(key)) ?? d; } catch (e) { return d; } }
+  function secWrite(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* хранилище недоступно */ } }
+  function secLog(type, detail = '') {
+    const log = secRead(SEC_LOG, []);
+    log.unshift({ type, detail: String(detail).slice(0, 160), at: new Date().toISOString() });
+    secWrite(SEC_LOG, log.slice(0, 100));
+  }
+
+  // Фильтр разметки: вырезает опасные теги, обработчики событий и ссылки javascript:.
+  // Пользовательский текст до сюда доходит уже экранированным (esc), поэтому фильтр — второй рубеж защиты.
+  const BAD_BLOCKS = /<\s*(script|iframe|object|embed|template|noscript|style)\b[\s\S]*?<\s*\/\s*\1\s*>/gi;
+  const BAD_TAGS = /<\s*\/?\s*(script|iframe|object|embed|base|meta|link|frame|frameset|template|noscript|style)\b[^>]*>/gi;
+  const BAD_ATTR = /\s(on[a-z]+|formaction|srcdoc)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi;
+  const BAD_URL = /(\s(?:href|src|action|xlink:href)\s*=\s*)(["'])\s*(?:javascript|vbscript|data:(?!image\/(?:png|jpe?g|webp|gif);))[^"']*\2/gi;
+  let blockedCount = 0;
+  function sanitizeHTML(html) {
+    const src = String(html);
+    if (!/[<]/.test(src)) return src;
+    let hit = '';
+    const cut = m => { hit ||= m.slice(0, 40); return ''; };
+    const out = src.replace(BAD_BLOCKS, cut).replace(BAD_TAGS, cut)
+      .replace(/<[a-zA-Z][^>]*>/g, tag => tag
+        .replace(BAD_ATTR, m => { hit ||= m.trim().slice(0, 40); return ''; })
+        .replace(BAD_URL, (m, a, q) => { hit ||= m.trim().slice(0, 40); return `${a}${q}#${q}`; }));
+    if (hit && blockedCount++ < 20) { secLog('html_blocked', hit); console.warn('Hookah Party: заблокирован опасный фрагмент разметки', hit); }
+    return out;
+  }
+  // Trusted Types (Chrome, Edge): браузер пропускает в разметку только то, что прошло через фильтр.
+  // В остальных браузерах тот же фильтр встроен в установку innerHTML.
+  (() => {
+    try {
+      if (window.trustedTypes?.createPolicy) { window.trustedTypes.createPolicy('default', { createHTML: sanitizeHTML }); return; }
+      const d = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+      if (d?.set) Object.defineProperty(Element.prototype, 'innerHTML', { ...d, set(v) { d.set.call(this, sanitizeHTML(v)); } });
+    } catch (e) { /* политика уже создана или браузер не позволяет */ }
+  })();
+  document.addEventListener('securitypolicyviolation', e => secLog('csp', `${e.violatedDirective} ${e.blockedURI || ''}`.trim()));
+
+  // Очистка ввода: невидимые и управляющие символы, «переворот» текста, лишние пробелы, длина.
+  function clean(s, max = 500, multiline = false) {
+    let t = String(s ?? '').normalize('NFC')
+      .replace(/[​-‏‪-‮⁦-⁩﻿]/g, '')
+      .replace(multiline ? /[\u0000-\u0009\u000B-\u001F\u007F]/g : /[\u0000-\u001F\u007F]/g, '');
+    t = multiline ? t.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n') : t.replace(/\s+/g, ' ');
+    return t.trim().slice(0, max);
+  }
+  const validName = s => /^[\p{L}\p{M}][\p{L}\p{M}\s'’.-]{1,39}$/u.test(s);
+  const safeUrl = u => /^https?:\/\/[^\s"'<>]+\.[^\s"'<>]+$/i.test(String(u || '')) ? String(u) : '';
+  const safeAvatar = u => /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/.test(String(u || '')) && String(u).length < 400000 ? u : null;
+
+  // Ограничение частоты для чувствительных действий (вход, SMS, регистрация) — хранится в браузере.
+  function rateHit(key, max, windowMs, consume = true) {
+    const all = secRead('hp.sec.rl', {}), now = Date.now();
+    const list = (all[key] || []).filter(t => now - t < windowMs);
+    if (list.length >= max) { all[key] = list; secWrite('hp.sec.rl', all); return { ok: false, wait: list[0] + windowMs - now }; }
+    if (consume) list.push(now);
+    all[key] = list; secWrite('hp.sec.rl', all);
+    return { ok: true, left: max - list.length };
+  }
+  const SEC = {
+    authPerHour: 17,          // попытки входа и отправки SMS с этого устройства за час
+    failsBeforeLock: 5,       // неверных паролей подряд до блокировки номера
+    lockMs: 5 * 60e3,         // блокировка на 5 минут
+    smsPer10Min: 3,           // кодов на один номер за 10 минут
+    codeTtlMs: 5 * 60e3,      // код из SMS действует 5 минут
+    codeAttempts: 5,          // попыток ввести код
+    accountsPerDevice: 3,     // аккаунтов, созданных с одного устройства (аналог «3 с одного IP»)
+    sessionDays: 30           // сессия истекает через 30 дней
+  };
+  const waitText = ms => { const m = Math.ceil(ms / 60000); return m >= 60 ? L(`${Math.ceil(m / 60)} ч`, `${Math.ceil(m / 60)} h`) : L(`${m} мин`, `${m} min`); };
+
+  // Пароли: PBKDF2-SHA256, 150 000 итераций, своя соль у каждого пользователя (Web Crypto).
+  // На сервере вместо этого будет Argon2id.
+  const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  const hasSubtle = () => !!(window.crypto?.subtle && window.isSecureContext !== false);
+  async function pbkdf2(pass, salt) {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveBits']);
+    return b64(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 150000 }, key, 256));
+  }
+  async function makePass(pass) {
+    if (!hasSubtle()) return hashPass(pass);
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    return { alg: 'pbkdf2-sha256', it: 150000, salt: b64(salt), hash: await pbkdf2(pass, salt) };
+  }
+  // Сравнение без раннего выхода, чтобы время проверки не подсказывало совпадения.
+  const sameStr = (a, b) => { if (a.length !== b.length) return false; let r = 0; for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i); return r === 0; };
+  async function checkPass(user, pass) {
+    const rec = user.pass;
+    if (typeof rec === 'string') {
+      // Старый демо-хэш: при успешном входе сразу переводим на PBKDF2.
+      if (!sameStr(rec, hashPass(pass))) return false;
+      if (hasSubtle()) { user.pass = await makePass(pass); save(); }
+      return true;
+    }
+    if (!rec?.salt || !hasSubtle()) return false;
+    return sameStr(await pbkdf2(pass, unb64(rec.salt)), rec.hash);
+  }
+  // Надёжность пароля: 0 — слабый, 3 — надёжный.
+  const COMMON = ['password', 'qwerty', '123456', '12345678', '123456789', 'qwerty123', '11111111', 'hookah', 'hookah123', 'parol', 'bishkek'];
+  function passIssues(pass, phone = '') {
+    const p = String(pass), low = p.toLowerCase();
+    if (p.length < 8) return L('Пароль должен быть не короче 8 символов.', 'The password must be at least 8 characters.');
+    if (!/\p{L}/u.test(p) || !/\d/.test(p)) return L('Добавьте в пароль и буквы, и цифры.', 'Use both letters and digits.');
+    if (COMMON.some(c => low.includes(c))) return L('Этот пароль слишком простой, его легко подобрать.', 'This password is too common and easy to guess.');
+    if (phone && digits(p).length >= 6 && digits(phone).includes(digits(p))) return L('Не используйте номер телефона как пароль.', 'Do not use your phone number as a password.');
+    return '';
+  }
+  function passScore(p) {
+    let s = 0;
+    if (p.length >= 8) s++;
+    if (p.length >= 12) s++;
+    if (/[a-zа-яё]/.test(p) && /[A-ZА-ЯЁ]/.test(p)) s++;
+    if (/\d/.test(p) && /[^\p{L}\d]/u.test(p)) s++;
+    return Math.min(3, s);
+  }
+
+  // Защита от встраивания сайта в чужие страницы (на GitHub Pages нельзя задать заголовок frame-ancestors).
+  if (window.top !== window.self && /(^|\.)github\.io$/.test(location.hostname)) {
+    try { window.top.location = window.self.location.href; } catch (e) { document.documentElement.style.display = 'none'; }
+  }
+
   // ---------- Язык ----------
   let lang = prefs.get('lang', 'ru') === 'en' ? 'en' : 'ru';
   const L = (ru, en) => lang === 'en' ? en : ru;
@@ -138,7 +266,8 @@
     home: svg('<path d="M4 11l8-7 8 7M6 9.5V20h12V9.5M10 20v-5h4v5"/>'),
     hookah: svg('<path d="M9 4h6l-1.2 3h-3.6zM12 7v6M9.5 9.5h5M12 13c-3.2 0-5 2.2-5 4.4C7 19.4 9 20.5 12 20.5s5-1.1 5-3.1c0-2.2-1.8-4.4-5-4.4zM14.5 11c3 0 5.5 1.4 6 4.5"/>'),
     mail: svg('<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 8l9 6 9-6"/>'),
-    list: svg('<path d="M4 6h16M4 12h16M4 18h10"/>')
+    list: svg('<path d="M4 6h16M4 12h16M4 18h10"/>'),
+    shield: svg('<path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6z"/><path d="M9 12l2 2 4-4"/>')
   };
 
   // ---------- Каталог ----------
@@ -234,10 +363,12 @@
 
   // ---------- Хранилище (демо) ----------
   const KEY = 'hookahparty.v2';
+  // PBKDF2-SHA256 от демо-пароля «hookah» (соль общая только у тестовых пользователей).
+  const DEMO_PASS = { alg: 'pbkdf2-sha256', it: 150000, salt: 'aG9va2FoLXBhcnR5LWRlbW8tc2FsdC12MQ==', hash: 'ZwP6viAssMvtj69J3eu80BsrY0tOpQfbwK/XW8Zu6S8=' };
   function seed() {
     const day = 864e5, at = (d, h, m = 0) => { const x = new Date(Date.now() + d * day); x.setHours(h, m, 0, 0); return x.toISOString(); };
     const ago = mins => new Date(Date.now() - mins * 60000).toISOString();
-    const u = (id, name, phone, extra = {}) => ({ id, name, phone, pass: hashPass('hookah'), verified: true, avatar: null, favs: [], friends: [], favVenue: '', createdAt: ago(60 * 24 * 40), ...extra });
+    const u = (id, name, phone, extra = {}) => ({ id, name, phone, pass: { ...DEMO_PASS }, verified: true, avatar: null, favs: [], friends: [], favVenue: '', createdAt: ago(60 * 24 * 40), ...extra });
     const V = id => venueById(id) || { name: 'Hookah', addr: '' };
     const savor = V('n4270648990'), holy = V('n6360868686'), hydra = V('n12870025414');
     return {
@@ -384,7 +515,26 @@
     d.mixes ||= s.mixes;
     return d;
   }
-  function load() { try { const raw = localStorage.getItem(KEY); if (raw) return migrate(JSON.parse(raw)); } catch (e) { /* хранилище недоступно */ } return null; }
+  // Загрузка с проверкой: отбрасываем опасные ключи (__proto__), чиним формат, проверяем аватары и ссылки.
+  function load() {
+    let raw = null;
+    try { raw = localStorage.getItem(KEY); } catch (e) { return null; }
+    if (!raw) return null;
+    try {
+      const d = JSON.parse(raw, (k, v) => (k === '__proto__' || k === 'constructor' || k === 'prototype') ? undefined : v);
+      if (!d || !Array.isArray(d.users) || !Array.isArray(d.events)) throw new Error('bad shape');
+      d.users = d.users.filter(u => u && typeof u.id === 'string' && typeof u.phone === 'string');
+      d.users.forEach(u => { u.avatar = safeAvatar(u.avatar); u.name = clean(u.name, 40) || '—'; });
+      d.events = d.events.filter(e => e && typeof e.id === 'string' && Array.isArray(e.invites));
+      d.events.forEach(e => { e.mapUrl = safeUrl(e.mapUrl); });
+      if (d.session && d.sessionExp && Date.now() > d.sessionExp) { d.session = null; secLog('session_expired'); }
+      if (d.session && !d.sessionExp) d.sessionExp = Date.now() + 30 * 864e5;
+      return migrate(d);
+    } catch (e) {
+      secLog('storage_repaired', String(e.message || e));
+      return null;
+    }
+  }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { /* хранилище недоступно */ } }
   let db = load() || withStories(seed());
 
@@ -430,7 +580,7 @@
   function avatar(u, size = '') {
     const cls = `av ${size ? 'av-' + size : ''}`;
     if (!u) return `<span class="${cls} av-ghost">?</span>`;
-    if (u.avatar) return `<img class="${cls}" src="${u.avatar}" alt="${esc(u.name)}">`;
+    if (safeAvatar(u.avatar)) return `<img class="${cls}" src="${u.avatar}" alt="${esc(u.name)}">`;
     return `<span class="${cls}" style="--h:${hashStr(u.id) % 360}" title="${esc(u.name)}">${esc(initials(u.name))}</span>`;
   }
   function avatarStack(ids, max = 5, size = 'sm') {
@@ -671,7 +821,7 @@
       <div class="wrap footer-bottom">
         <span>© 2026 Hookah Party</span><span class="age">18+</span>
         <span>${L('Курение вредит вашему здоровью. Сервис предназначен только для совершеннолетних.', 'Smoking harms your health. This service is for adults only.')}</span>
-        <span>${L('Карта', 'Map')}: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a></span>
+        <span>${L('Карта', 'Map')}: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap</a></span>
       </div>`;
     $$('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === page));
     seasonRibbon();
@@ -801,7 +951,7 @@
       <div class="map-card" hidden></div>
       <div class="map-hint" hidden>${L('Чтобы приблизить, зажмите Ctrl (⌘) и крутите колесо', 'Hold Ctrl (⌘) and scroll to zoom')}</div>
       <div class="map-legend" aria-hidden="true"><span><i class="lg-open"></i>${L('Открыто', 'Open')}</span><span><i class="lg-closed"></i>${L('Закрыто', 'Closed')}</span><span><i class="lg-unknown"></i>${L('Часы не указаны', 'Hours unknown')}</span></div>
-      <a class="map-attr" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>
+      <a class="map-attr" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap</a>
     </div>`;
   }
   const maps = {};
@@ -817,8 +967,8 @@
         ${v.phone ? `<li>${ICON.phone}<span class="mono">${esc(fmtPhone(v.phone))}</span></li>` : ''}
       </ul>
       <div class="map-links">
-        <a class="maplink ml-google" href="${gmapsUrl(v)}" target="_blank" rel="noopener"><span class="ml-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 22s-7-6.6-7-12a7 7 0 0 1 14 0c0 5.4-7 12-7 12z"/><circle cx="12" cy="10" r="2.6"/></svg></span>Google ${L('Карты', 'Maps')}</a>
-        <a class="maplink ml-2gis" href="${gisUrl(v)}" target="_blank" rel="noopener"><span class="ml-ic" aria-hidden="true">2</span>2ГИС</a>
+        <a class="maplink ml-google" href="${gmapsUrl(v)}" target="_blank" rel="noopener noreferrer"><span class="ml-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 22s-7-6.6-7-12a7 7 0 0 1 14 0c0 5.4-7 12-7 12z"/><circle cx="12" cy="10" r="2.6"/></svg></span>Google ${L('Карты', 'Maps')}</a>
+        <a class="maplink ml-2gis" href="${gisUrl(v)}" target="_blank" rel="noopener noreferrer"><span class="ml-ic" aria-hidden="true">2</span>2ГИС</a>
       </div>
       <button class="btn btn-primary btn-sm" type="button" data-action="gatherHere" data-vid="${v.id}">${ICON.plus}${L('Собрать друзей здесь', 'Gather friends here')}</button>`;
   }
@@ -839,6 +989,7 @@
       v.x = Math.max(-mx, Math.min(v.x, MAP.w + mx - v.w)); v.y = Math.max(-my, Math.min(v.y, MAP.h + my - v.h));
     }
     function apply() {
+      if (el.clientWidth < 10 || el.clientHeight < 10) return; // карта ещё не на экране
       clamp();
       const v = st.vb, s = unit();
       sv.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
@@ -868,6 +1019,7 @@
     }
     el.addEventListener('click', e => { const n = e.target.closest('.map-name'); if (n) select(n.dataset.vid); });
     function fit() {
+      if (el.clientWidth < 10 || el.clientHeight < 10) return;
       // Сначала примерный масштаб, затем запас под высоту меток и подписи справа.
       const a = aspect(), cw = Math.max(el.clientWidth, 1);
       let w = Math.max(box.x1 - box.x0, (box.y1 - box.y0) / a, 200) * 1.25;
@@ -1443,9 +1595,9 @@
         </div>
         <div class="btn-row">
           ${v ? `<button class="btn btn-sm" data-action="showVenue" data-vid="${v.id}">${ICON.home}${L('На нашей карте', 'On our map')}</button>` : ''}
-          <a class="btn btn-sm" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}" target="_blank" rel="noopener">${ICON.pin}Google ${L('Карты', 'Maps')}</a>
-          <a class="btn btn-sm" href="https://2gis.kg/bishkek/search/${encodeURIComponent(e.venue)}${v ? `?m=${v.lon},${v.lat}/18` : ''}" target="_blank" rel="noopener">${ICON.pin}2ГИС</a>
-          ${e.mapUrl ? `<a class="btn btn-sm" href="${esc(e.mapUrl)}" target="_blank" rel="noopener">${ICON.ext}${L('Сайт заведения', 'Venue website')}</a>` : ''}
+          <a class="btn btn-sm" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">${ICON.pin}Google ${L('Карты', 'Maps')}</a>
+          <a class="btn btn-sm" href="https://2gis.kg/bishkek/search/${encodeURIComponent(e.venue)}${v ? `?m=${v.lon},${v.lat}/18` : ''}" target="_blank" rel="noopener noreferrer">${ICON.pin}2ГИС</a>
+          ${safeUrl(e.mapUrl) ? `<a class="btn btn-sm" href="${esc(safeUrl(e.mapUrl))}" target="_blank" rel="noopener noreferrer">${ICON.ext}${L('Сайт заведения', 'Venue website')}</a>` : ''}
           ${!past ? `<button class="btn btn-sm ${reminded ? 'btn-on' : ''}" data-action="toggleRemind" data-id="${e.id}" aria-pressed="${reminded}">${ICON.bell}${reminded ? L('Напомним за час', 'Reminder on') : L('Напомнить за час', 'Remind me 1 h before')}</button>
           <button class="btn btn-sm" data-action="ics" data-id="${e.id}">${ICON.cal}${L('В календарь', 'Add to calendar')}</button>` : ''}
         </div>
@@ -1496,8 +1648,8 @@
 
     $('#story-form')?.addEventListener('submit', ev => {
       ev.preventDefault();
-      const rating = +($('input[name=st-star]:checked')?.value || 0), text = $('#st-text').value.trim();
-      const highlights = $('#st-hl').value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 3);
+      const rating = +($('input[name=st-star]:checked')?.value || 0), text = clean($('#st-text').value, 600, true);
+      const highlights = $('#st-hl').value.split('\n').map(x => clean(x, 80)).filter(Boolean).slice(0, 3);
       if (!rating) return void ($('#st-err').textContent = L('Оцените вечер от 1 до 5 звёзд.', 'Rate the evening from 1 to 5 stars.'));
       if (text.length < 20) return void ($('#st-err').textContent = L('Напишите хотя бы пару предложений: что курили и как было.', 'Write at least a couple of sentences: what you smoked and how it was.'));
       e.story = { rating, text, highlights, at: new Date().toISOString(), fire: [], comments: [] };
@@ -1506,7 +1658,7 @@
     const form = $('#comment-form'), ta = $('#comment-text');
     form.addEventListener('submit', ev => {
       ev.preventDefault();
-      const text = ta.value.trim();
+      const text = clean(ta.value, 500, true);
       if (!text) return;
       const q = chatQuota(e, u);
       if (!q.ok) { toast(L('Сейчас отправить нельзя: сработало ограничение на сообщения', 'You can’t send right now: message limit reached'), 'err'); render(); return; }
@@ -1727,7 +1879,7 @@
       ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; });
       f.addEventListener('submit', ev => {
         ev.preventDefault();
-        const e = eventById(f.dataset.story), text = ta.value.trim();
+        const e = eventById(f.dataset.story), text = clean(ta.value, 300, true);
         if (!e || !text) return;
         if (myStoryCommentToday(e, u)) { toast(L('Сегодня вы уже комментировали этот вечер', 'You have already commented on this evening today'), 'err'); return; }
         if (myRecentMessages(u).length >= LIMITS.global) { toast(L(`Лимит: ${LIMITS.global} ${plural(LIMITS.global, 'сообщение', 'сообщения', 'сообщений')} за 7 часов. Попробуйте позже.`, `Limit: ${LIMITS.global} messages per 7 hours. Try again later.`), 'err'); return; }
@@ -1865,7 +2017,7 @@
         ev.preventDefault();
         const rating = +($('input[name=rv-star]:checked', m)?.value || 0);
         if (!rating) { $('#rv-err', m).textContent = L('Поставьте оценку от 1 до 5 звёзд.', 'Give a rating from 1 to 5 stars.'); return; }
-        const text = $('#rv-text', m).value.trim();
+        const text = clean($('#rv-text', m).value, 400, true);
         if (mine) Object.assign(mine, { rating, text, at: new Date().toISOString() });
         else db.reviews.push({ id: uid('r'), tobaccoId: id, userId: u.id, rating, text, at: new Date().toISOString() });
         save(); toast(L('Спасибо за отзыв', 'Thanks for the review')); render(); openTobacco(id);
@@ -1985,6 +2137,7 @@
             <div class="field"><span class="label">${L('Цвет акцента', 'Accent colour')}</span><div class="swatches" role="radiogroup" aria-label="${L('Цвет акцента', 'Accent colour')}">${Object.entries(ACCENTS).map(([k, label]) => `<button role="radio" aria-checked="${accent === k}" class="sw sw-${k} ${accent === k ? 'on' : ''}" data-action="setAccent" data-accent="${k}"><i></i>${tr(label)}</button>`).join('')}</div></div>
           </div>
         </section>
+        ${securityPanel(u)}
         <section class="panel">
           <div class="panel-head"><h2>${L('Демо-данные', 'Demo data')}</h2></div>
           <p class="muted" style="margin-bottom:14px">${L('Все данные этого шаблона хранятся в вашем браузере. Сброс вернёт тестовых пользователей, сборы, отзывы и миксы.', 'All template data lives in your browser. Resetting restores the test users, events, reviews and mixes.')}</p>
@@ -2015,10 +2168,40 @@
       </div>`;
     $('#profile-form')?.addEventListener('submit', ev => {
       ev.preventDefault();
-      const name = $('#pf-name').value.trim();
-      if (name.length < 2) { $('#pf-err').textContent = L('Имя должно быть не короче двух букв.', 'The name must be at least two letters.'); return; }
-      u.name = name; u.favVenue = $('#pf-venue').value.trim(); save(); toast(L('Профиль сохранён', 'Profile saved')); render();
+      const name = clean($('#pf-name').value, 40);
+      if (!validName(name)) { $('#pf-err').textContent = L('Укажите имя буквами: от 2 до 40 символов.', 'Enter a name using letters: 2 to 40 characters.'); return; }
+      u.name = name; u.favVenue = clean($('#pf-venue').value, 60); save(); toast(L('Профиль сохранён', 'Profile saved')); render();
     });
+  }
+
+  // Панель «Безопасность»: сессия, правила защиты, журнал событий.
+  const SEC_EVENTS = {
+    login_ok: ['Вход в аккаунт', 'Signed in', 'ok'], login_fail: ['Неверный пароль', 'Wrong password', 'warn'], lockout: ['Номер временно заблокирован', 'Number temporarily locked', 'bad'],
+    logout: ['Выход из аккаунта', 'Signed out', ''], register: ['Создан аккаунт', 'Account created', 'ok'], sms_sent: ['Отправлен код', 'Code sent', ''],
+    sms_fail: ['Неверный код', 'Wrong code', 'warn'], rate_limited: ['Сработало ограничение частоты', 'Rate limit hit', 'warn'], html_blocked: ['Заблокирован опасный фрагмент', 'Dangerous markup blocked', 'bad'],
+    csp: ['Браузер заблокировал запрос (CSP)', 'Browser blocked a request (CSP)', 'bad'], bad_url: ['Подозрительная ссылка', 'Suspicious link', 'bad'],
+    session_expired: ['Сессия истекла', 'Session expired', ''], storage_repaired: ['Данные восстановлены после ошибки', 'Data repaired after an error', 'warn']
+  };
+  function securityPanel(u) {
+    const log = secRead(SEC_LOG, []).slice(0, 12), dt = t => `${fShort(new Date(t))}, ${fTime(new Date(t))}`;
+    const rules = [
+      L(`Политика безопасности браузера (CSP): скрипты только с этого сайта, без встроенного кода`, `Browser security policy (CSP): scripts only from this site, no inline code`),
+      L('Фильтр разметки и экранирование всего, что вводят пользователи', 'Markup filter and escaping of everything users type'),
+      L(`Пароли хранятся хэшем PBKDF2 (150 000 итераций)`, `Passwords are stored as PBKDF2 hashes (150,000 iterations)`),
+      L(`${SEC.failsBeforeLock} неверных паролей — блокировка номера на 5 минут`, `${SEC.failsBeforeLock} wrong passwords lock the number for 5 minutes`),
+      L(`Не больше ${SEC.authPerHour} попыток входа и SMS в час, ${SEC.smsPer10Min} кодов на номер за 10 минут`, `At most ${SEC.authPerHour} sign-in and SMS attempts per hour, ${SEC.smsPer10Min} codes per number per 10 minutes`),
+      L(`Не больше ${SEC.accountsPerDevice} аккаунтов с одного устройства`, `At most ${SEC.accountsPerDevice} accounts per device`),
+      L('Лимиты сообщений: раз в 3 минуты, 10 в сборе за сутки, 144 за 7 часов', 'Message limits: one per 3 minutes, 10 per event per day, 144 per 7 hours')
+    ];
+    return `<section class="panel sec-panel">
+      <div class="panel-head"><div><h2>${L('Безопасность', 'Security')}</h2>
+        <p class="muted" style="font-size:13.5px;margin-top:4px">${L('Сессия', 'Session')}: ${db.sessionAt ? `${L('вход', 'since')} ${dt(db.sessionAt)} · ` : ''}${L('действует до', 'valid until')} ${dt(db.sessionExp || Date.now())}</p></div>
+        <button class="btn btn-sm" data-action="logout">${L('Завершить сессию', 'End session')}</button></div>
+      <ul class="sec-rules">${rules.map(r => `<li>${ICON.shield}<span>${r}</span></li>`).join('')}</ul>
+      <div class="sec-log-head"><b>${L('Журнал безопасности', 'Security log')}</b>${log.length ? `<button class="link-btn" type="button" data-action="clearSecLog">${L('Очистить', 'Clear')}</button>` : ''}</div>
+      ${log.length ? `<ul class="sec-log">${log.map(x => { const ev = SEC_EVENTS[x.type] || [x.type, x.type, '']; return `<li class="${ev[2]}"><i></i><span><b>${L(ev[0], ev[1])}</b>${x.detail ? `<small>${esc(x.detail)}</small>` : ''}</span><time class="mono">${dt(x.at)}</time></li>`; }).join('')}</ul>`
+        : `<p class="muted">${L('Событий пока нет.', 'No events yet.')}</p>`}
+    </section>`;
   }
 
   // ---------- Вход и регистрация ----------
@@ -2029,25 +2212,56 @@
     mode === 'register' ? renderRegister(card) : renderLogin(card);
   }
   const phonePh = '+996 700 123 456';
+  // Блокировка номера после серии неверных паролей.
+  function lockLeft(phone) { const f = secRead('hp.sec.fails', {})[phone]; return f?.until > Date.now() ? f.until - Date.now() : 0; }
+  function failLogin(phone) {
+    const all = secRead('hp.sec.fails', {}), now = Date.now();
+    const f = all[phone] && !(all[phone].until && all[phone].until <= now) ? all[phone] : { n: 0 };
+    f.n = (f.n || 0) + 1;
+    if (f.n >= SEC.failsBeforeLock) { all[phone] = { n: 0, until: now + SEC.lockMs }; secWrite('hp.sec.fails', all); secLog('lockout', maskedPhone(phone)); return 0; }
+    all[phone] = f; secWrite('hp.sec.fails', all);
+    return SEC.failsBeforeLock - f.n;
+  }
+  function clearFails(phone) { const all = secRead('hp.sec.fails', {}); delete all[phone]; secWrite('hp.sec.fails', all); }
+  const secureCode = () => String(1000 + (crypto.getRandomValues ? crypto.getRandomValues(new Uint32Array(1))[0] % 9000 : Math.floor(Math.random() * 9000)));
+
   function renderLogin(card) {
     card.innerHTML = `
       <div><span class="eyebrow">${L('Вход', 'Sign in')}</span><h1 style="margin-top:8px">${L('С возвращением', 'Welcome back')}</h1></div>
       <form class="form" id="login-form" novalidate>
-        <div class="field"><label for="lg-phone">${L('Номер телефона', 'Phone number')}</label><input id="lg-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="${phonePh}"></div>
-        <div class="field"><label for="lg-pass">${L('Пароль', 'Password')}</label><input id="lg-pass" type="password" autocomplete="current-password"></div>
-        <div class="error" id="lg-err"></div>
-        <button class="btn btn-primary" type="submit">${L('Войти', 'Sign in')}</button>
+        <div class="field"><label for="lg-phone">${L('Номер телефона', 'Phone number')}</label><input id="lg-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="${phonePh}"></div>
+        <div class="field"><label for="lg-pass">${L('Пароль', 'Password')}</label><input id="lg-pass" type="password" autocomplete="current-password" maxlength="128"></div>
+        <div class="error" id="lg-err" role="alert"></div>
+        <button class="btn btn-primary" type="submit" id="lg-go">${L('Войти', 'Sign in')}</button>
         <button class="btn" type="button" id="lg-sms">${L('Войти по SMS-коду', 'Sign in with an SMS code')}</button>
       </form>
       <div class="hint">${L('Демо-аккаунт', 'Demo account')}: <span class="mono">+996 700 000 001</span>, ${L('пароль', 'password')} <b>hookah</b></div>
+      <p class="sec-note">${ICON.shield}${L(`Защита входа: ${SEC.failsBeforeLock} неверных попыток — блокировка на 5 минут, не больше ${SEC.authPerHour} попыток в час с устройства.`, `Sign-in protection: ${SEC.failsBeforeLock} wrong attempts lock the number for 5 minutes, at most ${SEC.authPerHour} attempts per hour from a device.`)}</p>
       <p class="muted" style="text-align:center">${L('Нет аккаунта?', 'No account?')} <a href="#/register" style="color:var(--accent)">${L('Зарегистрируйтесь', 'Sign up')}</a></p>`;
     maskPhone($('#lg-phone'));
-    const err = $('#lg-err');
-    $('#login-form').addEventListener('submit', ev => {
+    const err = $('#lg-err'), go1 = $('#lg-go');
+    $('#login-form').addEventListener('submit', async ev => {
       ev.preventDefault();
-      const phone = normPhone($('#lg-phone').value), user = userByPhone(phone);
+      err.textContent = '';
+      const phone = normPhone($('#lg-phone').value), pass = $('#lg-pass').value;
       if (!validPhone(phone)) { err.textContent = L('Введите номер полностью, вместе с кодом страны.', 'Enter the full number including the country code.'); return; }
-      if (!user || user.pass !== hashPass($('#lg-pass').value)) { err.textContent = L('Неверный номер или пароль.', 'Wrong number or password.'); return; }
+      const lock = lockLeft(phone);
+      if (lock) { err.textContent = L(`Слишком много неверных попыток. Вход для этого номера заблокирован ещё на ${waitText(lock)}.`, `Too many wrong attempts. Sign-in for this number is locked for ${waitText(lock)}.`); return; }
+      const r = rateHit('auth', SEC.authPerHour, 3600e3);
+      if (!r.ok) { secLog('rate_limited', 'login'); err.textContent = L(`Слишком много попыток входа с этого устройства. Попробуйте через ${waitText(r.wait)}.`, `Too many sign-in attempts from this device. Try again in ${waitText(r.wait)}.`); return; }
+      go1.disabled = true; go1.textContent = L('Проверяем…', 'Checking…');
+      const user = userByPhone(phone);
+      // Одинаковое сообщение и для неизвестного номера, и для неверного пароля: так не узнать, кто зарегистрирован.
+      const ok = user ? await checkPass(user, pass) : (await new Promise(r2 => setTimeout(r2, 300)), false);
+      go1.disabled = false; go1.textContent = L('Войти', 'Sign in');
+      if (!ok) {
+        const left = failLogin(phone);
+        secLog('login_fail', maskedPhone(phone));
+        err.textContent = left > 0 ? L(`Неверный номер или пароль. Осталось попыток: ${left}.`, `Wrong number or password. Attempts left: ${left}.`)
+          : L(`Неверный пароль ${SEC.failsBeforeLock} раз подряд. Вход для номера заблокирован на 5 минут.`, `Wrong password ${SEC.failsBeforeLock} times in a row. Sign-in for this number is locked for 5 minutes.`);
+        return;
+      }
+      clearFails(phone);
       if (!user.verified) { renderVerify(card, phone, () => { user.verified = true; signIn(user); }); return; }
       signIn(user);
     });
@@ -2055,51 +2269,90 @@
       const phone = normPhone($('#lg-phone').value), user = userByPhone(phone);
       if (!validPhone(phone)) { err.textContent = L('Сначала введите номер телефона.', 'Enter your phone number first.'); return; }
       if (!user) { err.textContent = L('Этот номер ещё не зарегистрирован.', 'This number is not registered yet.'); return; }
-      renderVerify(card, phone, () => { user.verified = true; signIn(user); });
+      renderVerify(card, phone, () => { user.verified = true; clearFails(phone); signIn(user); });
     });
   }
+
   function renderRegister(card) {
+    const regs = secRead('hp.sec.regs', []);
     card.innerHTML = `
       <div><span class="eyebrow">${L('Регистрация · шаг 1 из 3', 'Sign up · step 1 of 3')}</span><h1 style="margin-top:8px">${L('Создайте аккаунт', 'Create an account')}</h1></div>
       <form class="form" id="reg-form" novalidate>
         <div class="field"><label for="rg-name">${L('Имя', 'Name')}</label><input id="rg-name" autocomplete="given-name" maxlength="40" placeholder="${L('Как вас называть друзьям', 'What friends call you')}"></div>
-        <div class="field"><label for="rg-phone">${L('Номер телефона', 'Phone number')}</label><input id="rg-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="${phonePh}"></div>
-        <div class="field"><label for="rg-pass">${L('Пароль', 'Password')}</label><input id="rg-pass" type="password" autocomplete="new-password" placeholder="${L('Минимум 6 символов', 'At least 6 characters')}"></div>
-        <label class="check"><input type="checkbox" id="rg-age"> ${L('Мне исполнилось 18 лет, я принимаю правила сервиса', 'I am 18 or older and accept the terms of use')}</label>
-        <div class="error" id="rg-err"></div>
+        <div class="field"><label for="rg-phone">${L('Номер телефона', 'Phone number')}</label><input id="rg-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="${phonePh}"></div>
+        <div class="field"><label for="rg-pass">${L('Пароль', 'Password')}</label><input id="rg-pass" type="password" autocomplete="new-password" maxlength="128" placeholder="${L('Минимум 8 символов, буквы и цифры', 'At least 8 characters, letters and digits')}">
+          <div class="pass-meter" aria-hidden="true"><i></i><i></i><i></i></div><small class="muted" id="rg-strength"></small></div>
+        <label class="check"><input type="checkbox" id="rg-age"> ${L('Мне исполнилось 18 лет, я принимаю правила сервиса и согласен на обработку номера телефона', 'I am 18 or older, accept the terms of use and agree to the processing of my phone number')}</label>
+        <div class="error" id="rg-err" role="alert"></div>
         <button class="btn btn-primary" type="submit">${L('Получить код по SMS', 'Get an SMS code')}</button>
       </form>
+      <p class="sec-note">${ICON.shield}${L(`С одного устройства можно создать не больше ${SEC.accountsPerDevice} аккаунтов. Создано: ${regs.length}.`, `Up to ${SEC.accountsPerDevice} accounts can be created from one device. Created: ${regs.length}.`)}</p>
       <p class="muted" style="text-align:center">${L('Уже есть аккаунт?', 'Already have an account?')} <a href="#/login" style="color:var(--accent)">${L('Войти', 'Sign in')}</a></p>`;
     maskPhone($('#rg-phone'));
+    const meter = $('.pass-meter'), strength = $('#rg-strength');
+    $('#rg-pass').addEventListener('input', e => {
+      const p = e.target.value, sc = p ? passScore(p) : -1, issue = p ? passIssues(p, $('#rg-phone').value) : '';
+      $('#rg-err').textContent = '';
+      meter.dataset.score = issue ? 0 : sc;
+      strength.textContent = !p ? '' : issue || [L('Слабый пароль', 'Weak password'), L('Неплохой пароль', 'Fair password'), L('Хороший пароль', 'Good password'), L('Надёжный пароль', 'Strong password')][sc];
+    });
     $('#reg-form').addEventListener('submit', ev => {
       ev.preventDefault();
       const err = $('#rg-err');
-      const name = $('#rg-name').value.trim(), phone = normPhone($('#rg-phone').value), pass = $('#rg-pass').value;
-      if (name.length < 2) return void (err.textContent = L('Укажите имя: минимум две буквы.', 'Enter a name of at least two letters.'));
+      const name = clean($('#rg-name').value, 40), phone = normPhone($('#rg-phone').value), pass = $('#rg-pass').value;
+      if (!validName(name)) return void (err.textContent = L('Укажите имя буквами: от 2 до 40 символов.', 'Enter a name using letters: 2 to 40 characters.'));
       if (!validPhone(phone)) return void (err.textContent = L('Введите номер полностью, вместе с кодом страны.', 'Enter the full number including the country code.'));
       if (userByPhone(phone)?.verified) return void (err.textContent = L('Этот номер уже зарегистрирован. Войдите или восстановите доступ по SMS.', 'This number is already registered. Sign in or recover access by SMS.'));
-      if (pass.length < 6) return void (err.textContent = L('Пароль должен быть не короче 6 символов.', 'The password must be at least 6 characters.'));
+      const issue = passIssues(pass, phone);
+      if (issue) return void (err.textContent = issue);
       if (!$('#rg-age').checked) return void (err.textContent = L('Сервис доступен только совершеннолетним.', 'The service is for adults only.'));
-      renderVerify(card, phone, () => {
+      if (secRead('hp.sec.regs', []).length >= SEC.accountsPerDevice) {
+        secLog('rate_limited', 'register');
+        return void (err.textContent = L(`С этого устройства уже создано ${SEC.accountsPerDevice} аккаунта. Это ограничение защищает от массовой регистрации.`, `${SEC.accountsPerDevice} accounts have already been created on this device. This limit prevents mass sign-ups.`));
+      }
+      renderVerify(card, phone, async () => {
+        const passRec = await makePass(pass);
         let user = userByPhone(phone);
-        if (user) Object.assign(user, { name, pass: hashPass(pass), verified: true });
-        else { user = { id: uid('u'), name, phone, pass: hashPass(pass), verified: true, avatar: null, favs: [], friends: [], favVenue: '', createdAt: new Date().toISOString() }; db.users.push(user); }
+        if (user) Object.assign(user, { name, pass: passRec, verified: true });
+        else { user = { id: uid('u'), name, phone, pass: passRec, verified: true, avatar: null, favs: [], friends: [], favVenue: '', createdAt: new Date().toISOString() }; db.users.push(user); }
+        secWrite('hp.sec.regs', [...secRead('hp.sec.regs', []), Date.now()]);
+        secLog('register', maskedPhone(phone));
         claimPhoneInvites(user);
-        db.session = user.id; save();
+        startSession(user);
         renderAvatarStep(card, user);
       }, L('Регистрация · шаг 2 из 3', 'Sign up · step 2 of 3'));
     });
   }
+
   // Подтверждение номера. В демо код показывается на экране вместо настоящего SMS.
+  // Защита: не больше 3 кодов на номер за 10 минут и 17 попыток в час с устройства, код живёт 5 минут, 5 попыток ввода.
   function renderVerify(card, phone, onSuccess, eyebrow = L('Подтверждение номера', 'Number verification')) {
-    let code = String(1000 + Math.floor(Math.random() * 9000)), timer = null, left = 0;
+    let code = '', codeAt = 0, attempts = 0, timer = null, left = 0;
+    const blocked = wait => {
+      clearInterval(timer);
+      card.innerHTML = `<div><span class="eyebrow">${eyebrow}</span><h1 style="margin-top:8px">${L('Слишком много запросов кода', 'Too many code requests')}</h1>
+        <p class="muted" style="margin-top:8px">${L(`Для защиты от злоупотреблений новый код можно запросить через ${waitText(wait)}.`, `To prevent abuse you can request a new code in ${waitText(wait)}.`)}</p></div>
+        <button class="btn" type="button" id="code-back">${L('Назад', 'Back')}</button>`;
+      $('#code-back').onclick = () => route();
+    };
+    const send = () => {
+      const perPhone = rateHit('sms:' + phone, SEC.smsPer10Min, 10 * 60e3, false);
+      if (!perPhone.ok) { secLog('rate_limited', 'sms ' + maskedPhone(phone)); blocked(perPhone.wait); return false; }
+      const total = rateHit('auth', SEC.authPerHour, 3600e3);
+      if (!total.ok) { secLog('rate_limited', 'sms'); blocked(total.wait); return false; }
+      rateHit('sms:' + phone, SEC.smsPer10Min, 10 * 60e3);
+      code = secureCode(); codeAt = Date.now(); attempts = 0;
+      secLog('sms_sent', maskedPhone(phone));
+      return true;
+    };
+    if (!send()) return;
     card.innerHTML = `
       <div><span class="eyebrow">${eyebrow}</span><h1 style="margin-top:8px">${L('Введите код из SMS', 'Enter the SMS code')}</h1>
-        <p class="muted" style="margin-top:8px">${L('Отправили 4 цифры на', 'We sent 4 digits to')} <span class="mono">${fmtPhone(phone)}</span></p></div>
+        <p class="muted" style="margin-top:8px">${L('Отправили 4 цифры на', 'We sent 4 digits to')} <span class="mono">${fmtPhone(phone)}</span>. ${L('Код действует 5 минут.', 'The code is valid for 5 minutes.')}</p></div>
       <form class="form" id="code-form">
         <div class="code-inputs">${[0, 1, 2, 3].map(i => `<input id="code-${i}" inputmode="numeric" autocomplete="${i === 0 ? 'one-time-code' : 'off'}" maxlength="1" aria-label="${L('Цифра', 'Digit')} ${i + 1}">`).join('')}</div>
         <div class="hint" id="sms-hint"></div>
-        <div class="error" id="code-err" style="text-align:center"></div>
+        <div class="error" id="code-err" style="text-align:center" role="alert"></div>
         <button class="btn btn-primary" type="submit">${L('Подтвердить', 'Confirm')}</button>
         <div class="resend" id="resend"></div>
         <button class="link-btn" type="button" id="code-back">${L('Изменить номер', 'Change number')}</button>
@@ -2111,7 +2364,7 @@
       r.innerHTML = left > 0 ? `${L('Отправить код повторно через', 'Resend the code in')} <span class="mono">0:${pad(left)}</span>` : `<button class="link-btn" type="button" id="resend-btn">${L('Отправить код ещё раз', 'Send the code again')}</button>`;
       if (left-- <= 0) {
         clearInterval(timer);
-        $('#resend-btn').onclick = () => { code = String(1000 + Math.floor(Math.random() * 9000)); showHint(); toast(L('Новый код отправлен', 'A new code has been sent')); start(); };
+        $('#resend-btn').onclick = () => { if (!send()) return; showHint(); $('#code-err').textContent = ''; toast(L('Новый код отправлен', 'A new code has been sent')); start(); };
       }
     };
     const start = () => { left = 30; clearInterval(timer); tick(); timer = setInterval(tick, 1000); };
@@ -2126,13 +2379,20 @@
       b.addEventListener('keydown', e => { if (e.key === 'Backspace' && !b.value && i > 0) boxes[i - 1].focus(); });
     });
     boxes[0].focus();
-    $('#code-form').addEventListener('submit', ev => {
+    $('#code-form').addEventListener('submit', async ev => {
       ev.preventDefault();
-      if (boxes.map(b => b.value).join('') !== code) {
-        $('#code-err').textContent = L('Код не подходит. Проверьте цифры или запросите новый.', 'The code is wrong. Check the digits or request a new one.');
-        boxes.forEach(b => b.value = ''); boxes[0].focus(); return;
+      const errEl = $('#code-err'), reset = () => { boxes.forEach(b => b.value = ''); boxes[0].focus(); };
+      if (Date.now() - codeAt > SEC.codeTtlMs) { errEl.textContent = L('Код устарел. Запросите новый.', 'The code has expired. Request a new one.'); reset(); return; }
+      if (attempts >= SEC.codeAttempts) { errEl.textContent = L('Слишком много неверных попыток. Запросите новый код.', 'Too many wrong attempts. Request a new code.'); reset(); return; }
+      if (!sameStr(boxes.map(b => b.value).join(''), code)) {
+        attempts++;
+        secLog('sms_fail', maskedPhone(phone));
+        errEl.textContent = attempts >= SEC.codeAttempts ? L('Слишком много неверных попыток. Запросите новый код.', 'Too many wrong attempts. Request a new code.')
+          : L(`Код не подходит. Осталось попыток: ${SEC.codeAttempts - attempts}.`, `Wrong code. Attempts left: ${SEC.codeAttempts - attempts}.`);
+        reset(); return;
       }
-      clearInterval(timer); onSuccess();
+      clearInterval(timer); code = '';
+      await onSuccess();
     });
     $('#code-back').addEventListener('click', () => { clearInterval(timer); route(); });
   }
@@ -2150,7 +2410,11 @@
     };
     draw();
   }
-  function signIn(user) { db.session = user.id; save(); toast(L(`Вы вошли как ${user.name}`, `Signed in as ${user.name}`)); go(''); }
+  function startSession(user) {
+    db.session = user.id; db.sessionAt = Date.now(); db.sessionExp = Date.now() + SEC.sessionDays * 864e5;
+    save(); secLog('login_ok', user.name);
+  }
+  function signIn(user) { startSession(user); toast(L(`Вы вошли как ${user.name}`, `Signed in as ${user.name}`)); go(''); }
 
   // ---------- Пикер приглашений ----------
   function invitePicker(root, exclude, preset = []) {
@@ -2217,8 +2481,8 @@
       vIn.addEventListener('change', () => { const v = VENUES.find(x => x.name === vIn.value.trim()); if (v && v.addr && !aIn.value.trim()) aIn.value = v.addr; });
       $('#ev-form', m).addEventListener('submit', ev => {
         ev.preventDefault();
-        const err = $('#ev-err', m), val = s => $(s, m).value.trim();
-        const title = val('#ev-title'), venue = val('#ev-venue'), mapUrl = val('#ev-map');
+        const err = $('#ev-err', m), val = s => clean($(s, m).value, 100);
+        const title = val('#ev-title'), venue = val('#ev-venue'), mapUrl = clean($('#ev-map', m).value, 300);
         if (!title) return void (err.textContent = L('Придумайте название сбора.', 'Give the event a title.'));
         if (!venue) return void (err.textContent = L('Укажите заведение.', 'Choose a venue.'));
         if (mapUrl && !/^https?:\/\/\S+\.\S+/.test(mapUrl)) return void (err.textContent = L('Ссылка должна начинаться с https://', 'The link must start with https://'));
@@ -2228,7 +2492,7 @@
         const hookahs = Math.max(0, Math.min(20, parseInt(val('#ev-hookahs'), 10) || 0));
         const price = Math.max(0, parseInt(val('#ev-price'), 10) || 0);
         const v = VENUES.find(x => x.name === venue);
-        onSave({ title, venue, venueId: v ? v.id : null, address: val('#ev-address') || v?.addr || '', mapUrl, at: when.toISOString(), hookahs, price, desc: val('#ev-desc') }, picker ? toInvites(picker.get()) : []);
+        onSave({ title: title.slice(0, 60), venue: venue.slice(0, 60), venueId: v ? v.id : null, address: val('#ev-address') || v?.addr || '', mapUrl: safeUrl(mapUrl), at: when.toISOString(), hookahs, price, desc: clean($('#ev-desc', m).value, 400, true) }, picker ? toInvites(picker.get()) : []);
       });
     });
   }
@@ -2446,7 +2710,7 @@
         $$('input, select', m).forEach(i => i.addEventListener('input', upd)); upd();
         $('#mix-form', m).addEventListener('submit', ev => {
           ev.preventDefault();
-          const err = $('#mx-err', m), name = $('#mx-name', m).value.trim(), p = parts();
+          const err = $('#mx-err', m), name = clean($('#mx-name', m).value, 40), p = parts();
           if (!name) return void (err.textContent = L('Придумайте название микса.', 'Give the mix a name.'));
           if (p.length < 2) return void (err.textContent = L('Выберите хотя бы два табака с долей больше нуля.', 'Choose at least two tobaccos with a share above zero.'));
           if (new Set(p.map(x => x.id)).size !== p.length) return void (err.textContent = L('Табаки в миксе не должны повторяться.', 'Each tobacco can appear only once.'));
@@ -2515,7 +2779,8 @@
     closeRibbon({ key }) { prefs.set('ribbonClosed', key); seasonRibbon(); },
     uploadAvatar() { const u = me(); pickAvatarFile(url => { u.avatar = url; save(); toast(L('Фото обновлено', 'Photo updated')); render(); }); },
     removeAvatar() { const u = me(); u.avatar = null; save(); render(); },
-    logout() { db.session = null; save(); toast(L('Вы вышли из аккаунта', 'You have signed out')); go(''); },
+    logout() { secLog('logout'); db.session = null; db.sessionExp = null; save(); toast(L('Вы вышли из аккаунта', 'You have signed out')); go(''); },
+    clearSecLog() { secWrite(SEC_LOG, []); render(); },
     reset() { db = withStories(seed()); save(); toast(L('Демо-данные восстановлены', 'Demo data restored')); go(''); },
     info({ key }) {
       const texts = {
@@ -2539,8 +2804,17 @@
   // ---------- Роутер ----------
   const view = $('#view');
   // render() перерисовывает текущую страницу без прокрутки наверх; route() — полный переход.
+  const PAGES = new Set(['', 'venues', 'events', 'event', 'catalog', 'people', 'user', 'how', 'profile', 'login', 'register', 'history']);
+  const NEEDS_ARG = new Set(['event', 'user']);
   function render() {
-    const [page = '', arg] = location.hash.replace(/^#\/?/, '').split('/');
+    const hash = location.hash.replace(/^#\/?/, '');
+    let [page = '', arg, extra] = hash.split('/');
+    const badArg = arg !== undefined && !/^[\w-]{1,40}$/.test(arg);
+    if (!PAGES.has(page) || badArg || extra !== undefined || hash.length > 120 || (NEEDS_ARG.has(page) && !arg)) {
+      if (/[<>"'`]|script|%3c/i.test(hash)) secLog('bad_url', hash.slice(0, 60));
+      page = 'notfound';
+    }
+    if (db.session && db.sessionExp && Date.now() > db.sessionExp) { secLog('session_expired'); db.session = null; save(); toast(L('Сессия истекла, войдите снова', 'Your session has expired, please sign in again')); }
     const nav = { history: 'history', venues: 'venues', catalog: 'catalog', events: 'events', event: 'events', people: 'people', user: 'people', profile: 'profile', login: 'profile', register: 'profile' }[page] || '';
     renderChrome(nav);
     document.title = 'Hookah Party';
@@ -2553,6 +2827,7 @@
       case 'user': pageUser(arg); break;
       case 'how': pageHow(); break;
       case 'history': pageHistory(); break;
+      case 'notfound': view.innerHTML = emptyState(L('Такой страницы нет', 'Page not found'), L('Возможно, ссылка устарела или в ней опечатка.', 'The link may be outdated or contain a typo.'), `<a class="btn btn-primary btn-sm" href="#/">${L('На главную', 'Go home')}</a>`); break;
       case 'profile': pageProfile(); break;
       case 'login': pageAuth('login'); break;
       case 'register': pageAuth('register'); break;

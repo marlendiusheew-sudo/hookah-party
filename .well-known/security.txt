@@ -1,0 +1,4 @@
+Contact: https://github.com/marlendiusheew-sudo/hookah-party/security/advisories/new
+Expires: 2027-10-23T00:00:00.000Z
+Preferred-Languages: ru, en
+Policy: https://github.com/marlendiusheew-sudo/hookah-party/blob/main/SECURITY.md

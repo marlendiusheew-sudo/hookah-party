@@ -1,0 +1,13 @@
+# Автообновление зависимостей: Dependabot сам создаёт запросы на обновление,
+# автотесты проверяют их перед слиянием.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
