@@ -1,4 +1,19 @@
 /* Layout: sticky top bar · one centered column up to 1120px · on phones the menu moves to a bottom tab bar, like a native app */
+
+/* Шрифты лежат на самом сайте (fonts/, лицензия SIL OFL — fonts/OFL.txt), а не на Google Fonts: за ними страница никуда не ходит.
+   Те же файлы, что отдавал Google (переменные шрифты): наборы cyrillic-ext (киргизские Ң Ө Ү), cyrillic и latin — браузер скачивает
+   набор, только если на странице есть его символы. Начертания те же, что сайт брал у Google: Unbounded 500–700, Golos Text 400–600,
+   JetBrains Mono 500. Новый файл — новое имя с версией (сервер и офлайн-кеш хранят шрифты долго). */
+@font-face { font-family: 'Unbounded'; font-style: normal; font-weight: 500 700; font-display: swap; src: url(fonts/unbounded-v12-cyrillic-ext.woff2) format('woff2'); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'Unbounded'; font-style: normal; font-weight: 500 700; font-display: swap; src: url(fonts/unbounded-v12-cyrillic.woff2) format('woff2'); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'Unbounded'; font-style: normal; font-weight: 500 700; font-display: swap; src: url(fonts/unbounded-v12-latin.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Golos Text'; font-style: normal; font-weight: 400 600; font-display: swap; src: url(fonts/golostext-v7-cyrillic-ext.woff2) format('woff2'); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'Golos Text'; font-style: normal; font-weight: 400 600; font-display: swap; src: url(fonts/golostext-v7-cyrillic.woff2) format('woff2'); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'Golos Text'; font-style: normal; font-weight: 400 600; font-display: swap; src: url(fonts/golostext-v7-latin.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url(fonts/jetbrainsmono-v24-cyrillic-ext.woff2) format('woff2'); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url(fonts/jetbrainsmono-v24-cyrillic.woff2) format('woff2'); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url(fonts/jetbrainsmono-v24-latin.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
 :root {
   --bg: #161114;
   --surface: #211a1e;
@@ -324,9 +339,10 @@ p { margin: 0; }
 .auth { display: grid; place-items: start center; }
 .auth-card { width: 100%; max-width: 440px; display: grid; gap: 20px; }
 .auth-card h1 { font-size: 26px; }
-.code-inputs { display: flex; gap: 10px; justify-content: center; }
+/* Код из SMS — 6 клеток: на узком экране клетки сужаются, а не вылезают за карточку. */
+.code-inputs { display: flex; gap: 8px; justify-content: center; min-width: 0; }
 .code-inputs input {
-  width: 54px; height: 62px; text-align: center; font: 700 24px var(--f-mono);
+  flex: 0 1 52px; width: 52px; min-width: 0; height: 60px; padding: 0; text-align: center; font: 700 24px var(--f-mono);
   background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r); color: var(--fg);
 }
 .code-inputs input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--smoke); }
@@ -1049,7 +1065,8 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 @media (max-width: 420px) {
   .row-2 { grid-template-columns: 1fr; }
   .ev-grid { grid-template-columns: 1fr; }
-  .code-inputs input { width: 48px; height: 56px; }
+  .code-inputs { gap: 6px; }
+  .code-inputs input { height: 54px; font-size: 22px; }
   .brand-word { font-size: 15px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1392,6 +1409,46 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 .sec-log span { display: grid; min-width: 0; }
 .sec-log small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sec-log time { color: var(--muted); font-size: 11.5px; }
+/* Устройства, с которых входили (на сервере): иконка, подпись, «это устройство», первый и последний вход */
+.sec-devices { list-style: none; margin: 0; padding: 0; display: grid; }
+.sec-devices li { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px 0; font-size: 13px; }
+.sec-devices li + li { border-top: 1px dashed var(--line); }
+.sec-devices li.muted { display: block; }
+.dev-ic { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); }
+.dev-ic svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.sec-devices li.cur .dev-ic { background: color-mix(in srgb, var(--ok) 16%, var(--surface)); color: var(--ok); }
+.dev-main { display: grid; gap: 2px; min-width: 0; }
+.dev-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.dev-name b { font-weight: 600; overflow-wrap: anywhere; }
+.dev-name em { font-style: normal; font-size: 11.5px; font-weight: 600; color: var(--ok); }
+.dev-main small { color: var(--muted); }
+.sec-hint { margin: 6px 0 2px; font-size: 12.5px; color: var(--muted); }
+.sec-panel.flash { animation: flash 1.6s ease-out; }
+/* Смена пароля: строка «Пароль» в «Безопасности» (после входа по SMS — подсвечена), окно с ошибками у полей, «Забыли пароль?» на входе */
+.sec-pass { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 10px 12px; align-items: center; margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); }
+.sec-pass-ic { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: var(--surface); color: var(--accent); }
+.sec-pass-ic svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.sec-pass-main { display: grid; gap: 2px; min-width: 0; font-size: 14px; }
+.sec-pass-main small { color: var(--muted); font-size: 12.5px; }
+.sec-pass.sms { background: var(--smoke); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+@media (max-width: 560px) { .sec-pass { grid-template-columns: 32px minmax(0, 1fr); } .sec-pass .btn { grid-column: 2; justify-self: start; } }
+.pw-sms { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 12px 14px; border-radius: var(--r-sm); background: var(--smoke); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); font-size: 13.5px; }
+.pw-sms svg { width: 18px; height: 18px; stroke: var(--accent); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; margin-top: 1px; }
+.pw-note { margin: 0; font-size: 13px; }
+.field-err { color: var(--danger); font-size: 13px; }
+.field-err:empty { display: none; }
+.field input[aria-invalid="true"] { border-color: var(--danger); }
+.lg-forgot { justify-self: end; font-size: 13px; }
+/* Удаление аккаунта: отдельная «опасная» панель в конце настроек */
+.danger-zone { margin-top: 10px; border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); background: color-mix(in srgb, var(--danger) 5%, var(--surface)); }
+.danger-zone .panel-head { margin-bottom: 12px; }
+.danger-zone h2 { color: var(--danger); }
+.danger-zone .panel-head .muted { font-size: 13.5px; margin-top: 4px; }
+.dz-list { margin: 0 0 14px; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; }
+.dz-list li::marker { color: var(--danger); }
+.dz-note { margin: 0 0 16px; font-size: 13.5px; color: var(--muted); }
+.btn-danger-solid { background: var(--danger); border-color: var(--danger); color: var(--on-accent); }
+.btn-danger-solid:hover { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 86%, var(--fg)); }
 
 /* ================= Уведомления ================= */
 .bell { position: relative; }
@@ -1425,6 +1482,12 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 .feed-ic.nt-replies.ic-check { background: var(--ok); }
 .feed-ic.nt-messages { background: #4a8fe0; }
 .feed-ic.nt-reactions { background: var(--ember); }
+/* Уведомления о безопасности: автора нет — вместо аватара щит (сигналы — красный, вход с нового устройства — жёлтый) */
+.av-sys { --sys: var(--danger); background: color-mix(in srgb, var(--sys) 15%, var(--surface)); color: var(--sys); border-color: color-mix(in srgb, var(--sys) 35%, transparent); }
+.av-sys.av-warn { --sys: var(--warn); }
+.av-sys svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.switch.is-fixed { cursor: default; }
+.switch.is-fixed .sw-track { opacity: .6; }
 .tab-panel > .notif-list { padding: 6px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--elev); }
 .notif-settings { margin-top: 8px; }
 .switches { display: flex; flex-wrap: wrap; gap: 10px 22px; }
@@ -1619,6 +1682,15 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 .share-btn small { font-weight: 400; font-size: 12px; color: var(--muted); }
 .wa-mini { width: 32px; height: 32px; margin-right: 6px; }
 .wa-mini svg { color: #25d366; width: 17px; height: 17px; }
+/* Организатор: убрать человека из сбора (режим «карандаша» в списке участников), сменить ссылку-приглашение */
+.guest-edit { width: 30px; height: 30px; }
+.guest-edit svg { width: 15px; height: 15px; }
+.guest-edit.on { color: var(--accent); border-color: var(--accent); background: var(--smoke); }
+.drop-guest { flex: none; padding: 5px 11px; font-size: 12.5px; }
+.share-reset { display: grid; gap: 4px; justify-items: start; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.share-reset .link-btn { display: inline-flex; align-items: center; gap: 6px; color: var(--danger); font-size: 13.5px; }
+.share-reset .link-btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.share-reset small { color: var(--muted); font-size: 12px; line-height: 1.45; }
 
 /* Страница, которую открывает друг по ссылке */
 .join { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; align-items: start; padding-top: 12px; }

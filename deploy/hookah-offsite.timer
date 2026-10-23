@@ -1,0 +1,13 @@
+# systemd: /etc/systemd/system/hookah-offsite.timer — ПО ЖЕЛАНИЮ: каждое утро после ночной копии уносит её в хранилище.
+#   sudo cp deploy/hookah-offsite.service deploy/hookah-offsite.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now hookah-offsite.timer
+[Unit]
+Description=Hookah Party: копия резервных копий вне сервера каждое утро
+
+[Timer]
+OnCalendar=*-*-* 06:15:00
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

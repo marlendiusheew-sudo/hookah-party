@@ -1,5 +1,7 @@
 # Автообновление зависимостей: Dependabot сам создаёт запросы на обновление,
 # автотесты проверяют их перед слиянием.
+# cooldown: новую версию предлагаем не раньше чем через 7 дней после выхода — за это время взломанный
+# выпуск обычно успевают заметить и отозвать. Обновления безопасности приходят сразу, без задержки.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -7,7 +9,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+  # Действия GitHub закреплены по SHA; Dependabot обновляет и SHA, и комментарий с версией.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7

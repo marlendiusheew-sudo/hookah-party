@@ -22,7 +22,8 @@ pages:
   image: alpine:3.20
   script:
     - mkdir -p public
-    - cp index.html styles.css app.js map-data.js art.js admin.js manifest.webmanifest icon-192.png icon-512.png apple-touch-icon.png public/
+    - cp index.html styles.css app.js map-data.js art.js sw.js manifest.webmanifest icon-192.png icon-512.png apple-touch-icon.png og.png public/
+    - cp -r .well-known fonts public/
   artifacts:
     paths:
       - public

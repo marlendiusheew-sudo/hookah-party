@@ -1,0 +1,17 @@
+// Автоматические обновления безопасности Ubuntu. Куда: /etc/apt/apt.conf.d/52hookah-unattended-upgrades
+//   sudo apt install -y unattended-upgrades
+//   sudo cp deploy/apt.conf.d/52hookah-unattended-upgrades /etc/apt/apt.conf.d/
+// Проверка (ничего не ставит, только показывает): sudo unattended-upgrade --dry-run --debug 2>&1 | tail -20
+// Node.js ставится из репозитория NodeSource и сам не обновляется: раз в месяц sudo apt update && sudo apt upgrade,
+// затем sudo systemctl restart hookah-party.
+
+// Каждый день обновлять списки пакетов и ставить обновления безопасности.
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
+
+// Если обновление требует перезагрузки (например, ядро) — перезагрузиться ночью, до резервной копии в 05:30.
+// Время — по часовому поясу сервера. Сайт поднимется сам: сервис включён в автозапуск.
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "04:30";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";

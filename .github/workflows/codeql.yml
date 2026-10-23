@@ -1,4 +1,6 @@
-# Автоматический поиск уязвимостей в коде (XSS, небезопасные вставки и т. п.).
+# Автоматический поиск уязвимостей: в коде сайта и сервера (XSS, небезопасные вставки и т. п.)
+# и в самих сценариях GitHub Actions (подстановка непроверенных данных в команды и т. п.).
+# Действия закреплены по полному SHA коммита (в комментарии — версия), обновляет их Dependabot.
 name: CodeQL
 
 on:
@@ -8,17 +10,27 @@ on:
   schedule:
     - cron: '23 4 * * 1'
 
-permissions:
-  contents: read
-  security-events: write
+# По умолчанию у токена нет прав; задаче выдаём только нужное.
+permissions: {}
+
+# Новая отправка отменяет устаревший запуск для той же ветки или запроса; плановые запуски не отменяются.
+concurrency:
+  group: codeql-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write # загрузка результатов во вкладку Security → Code scanning
     steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          languages: javascript-typescript
+          persist-credentials: false
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: javascript-typescript,actions
           queries: security-extended
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1

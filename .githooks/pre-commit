@@ -1,0 +1,17 @@
+#!/bin/sh
+# Перед каждым коммитом ищем секреты в подготовленных файлах: ключи, токены, пароли, .env и т. п.
+# Включается один раз в каждой копии репозитория:  git config core.hooksPath .githooks
+# Обойти можно только вручную (git commit --no-verify) — не делайте так, если найден настоящий ключ.
+
+# Git из графических программ (Xcode, GitHub Desktop) может не видеть node — добавляем обычные места установки.
+PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+export PATH
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-commit: не найден Node.js — проверка секретов не выполнена, коммит остановлен." >&2
+  echo "Установите Node.js 24+ или сделайте коммит из терминала, где доступна команда node." >&2
+  exit 1
+fi
+
+root=$(git rev-parse --show-toplevel) || exit 1
+exec node "$root/scripts/check-secrets.js" --staged

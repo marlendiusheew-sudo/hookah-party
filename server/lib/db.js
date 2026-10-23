@@ -8,10 +8,13 @@ const path = require('node:path');
 function open(file) {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
+  // secure_delete: удалённое затирается нулями, в свободных страницах файла и в WAL не остаётся текста сообщений, имён и номеров
+  // удалённых аккаунтов (а значит, и в копиях, сделанных после удаления).
   db.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
     PRAGMA busy_timeout = 3000;
+    PRAGMA secure_delete = ON;
 
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY, name TEXT NOT NULL,
@@ -64,20 +67,59 @@ function open(file) {
       id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, user_id TEXT, ip TEXT, type TEXT NOT NULL, detail TEXT
     );
     CREATE INDEX IF NOT EXISTS audit_user ON audit(user_id, at);
+    CREATE INDEX IF NOT EXISTS audit_type_at ON audit(type, at);
   `);
   // Журнал созданий и отмен сборов: сами отменённые сборы удаляются, а счётчик для лимита остаётся.
   db.exec(`CREATE TABLE IF NOT EXISTS event_log (user_id TEXT NOT NULL, action TEXT NOT NULL, at INTEGER NOT NULL);
     CREATE INDEX IF NOT EXISTS event_log_user ON event_log(user_id, action, at);`);
+  // Устройства, с которых входил пользователь (lib/ua.js): fp — отпечаток «браузер + система + тип устройства» без версий,
+  // label — подпись для людей («Chrome · macOS»). Вход с нового устройства — уведомление; не виденные год — удаляются (lib/retention.js).
+  db.exec(`CREATE TABLE IF NOT EXISTS known_devices (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, fp TEXT NOT NULL, label TEXT NOT NULL,
+      first_at INTEGER NOT NULL, last_at INTEGER NOT NULL, PRIMARY KEY (user_id, fp)
+    );
+    CREATE INDEX IF NOT EXISTS known_devices_seen ON known_devices(last_at);`);
+  // sessions.ua — подпись устройства без версий («Chrome · macOS», lib/ua.js), а не сырой User-Agent; ip живёт, пока жива сессия (≤ 30 дней).
   // Миграции старых баз: роль пользователя и время подтверждения прав администратора в сессии.
+  // Вход в панель по коду из приложения (lib/totp.js): секрет и секрет на этапе подключения — только зашифрованными (secure.encrypt),
+  // totp_last — шаг последнего принятого кода (повторно тот же код не сработает); admin_mfa — сессия открыта паролем и кодом.
+  // via_sms_at — когда сессия создана входом по коду из SMS (0 — вход паролем): первые 15 минут в такой сессии пароль
+  // можно сменить без текущего («Забыли пароль?», POST /api/me/password).
+  // avatar_v — версия фото: в bootstrap уходит только она, сама картинка — по адресу /api/avatar/<id>?v=<версия>.
+  // invited_by — кто позвал (организатор или идущий гость): номер приглашённого «по номеру» целиком видят только они.
+  // sms_codes.challenge — хэш ключа запроса кода: проверить код может только тот, кто его запросил (POST /api/auth/sms).
   for (const sql of ["ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'", 'ALTER TABLE sessions ADD COLUMN admin_until INTEGER NOT NULL DEFAULT 0',
-    'ALTER TABLE events ADD COLUMN join_token TEXT']) {
+    'ALTER TABLE events ADD COLUMN join_token TEXT',
+    'ALTER TABLE users ADD COLUMN totp_secret_enc TEXT', 'ALTER TABLE users ADD COLUMN totp_pending_enc TEXT',
+    'ALTER TABLE users ADD COLUMN totp_last INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE sessions ADD COLUMN admin_mfa INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE sessions ADD COLUMN via_sms_at INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN avatar_v TEXT', 'ALTER TABLE invites ADD COLUMN invited_by TEXT', 'ALTER TABLE sms_codes ADD COLUMN challenge TEXT']) {
     try { db.exec(sql); } catch (e) { /* колонка уже есть */ }
   }
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS events_join ON events(join_token) WHERE join_token IS NOT NULL');
+  // Фото, загруженные до появления версии, получают случайную версию один раз.
+  db.exec('UPDATE users SET avatar_v = lower(hex(randomblob(8))) WHERE avatar IS NOT NULL AND avatar_v IS NULL');
+  // Кого организатор убрал из сбора: по ссылке такой человек не вернётся, пока организатор сам не позовёт его снова.
+  db.exec(`CREATE TABLE IF NOT EXISTS event_bans (
+      event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      at TEXT NOT NULL, PRIMARY KEY (event_id, user_id)
+    );`);
   // Короткие помощники: q(sql).all(...)/get/run. Кешируем подготовленные запросы.
   const cache = new Map();
   db.q = sql => { let st = cache.get(sql); if (!st) { st = db.prepare(sql); cache.set(sql, st); } return st; };
   db.tx = fn => { db.exec('BEGIN'); try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } };
+  // Перенести WAL в файл базы и обнулить WAL (там остаются прежние версии страниц, в том числе удалённый текст).
+  // Не ждём: если базу сейчас читает другой процесс (ночная копия), откладываем до следующей чистки (раз в час) — иначе
+  // синхронный вызов на 3 секунды остановил бы весь сервер. true — получилось.
+  db.wipe = () => {
+    db.exec('PRAGMA busy_timeout = 0');
+    try { return db.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get()?.busy === 0; } catch (e) { return false; } finally { db.exec('PRAGMA busy_timeout = 3000'); }
+  };
+  // База, созданная до secure_delete, могла сохранить удалённое в свободных страницах — один раз пересобираем её (VACUUM).
+  // Отметка — user_version = 1; не вышло (база занята) — попробуем при следующем запуске.
+  if (db.prepare('PRAGMA user_version').get().user_version < 1) {
+    try { db.exec('VACUUM'); db.exec('PRAGMA user_version = 1'); db.wipe(); } catch (e) { /* в следующий раз */ }
+  }
   return db;
 }
 

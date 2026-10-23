@@ -1,4 +1,6 @@
 # Автотесты при каждой отправке и в каждом запросе на изменение.
+# Действия GitHub закреплены по полному SHA коммита (в комментарии — версия): подменить код
+# по тегу нельзя. Обновляет их Dependabot (.github/dependabot.yml).
 name: Тесты
 
 on:
@@ -6,19 +8,32 @@ on:
     branches: [main]
   pull_request:
 
-permissions:
-  contents: read
+# По умолчанию у токена нет прав; каждой задаче выдаём только нужное.
+permissions: {}
+
+# Новая отправка в ту же ветку или тот же запрос отменяет устаревший незавершённый запуск.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      - name: Поиск секретов в файлах репозитория
+        run: node scripts/check-secrets.js --all
+      # --ignore-scripts: скрипты установки пакетов не запускаются (так распространяются взломанные пакеты).
+      - run: npm ci --ignore-scripts
       - run: npm test
       - name: Проверка уязвимостей в зависимостях
         run: npm audit --audit-level=high
@@ -26,12 +41,17 @@ jobs:
   e2e:
     name: В браузере (Chromium)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

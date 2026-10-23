@@ -145,7 +145,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Сайт копируется в приложение прямо из корня репозитория — у приложения и сайта всегда одна версия.\nset -e\nSRC=\"${PROJECT_DIR}/..\"\nDST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/web\"\nmkdir -p \"$DST\"\nfor f in index.html styles.css app.js art.js map-data.js; do\n  cp \"$SRC/$f\" \"$DST/$f\"\ndone\n";
+			shellScript = "# Сайт копируется в приложение прямо из корня репозитория — у приложения и сайта всегда одна версия.\nset -e\nSRC=\"${PROJECT_DIR}/..\"\nDST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/web\"\nmkdir -p \"$DST\"\nfor f in index.html styles.css app.js art.js map-data.js; do\n  cp \"$SRC/$f\" \"$DST/$f\"\ndone\n# Шрифты сайта и их лицензия (SIL OFL): страница берёт их отсюда, без Google Fonts и без интернета.\nmkdir -p \"$DST/fonts\"\nrm -f \"$DST\"/fonts/*.woff2\ncp \"$SRC\"/fonts/*.woff2 \"$SRC/fonts/OFL.txt\" \"$DST/fonts/\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

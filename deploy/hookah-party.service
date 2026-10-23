@@ -1,22 +1,72 @@
 # systemd: /etc/systemd/system/hookah-party.service
-# sudo systemctl daemon-reload && sudo systemctl enable --now hookah-party
+#   sudo cp deploy/hookah-party.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now hookah-party
+# Журнал: journalctl -u hookah-party -f        Насколько закрыт процесс: systemd-analyze security hookah-party
 [Unit]
 Description=Hookah Party
 After=network.target
+# Если сервис падает сразу после запуска (ошибка в .env, нет папки данных), после 10 запусков за 2 минуты systemd
+# перестаёт его поднимать и пишет в status «start request repeated too quickly». Причина — в журнале; после исправления:
+#   sudo systemctl reset-failed hookah-party && sudo systemctl start hookah-party
+# Редкие падения (раз в несколько минут и реже) на этот предел не влияют: сервис поднимается через RestartSec.
+StartLimitIntervalSec=2min
+StartLimitBurst=10
 
 [Service]
 Type=simple
 User=hookah
+Group=hookah
 WorkingDirectory=/opt/hookah-party
+# NODE_ENV=production — по умолчанию; значение из .env (EnvironmentFile) важнее.
+Environment=NODE_ENV=production
 EnvironmentFile=/opt/hookah-party/.env
 ExecStart=/usr/bin/node server/index.js
 Restart=on-failure
-# Ограничения процесса: только своя папка с данными, без лишних прав.
+RestartSec=3
+# Всё, что создаёт сервер (база, её -wal/-shm), доступно только пользователю hookah.
+UMask=0077
+
+# Пределы ресурсов: даже под наплывом запросов Node не займёт всю память машины и не задушит nginx, SSH и копии.
+# Обычно Node занимает 60–150 МБ; проверка пароля (Argon2) — 19 МБ, одновременно их немного (~4).
+# Выше MemoryHigh ядро притормаживает процесс и отбирает память, на MemoryMax процесс завершается, и через RestartSec
+# systemd запускает его заново. Расчёт на сервер с 1–2 ГБ памяти; с 2 ГБ и больше можно поднять, например, до 768M и 1G.
+MemoryHigh=384M
+MemoryMax=512M
+# Потоков у Node ~10 (основной, 4 у движка V8, 4 у пула libuv — в нём Argon2 и чтение файлов), 64 — с запасом.
+TasksMax=64
+# Открытых файлов и соединений: от nginx к Node одновременно не больше ~270 (limit_conn и keepalive в deploy/nginx.conf).
+LimitNOFILE=4096
+
+# Ограничения процесса: писать можно только в папку с данными, остальная система — только для чтения или не видна.
 NoNewPrivileges=true
 ProtectSystem=strict
+ReadWritePaths=/opt/hookah-party/server/data
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/opt/hookah-party/server/data
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RemoveIPC=true
+# Никаких особых прав root (порт 3000 не привилегированный).
+CapabilityBoundingSet=
+AmbientCapabilities=
+# Сеть: IPv4/IPv6 (nginx, SMS-шлюз), локальные сокеты и netlink (определение сетевых интерфейсов при DNS-запросах).
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SystemCallArchitectures=native
+# Только обычные для сервисов системные вызовы; запрещённый вызов получает ошибку EPERM, а не убивает процесс.
+# Если сервис не стартует и в журнале «Operation not permitted» — закомментируйте две строки ниже и сообщите разработчику.
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# MemoryDenyWriteExecute=true НЕ ставим: V8 (движок Node) на лету компилирует JavaScript в машинный код — с ним Node не работает.
 
 [Install]
 WantedBy=multi-user.target

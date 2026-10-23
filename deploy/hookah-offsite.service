@@ -1,0 +1,33 @@
+# systemd: /etc/systemd/system/hookah-offsite.service — ПО ЖЕЛАНИЮ: копии базы ещё и вне сервера (облачное хранилище).
+# Нужен rclone с настроенным хранилищем «offsite» у пользователя hookah (deploy/SERVER-SETUP.md, шаг 15).
+# Уносятся только зашифрованные файлы *.db.enc: без BACKUP_KEY хранилище их содержимого не видит.
+#   Проверить вручную: sudo systemctl start hookah-offsite && journalctl -u hookah-offsite -n 20
+[Unit]
+Description=Hookah Party: копия резервных копий вне сервера
+After=hookah-backup.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=hookah
+Group=hookah
+# Новые копии — в хранилище (уже загруженные не трогаются).
+ExecStart=/usr/bin/rclone copy /opt/hookah-party/server/data/backups offsite:hookah-backups --include "hookah-*.db.enc" --immutable
+# Старше 15 дней — удалить и там: срок хранения копий тот же, что на сервере (политика конфиденциальности).
+ExecStart=/usr/bin/rclone delete offsite:hookah-backups --include "hookah-*.db.enc" --min-age 14d
+Nice=10
+NoNewPrivileges=true
+ProtectSystem=strict
+# Настройки и кеш rclone — в домашней папке пользователя hookah.
+ReadWritePaths=/var/lib/hookah
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK

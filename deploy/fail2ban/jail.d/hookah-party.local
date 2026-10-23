@@ -1,0 +1,39 @@
+# fail2ban: правила бана. Куда: /etc/fail2ban/jail.d/hookah-party.local
+# Установка (из папки проекта на сервере):
+#   sudo cp deploy/fail2ban/filter.d/hookah-party.conf /etc/fail2ban/filter.d/
+#   sudo cp deploy/fail2ban/jail.d/hookah-party.local  /etc/fail2ban/jail.d/
+#   sudo systemctl restart fail2ban && sudo fail2ban-client status hookah-party
+#
+# Почему порог такой: nginx пропускает ко входу не больше 11 запросов сразу и дальше 5 в минуту с одного посетителя,
+# сам сервер — не больше 17 попыток в час и блокирует номер после 5 неверных паролей. fail2ban добавляет третий слой —
+# бан IP на уровне сети для тех, кто упорно подбирает пароли или лезет в панель администратора.
+# IPv6: банится ровно адрес из журнала, а не вся сеть /64 устройства (nginx и сервер в своих лимитах считают /64 одним посетителем).
+# Много банов из одной сети /64 — закройте её целиком вручную: deploy/SERVER-SETUP.md, раздел 13.
+# Осторожно с общими IP: у мобильных операторов один адрес на многих людей. Если пожалуются, что сайт не открывается,
+# проверьте баны и снимите:  sudo fail2ban-client status hookah-party
+#                            sudo fail2ban-client set hookah-party unbanip <IP>
+
+[hookah-party]
+enabled   = true
+backend   = systemd
+filter    = hookah-party
+# Бан через ufw только на портах сайта: профиль «Nginx Full» = 80 и 443 (появляется вместе с nginx).
+# SSH с забаненного IP остаётся доступен — если под бан попадёт общий IP оператора, с которого заходите вы, сервер не потеряете.
+# Нет профиля (sudo ufw app list) — стандартное действие закроет IP целиком.
+action    = ufw[application="Nginx Full"]
+# 10 «штрафных» событий за час — бан на час; каждый следующий бан того же IP вдвое дольше, но не больше недели.
+maxretry  = 10
+findtime  = 1h
+bantime   = 1h
+bantime.increment = true
+bantime.maxtime   = 1w
+# IP-адреса не ищутся в DNS; свои адреса, которые банить нельзя, — через пробел (например, ваш домашний статический IP).
+usedns    = no
+ignoreip  = 127.0.0.1/8 ::1
+
+# Подбор паролей к SSH. Вход только по ключу, так что это просто чистка журнала от ботов.
+# Здесь — бан IP на все порты (стандартное действие ufw). Журнал — из journald: на Ubuntu 24.04 файла auth.log может не быть.
+[sshd]
+enabled   = true
+backend   = systemd
+banaction = ufw

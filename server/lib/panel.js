@@ -29,9 +29,10 @@ function encrypt(plain, key) {
   const body = Buffer.concat([c.update(plain), c.final()]);
   return Buffer.concat([MAGIC, iv, c.getAuthTag(), body]);
 }
+// Тег GCM — ровно 16 байт (authTagLength): обрезанный файл не принимаем.
 function decrypt(blob, key) {
-  if (!blob.subarray(0, 4).equals(MAGIC)) throw new Error('не тот формат файла');
-  const d = crypto.createDecipheriv('aes-256-gcm', key, blob.subarray(4, 16));
+  if (blob.length < 32 || !blob.subarray(0, 4).equals(MAGIC)) throw new Error('не тот формат файла');
+  const d = crypto.createDecipheriv('aes-256-gcm', key, blob.subarray(4, 16), { authTagLength: 16 });
   d.setAAD(AAD); d.setAuthTag(blob.subarray(16, 32));
   return Buffer.concat([d.update(blob.subarray(32)), d.final()]);
 }

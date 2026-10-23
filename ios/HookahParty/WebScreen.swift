@@ -59,8 +59,12 @@ struct WebScreen: UIViewRepresentable {
         weak var webView: WKWebView?
         private var downloads: [WKDownload: URL] = [:]
 
+        // Потянуть вниз — обновить. Если вместо сайта экран «Нет соединения» (страница без адреса, about:blank), открываем сайт
+        // заново: reload() перезагрузил бы сам этот экран, и выйти из него было бы нельзя.
         @objc func reload(_ sender: UIRefreshControl) {
-            webView?.reload()
+            if let web = webView {
+                if web.url == nil || web.url?.scheme == "about" { web.load(URLRequest(url: WebScreen.startURL)) } else { web.reload() }
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { sender.endRefreshing() }
         }
 
@@ -76,7 +80,8 @@ struct WebScreen: UIViewRepresentable {
             if action.shouldPerformDownload { decisionHandler(.download, preferences); return }
             guard let url = action.request.url else { decisionHandler(.cancel, preferences); return }
             if isOwn(url) { decisionHandler(.allow, preferences); return }
-            if ["http", "https", "tel", "mailto"].contains(url.scheme ?? "") { UIApplication.shared.open(url) }
+            // otpauth — кнопка «Открыть в приложении» при подключении кодов 2FA в панели администратора.
+            if ["http", "https", "tel", "mailto", "otpauth"].contains(url.scheme ?? "") { UIApplication.shared.open(url) }
             decisionHandler(.cancel, preferences)
         }
 
@@ -87,13 +92,24 @@ struct WebScreen: UIViewRepresentable {
             return nil
         }
 
-        // Если сайт не загрузился (нет сети при работе с сервером) — показываем понятный экран.
-        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        // Если сайт не загрузился (нет сети при работе с сервером) — показываем понятный экран: до начала страницы
+        // (provisional) и посреди неё. Отменённая загрузка — не ошибка: так бывает, когда новая загрузка (location.reload()
+        // со страницы) прерывает прежнюю (-999) или переход отдан Safari или стал скачиванием (WebKit, 102). Тогда экран не трогаем.
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { showOffline(webView, error) }
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { showOffline(webView, error) }
+
+        private func showOffline(_ webView: WKWebView, _ error: Error) {
+            let e = error as NSError
+            if (e.domain == NSURLErrorDomain && e.code == NSURLErrorCancelled) || (e.domain == "WebKitErrorDomain" && e.code == 102) { return }
+            let en = Locale.preferredLanguages.first?.hasPrefix("en") == true
+            // «Повторить» — ссылка на сам сайт: заново открывает его, а не этот экран.
+            let start = WebScreen.startURL.absoluteString.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "\"", with: "&quot;").replacingOccurrences(of: "<", with: "&lt;")
             let html = """
             <meta name="viewport" content="width=device-width,initial-scale=1">
             <body style="margin:0;height:100vh;display:grid;place-items:center;background:#161114;color:#f2eae5;font:16px -apple-system,sans-serif;text-align:center">
-            <div style="padding:24px"><div style="font-size:44px">💨</div><h2>Нет соединения</h2>
-            <p style="color:#a8969c">Проверьте интернет и потяните экран вниз, чтобы обновить.</p></div></body>
+            <div style="padding:24px"><div style="font-size:44px">💨</div><h2>\(en ? "No connection" : "Нет соединения")</h2>
+            <p style="color:#a8969c">\(en ? "Check your internet connection and pull down or tap “Try again”." : "Проверьте интернет и потяните экран вниз или нажмите «Повторить».")</p>
+            <a href="\(start)" style="display:inline-block;margin-top:8px;padding:12px 22px;border-radius:999px;background:#d4894f;color:#1b1013;font-weight:600;text-decoration:none">\(en ? "Try again" : "Повторить")</a></div></body>
             """
             webView.loadHTMLString(html, baseURL: nil)
         }

@@ -1,14 +1,42 @@
-# systemd: ежедневная резервная копия базы (запускается таймером hookah-backup.timer)
+# systemd: /etc/systemd/system/hookah-backup.service — ночная зашифрованная копия базы (её запускает hookah-backup.timer).
+# BACKUP_KEY (и при желании BACKUP_KEEP, BACKUP_DIR) — в .env, сюда он попадает через EnvironmentFile.
+# Без BACKUP_KEY копия не делается: запуск завершится ошибкой с объяснением в журнале.
+#   Проверить вручную: sudo systemctl start hookah-backup && journalctl -u hookah-backup -n 5
+#   Список копий:      sudo ls -l /opt/hookah-party/server/data/backups
 [Unit]
-Description=Hookah Party: резервная копия базы
+Description=Hookah Party: зашифрованная резервная копия базы
 
 [Service]
 Type=oneshot
 User=hookah
+Group=hookah
 WorkingDirectory=/opt/hookah-party
 EnvironmentFile=/opt/hookah-party/.env
 ExecStart=/usr/bin/node server/backup.js /opt/hookah-party/server/data/backups
+UMask=0077
+# Копия — фоновая работа: уступает процессор и диск сайту.
+Nice=10
+IOSchedulingClass=idle
+
 NoNewPrivileges=true
 ProtectSystem=strict
-ProtectHome=true
 ReadWritePaths=/opt/hookah-party/server/data
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+# Копии сеть не нужна.
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM

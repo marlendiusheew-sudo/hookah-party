@@ -1,12 +1,27 @@
 .DS_Store
 dist/
 node_modules/
-server/data/
-.env
 ios/build/
 ios/build-export.plist
 *.xcuserstate
 xcuserdata/
 
+# Секреты — никогда в git. Тот же список проверяет scripts/check-secrets.js (перед коммитом и в CI).
+# Ключи и пароли — только в .env; в репозитории лишь шаблон .env.example с пустыми значениями.
+.env
+.env.*
+!.env.example
+# Файлы ключей и сертификатов (TLS, SSH, Apple)
+*.pem
+*.key
+*.p12
+*.pfx
+*.p8
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+# Данные сервера: база, резервные копии, ключ разработки
+server/data/
 # Исходник панели администратора — в git только зашифрованным (server/private/admin-panel.enc)
 server/private/admin-panel.js

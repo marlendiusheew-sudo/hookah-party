@@ -1,5 +1,8 @@
-# systemd: /etc/systemd/system/hookah-backup.timer
-# sudo systemctl daemon-reload && sudo systemctl enable --now hookah-backup.timer
+# systemd: /etc/systemd/system/hookah-backup.timer — запускает hookah-backup.service каждую ночь.
+#   sudo cp deploy/hookah-backup.service deploy/hookah-backup.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now hookah-backup.timer
+#   Когда следующий запуск: systemctl list-timers hookah-backup.timer
+# Время — по часовому поясу сервера (поставьте Asia/Bishkek: sudo timedatectl set-timezone Asia/Bishkek).
 [Unit]
 Description=Hookah Party: резервная копия базы каждую ночь
 

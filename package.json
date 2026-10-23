@@ -6,9 +6,15 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node tests/smoke.test.js && node --test tests/server.test.js",
+    "test": "node tests/smoke.test.js && node tests/xss.test.js && node --test tests/server.test.js tests/attack.test.js tests/deploy.test.js",
+    "test:e2e": "node --test tests/e2e.test.js",
+    "test:security": "node tests/xss.test.js && node --test tests/attack.test.js",
+    "secrets": "node scripts/check-secrets.js --all",
+    "secrets:history": "node scripts/check-secrets.js --history",
+    "hooks": "git config core.hooksPath .githooks",
     "backup": "node server/backup.js",
-    "test:e2e": "node --test tests/e2e.test.js"
+    "restore": "node server/backup.js restore",
+    "rotate-key": "node server/rotate-key.js"
   },
   "devDependencies": {
     "jsdom": "30.1.3",

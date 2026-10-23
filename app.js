@@ -20,7 +20,8 @@
   const hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
   // Режим: SERVER = true, если сайт открыт с нашего сервера (тогда данные и вход идут через API).
-  let SERVER = false, CSRF = null;
+  // wait — вместо страниц экран ожидания: 'boot' — режим ещё не ясен, 'down' и 'offline' — сервер есть, но недоступен (boot() в конце файла).
+  let SERVER = false, CSRF = null, wait = 'boot';
   // Открыт ли сайт внутри iOS-приложения (оно добавляет метку HookahPartyApp к User-Agent).
   const IN_APP = location.protocol === 'hookah:' || /HookahPartyApp/.test(navigator.userAgent);
 
@@ -34,52 +35,128 @@
   // Всё здесь — защита на стороне браузера. Когда появится сервер, те же правила нужно повторить на нём:
   // браузерные проверки можно обойти, серверные — нет.
 
-  // Журнал событий безопасности (последние 100), виден в профиле → Настройки → Безопасность.
-  const SEC_LOG = 'hp.sec.log';
+  // Журнал событий безопасности (последние 100, не старше 90 дней), виден в профиле → Настройки → Безопасность.
+  const SEC_LOG = 'hp.sec.log', SEC_LOG_DAYS = 90;
   function secRead(key, d) { try { return JSON.parse(localStorage.getItem(key)) ?? d; } catch (e) { return d; } }
   function secWrite(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* хранилище недоступно */ } }
+  // Записи старше 90 дней отбрасываются при каждом чтении и записи — как обещано в политике конфиденциальности.
+  function secLogRead() {
+    const all = secRead(SEC_LOG, []), since = Date.now() - SEC_LOG_DAYS * 864e5;
+    const log = Array.isArray(all) ? all.filter(x => x && new Date(x.at).getTime() > since) : [];
+    if (!Array.isArray(all) || log.length !== all.length) secWrite(SEC_LOG, log);
+    return log;
+  }
   function secLog(type, detail = '') {
-    const log = secRead(SEC_LOG, []);
+    const log = secLogRead();
     log.unshift({ type, detail: String(detail).slice(0, 160), at: new Date().toISOString() });
     secWrite(SEC_LOG, log.slice(0, 100));
   }
 
-  // Фильтр разметки: вырезает опасные теги, обработчики событий и ссылки javascript:.
-  // Пользовательский текст до сюда доходит уже экранированным (esc), поэтому фильтр — второй рубеж защиты.
-  const BAD_BLOCKS = /<\s*(script|iframe|object|embed|template|noscript|style)\b[\s\S]*?<\s*\/\s*\1\s*>/gi;
-  const BAD_TAGS = /<\s*\/?\s*(script|iframe|object|embed|base|meta|link|frame|frameset|template|noscript|style)\b[^>]*>/gi;
-  const BAD_ATTR = /\s(on[a-z]+|formaction|srcdoc)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi;
-  const BAD_URL = /(\s(?:href|src|action|xlink:href)\s*=\s*)(["'])\s*(?:javascript|vbscript|data:(?!image\/(?:png|jpe?g|webp|gif);))[^"']*\2/gi;
-  let blockedCount = 0;
+  // Фильтр разметки — второй рубеж после экранирования (esc) и CSP: пользовательский текст доходит сюда уже экранированным.
+  // Разметку разбирает сам браузер (DOMParser: отдельный документ, где код не выполняется и ничего не загружается), поэтому
+  // теги и атрибуты читаются ровно так, как их прочтёт страница, — регулярные выражения обманывает «/» вместо пробела,
+  // кавычка вплотную или «>» внутри значения. Остаются только теги и атрибуты, которые сайт использует сам (белый список),
+  // остальное выбрасывается вместе с содержимым, комментарии — тоже. Ссылки — только свои, http(s), mailto, tel и otpauth
+  // (QR-код 2FA в панели), картинки — data:image, blob: и свой сайт, style — без url(), expression и @import.
+  const NS_HTML = 'http://www.w3.org/1999/xhtml', NS_SVG = 'http://www.w3.org/2000/svg', words = s => new Set(s.split(' '));
+  const OK_TAGS = {
+    [NS_HTML]: words('a article aside b blockquote br button cite code datalist dd details div dl dt em fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hr i img input kbd label legend li mark nav ol optgroup option p pre progress s section select small span strong sub summary sup textarea time u ul'),
+    [NS_SVG]: words('svg g path circle ellipse rect line polyline polygon text tspan defs linearGradient radialGradient stop')
+  };
+  // data-* и aria-* разрешены везде, href и src — после проверки адреса.
+  const OK_ATTRS = {
+    [NS_HTML]: words('accept alt autocapitalize autocomplete checked class cols datetime decoding dir disabled enterkeyhint for height hidden href id inputmode label lang list loading max maxlength min minlength multiple name novalidate open pattern placeholder readonly rel required reversed role rows selected size spellcheck src start step style tabindex target title type value width'),
+    [NS_SVG]: words('class clip-rule cx cy d dominant-baseline fill fill-opacity fill-rule focusable font-size font-weight fx fy gradientTransform gradientUnits height id letter-spacing offset opacity pathLength points preserveAspectRatio r role rx ry shape-rendering stop-color stop-opacity stroke stroke-dasharray stroke-dashoffset stroke-linecap stroke-linejoin stroke-miterlimit stroke-opacity stroke-width style tabindex text-anchor transform vector-effect viewBox width x x1 x2 xmlns y y1 y2')
+  };
+  // Адрес так, как его поймёт браузер: без пробелов и управляющих символов по краям, без табуляций и переводов строк внутри.
+  const bareUrl = v => v.replace(/^[\x00-\x20]+|[\x00-\x20]+$/g, '').replace(/[\t\n\r]/g, '');
+  const urlScheme = v => (/^([a-z][a-z\d+.-]*):/i.exec(bareUrl(v)) || [])[1]?.toLowerCase();
+  const ownUrl = v => { try { const u = new URL(bareUrl(v), location.href); return u.protocol === location.protocol && u.host === location.host; } catch (e) { return false; } };
+  const BAD_CSS = /(url|image|image-set|cross-fade|element|src|expression)\s*\(|@import|javascript:|behavior|binding|\\/i;
+  const formProps = document.createElement('form');
+  function attrOk(el, a) {
+    const n = a.name, v = a.value;
+    if (/^(data-[\w.-]+|aria-[a-z]+)$/.test(n)) return true;
+    if (!OK_ATTRS[el.namespaceURI].has(n)) return false;
+    if (n === 'href') return !urlScheme(v) || ['http', 'https', 'mailto', 'tel', 'otpauth'].includes(urlScheme(v));
+    if (n === 'src') return /^(data:image\/(png|jpe?g|webp|gif);base64,|blob:)/i.test(bareUrl(v)) || ownUrl(v);
+    if (n === 'style') return !BAD_CSS.test(v);
+    // id и name, совпадающие со свойствами document или формы, подменили бы их для кода страницы (DOM clobbering).
+    if ((n === 'id' || n === 'name') && (v in document || v in formProps)) return false;
+    return el.namespaceURI !== NS_SVG || !/url\s*\(/i.test(v) || /^url\(#[\w-]+\)$/.test(v.trim()); // в SVG — только ссылки на свои градиенты
+  }
+  // Обход без рекурсии (глубина вложенности не важна): лишний узел удаляется вместе с поддеревом, у остальных — лишние атрибуты.
+  function scrub(body) {
+    let hit = '', n = body.firstChild;
+    const after = x => { while (x !== body && !x.nextSibling) x = x.parentNode; return x === body ? null : x.nextSibling; };
+    while (n) {
+      if (n.nodeType === 3) { n = after(n); continue; }
+      if (n.nodeType !== 1 || !OK_TAGS[n.namespaceURI]?.has(n.localName)) {
+        if (n.nodeType === 1) hit ||= '<' + n.localName;
+        const next = after(n); n.remove(); n = next; continue;
+      }
+      for (const a of [...n.attributes]) if (!attrOk(n, a)) { hit ||= `${a.name}=${a.value}`.slice(0, 40); n.removeAttributeNode(a); }
+      n = n.firstChild || after(n);
+    }
+    return hit;
+  }
+  let blockedCount = 0, parsePolicy = null;
+  const parser = new DOMParser();
   function sanitizeHTML(html) {
     const src = String(html);
-    if (!/[<]/.test(src)) return src;
-    let hit = '';
-    const cut = m => { hit ||= m.slice(0, 40); return ''; };
-    const out = src.replace(BAD_BLOCKS, cut).replace(BAD_TAGS, cut)
-      .replace(/<[a-zA-Z][^>]*>/g, tag => tag
-        .replace(BAD_ATTR, m => { hit ||= m.trim().slice(0, 40); return ''; })
-        .replace(BAD_URL, (m, a, q) => { hit ||= m.trim().slice(0, 40); return `${a}${q}#${q}`; }));
+    if (!src.includes('<')) return src;
+    // «<body>» впереди — чтобы начальные пробелы и текст разбирались так же, как при вставке в элемент страницы.
+    const doc = parser.parseFromString(parsePolicy ? parsePolicy.createHTML('<body>' + src) : '<body>' + src, 'text/html');
+    const hit = scrub(doc.body);
     if (hit && blockedCount++ < 20) { secLog('html_blocked', hit); console.warn('Hookah Party: заблокирован опасный фрагмент разметки', hit); }
-    return out;
+    return doc.body.innerHTML;
   }
-  // Trusted Types (Chrome, Edge): браузер пропускает в разметку только то, что прошло через фильтр.
-  // В остальных браузерах тот же фильтр встроен в установку innerHTML.
+  // Trusted Types (Chrome, Edge и другие браузеры, где они есть): в разметку попадает только то, что прошло через фильтр (политика default).
+  // Политика hp-sanitize — только для самого фильтра: разобрать ещё не очищенную строку в отдельном документе, в страницу она не попадает.
+  // Где Trusted Types нет или они не включены (нет CSP), тот же фильтр встроен в innerHTML, outerHTML и insertAdjacentHTML.
   (() => {
     try {
       if (window.trustedTypes?.createPolicy) {
+        let used = false;
+        parsePolicy = window.trustedTypes.createPolicy('hp-sanitize', { createHTML: s => s });
         window.trustedTypes.createPolicy('default', {
-          createHTML: sanitizeHTML,
+          createHTML: s => { used = true; return sanitizeHTML(s); },
           // Скрипт можно подключить только один: панель администратора с нашего сайта.
           createScriptURL: u => { if (/^admin\.js\?v=\d+$/.test(u) || u === 'sw.js') return u; secLog('html_blocked', 'script ' + String(u).slice(0, 40)); throw new TypeError('Скрипт запрещён'); }
         });
-        return;
+        document.createElement('i').innerHTML = '<b></b>'; // с CSP строка прошла через политику — значит, Trusted Types работают
+        if (used) return;
       }
-      const d = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
-      if (d?.set) Object.defineProperty(Element.prototype, 'innerHTML', { ...d, set(v) { d.set.call(this, sanitizeHTML(v)); } });
+      for (const k of ['innerHTML', 'outerHTML']) {
+        const d = Object.getOwnPropertyDescriptor(Element.prototype, k);
+        if (d?.set) Object.defineProperty(Element.prototype, k, { ...d, set(v) { d.set.call(this, sanitizeHTML(v)); } });
+      }
+      const adjacent = Element.prototype.insertAdjacentHTML;
+      if (adjacent) Element.prototype.insertAdjacentHTML = function (pos, v) { return adjacent.call(this, pos, sanitizeHTML(v)); };
     } catch (e) { /* политика уже создана или браузер не позволяет */ }
   })();
-  document.addEventListener('securitypolicyviolation', e => secLog('csp', `${e.violatedDirective} ${e.blockedURI || ''}`.trim()));
+  // Браузер заблокировал код по политике безопасности (CSP или Trusted Types). Пишем в журнал этого браузера (не больше 20 за визит),
+  // а на сервере ещё и отправляем короткий отчёт (не больше 5 за визит, ошибки отправки не важны). В отчёте только нужное:
+  // директива, источник — адрес сайта без пути или слово inline/eval/trusted-types-sink, начало кода, файл и строка, раздел сайта.
+  // Политик две (заголовок сервера и <meta> в index.html), и каждая сообщает о том же нарушении, — одинаковые отчёты считаем один раз.
+  let cspLogged = 0, cspSent = 0;
+  const cspSeen = new Set();
+  function cspSource(uri) {
+    const s = String(uri || '');
+    if (!s || /^[a-z][a-z0-9-]*$/i.test(s)) return s.toLowerCase().slice(0, 40);
+    try { const u = new URL(s); return /^(https?|wss?):$/.test(u.protocol) ? u.origin : u.protocol.slice(0, -1); } catch (e) { return 'other'; }
+  }
+  document.addEventListener('securitypolicyviolation', e => {
+    const r = {
+      directive: String(e.effectiveDirective || e.violatedDirective || '').slice(0, 40), blocked: cspSource(e.blockedURI), sample: clean(e.sample, 60),
+      src: String(e.sourceFile || '').split(/[?#]/)[0].split('/').pop().slice(0, 60), line: e.lineNumber | 0, page: (/^[\w-]{1,30}$/.exec(location.hash.split('/')[1] || 'home') || ['?'])[0]
+    };
+    const key = JSON.stringify(r);
+    if (cspSeen.has(key) || cspSeen.size >= 100) return;
+    cspSeen.add(key);
+    if (cspLogged++ < 20) secLog('csp', [r.directive, r.blocked, r.sample && `«${r.sample}»`].filter(Boolean).join(' '));
+    if (SERVER && cspSent++ < 5) api('POST', '/csp-report', r).catch(() => {});
+  });
 
   // Очистка ввода: невидимые и управляющие символы, «переворот» текста, лишние пробелы, длина.
   function clean(s, max = 500, multiline = false) {
@@ -92,6 +169,8 @@
   const validName = s => /^[\p{L}\p{M}][\p{L}\p{M}\s'’.-]{1,39}$/u.test(s);
   const safeUrl = u => /^https?:\/\/[^\s"'<>]+\.[^\s"'<>]+$/i.test(String(u || '')) ? String(u) : '';
   const safeAvatar = u => /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/.test(String(u || '')) && String(u).length < 400000 ? u : null;
+  // Сколько символов data:-адреса помещается в лимит фото на сервере (100 КБ картинки в base64).
+  const AVATAR_MAX_URL = Math.ceil(100 * 1024 / 3) * 4;
 
   // Ограничение частоты для чувствительных действий (вход, SMS, регистрация) — хранится в браузере.
   function rateHit(key, max, windowMs, consume = true) {
@@ -110,7 +189,8 @@
     codeTtlMs: 5 * 60e3,      // код из SMS действует 5 минут
     codeAttempts: 5,          // попыток ввести код
     accountsPerDevice: 3,     // аккаунтов, созданных с одного устройства (аналог «3 с одного IP»)
-    sessionDays: 30           // сессия истекает через 30 дней
+    sessionDays: 30,          // сессия истекает через 30 дней
+    smsResetMs: 15 * 60e3     // после входа по коду из SMS пароль можно сменить без текущего — 15 минут
   };
   const waitText = ms => { const m = Math.ceil(ms / 60000); return m >= 60 ? L(`${Math.ceil(m / 60)} ч`, `${Math.ceil(m / 60)} h`) : L(`${m} мин`, `${m} min`); };
 
@@ -159,6 +239,14 @@
     if (/\d/.test(p) && /[^\p{L}\d]/u.test(p)) s++;
     return Math.min(3, s);
   }
+  // Индикатор надёжности под полем нового пароля (полоски .pass-meter и подпись): регистрация и смена пароля.
+  function passMeter(input, meter, label, phone = () => '') {
+    input.addEventListener('input', () => {
+      const p = input.value, sc = p ? passScore(p) : -1, issue = p ? passIssues(p, phone()) : '';
+      meter.dataset.score = issue ? 0 : sc;
+      label.textContent = !p ? '' : issue || [L('Слабый пароль', 'Weak password'), L('Неплохой пароль', 'Fair password'), L('Хороший пароль', 'Good password'), L('Надёжный пароль', 'Strong password')][sc];
+    });
+  }
 
   // Защита от встраивания сайта в чужие страницы (на GitHub Pages нельзя задать заголовок frame-ancestors).
   if (window.top !== window.self && /(^|\.)github\.io$/.test(location.hostname)) {
@@ -198,13 +286,21 @@
     return d;
   }
   const validPhone = d => d.length >= 11 && d.length <= 15;
+  // Регистрация, вход по SMS и приглашение по номеру — только для номеров с этими кодами стран (как на сервере: ALLOWED_PHONE_PREFIXES,
+  // по умолчанию только +996). С сервером список приходит в данных (phoneCodes), в демо — этот.
+  let PHONE_CODES = ['996'];
+  const PHONE_LEN = { 996: 12, 7: 11 };
+  const phoneAllowed = d => validPhone(d) && PHONE_CODES.some(p => d.startsWith(p) && (!PHONE_LEN[p] || d.length === PHONE_LEN[p]));
+  const phoneCodesText = () => PHONE_CODES.map(p => '+' + p).join(', ');
+  const phoneErr = d => !validPhone(d) || PHONE_CODES.some(p => d.startsWith(p)) ? L('Введите номер полностью, вместе с кодом страны.', 'Enter the full number including the country code.')
+    : L(`Принимаем только номера с кодом ${phoneCodesText()}.`, `Only numbers starting with ${phoneCodesText()} are accepted.`);
   function fmtPhone(s) {
     const d = normPhone(s);
     if (d.length === 12 && d.startsWith('996')) return `+996 ${d.slice(3, 6)} ${d.slice(6, 9)} ${d.slice(9)}`;
     if (d.length === 11 && d[0] === '7') return `+7 (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7, 9)}-${d.slice(9)}`;
     return '+' + d;
   }
-  // Номер целиком видят только друзья и участники общих сборов.
+  // Номер без середины: кто видит его целиком — см. canSeePhone.
   const maskedPhone = s => { const d = normPhone(s); return `+${d.startsWith('996') ? '996' : d[0]} ••• ••• ${d.slice(-3)}`; };
   function maskPhone(el) {
     el.addEventListener('input', () => {
@@ -280,10 +376,14 @@
     mail: svg('<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 8l9 6 9-6"/>'),
     list: svg('<path d="M4 6h16M4 12h16M4 18h10"/>'),
     shield: svg('<path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6z"/><path d="M9 12l2 2 4-4"/>'),
+    mobile: svg('<rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M11 18.5h2"/>'),
+    tablet: svg('<rect x="4.5" y="3" width="15" height="18" rx="2.2"/><path d="M11 18h2"/>'),
+    laptop: svg('<rect x="4.5" y="5" width="15" height="10.5" rx="1.5"/><path d="M2.5 19h19"/>'),
     tg: svg('<path d="M21 4.5L2.8 11.4c-.8.3-.8 1.4 0 1.7l4.6 1.6 1.8 5.4c.2.7 1.1.9 1.6.4l2.6-2.5 4.6 3.4c.6.4 1.4.1 1.6-.6L22.3 5.8c.2-.9-.6-1.6-1.3-1.3z"/><path d="M7.4 14.7L18 7.5l-8.2 8.8"/>'),
     wa: svg('<path d="M3.5 20.5l1.3-4.3A8.6 8.6 0 1 1 8 19.3z"/><path d="M9 8.3c-.4 2.6 3.5 6.6 6.4 6.3.6 0 1.2-.6 1.3-1.3l-1.9-1-1 .9c-1.1-.4-2.4-1.6-2.8-2.8l.9-1-1-1.9c-.7 0-1.4.4-1.9.8z"/>'),
     share: svg('<path d="M12 15V3.5M8 7l4-4 4 4M6 11H5v9.5h14V11h-1"/>'),
-    link: svg('<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/>')
+    link: svg('<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/>'),
+    key: svg('<circle cx="7.5" cy="16.5" r="3.5"/><path d="M10 14l9.5-9.5M16.5 7.5l2.5 2.5M14 10l2 2"/>')
   };
 
   // ---------- Каталог ----------
@@ -618,8 +718,14 @@
       return null;
     }
   }
-  function save() { if (SERVER) return; try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { /* хранилище недоступно */ } }
-  let db = load() || withStories(seed());
+  function save() { if (SERVER || wait) return; try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { /* хранилище недоступно */ } }
+  // Пустые данные: сайт с сервером, пока сервер не ответил, и после удаления аккаунта.
+  const emptyData = () => ({ session: null, role: null, csrf: null, users: [], events: [], reviews: [], mixes: [], notifications: [], storiesSeeded: true });
+  // Где сервер уже был, демо-данных нет даже в памяти: до ответа сервера — пусто.
+  let db = prefs.get('mode') === 'server' ? emptyData() : load() || withStories(seed());
+  // Сервер подтвердился — демо-данные этому браузеру не нужны. Стираем и их, и демо-счётчики: там мог остаться номер
+  // и хэш пароля, если человек «зарегистрировался» в демо, пока сайт по ошибке показывал его вместо сервера (так бывало в прежних версиях).
+  const forgetDemo = () => { for (const k of [KEY, 'hp.sec.fails', 'hp.sec.rl', 'hp.sec.regs', 'hp.evlog']) try { localStorage.removeItem(k); } catch (e) { /* хранилище недоступно */ } };
 
   // ---------- Сервер ----------
   // На GitHub Pages и с диска сайт работает в демо-режиме (данные в браузере).
@@ -636,12 +742,36 @@
   }
   const apiMsg = err => err?.info?.message ? L(err.info.message.ru, err.info.message.en)
     : navigator.onLine === false ? L('Нет соединения с интернетом.', 'No internet connection.') : L('Не удалось связаться с сервером. Попробуйте ещё раз.', 'Could not reach the server. Try again.');
-  function applyData(d) { if (d && Array.isArray(d.users)) { db = d; CSRF = d.csrf || null; } }
-  async function refresh() { try { applyData(await api('GET', '/bootstrap')); } catch (e) { /* покажем то, что есть */ } }
-  // 'server' — есть сервер; 'static' — сайт без сервера (демо); 'offline' — сеть недоступна.
-  async function detectServer() {
+  // Данные с сервера. Чужих списков друзей и избранного сервер не присылает, а у чужих вечеров из «Истории» нет гостей и голосов
+  // (только итоги в summary) — дополняем пустыми, чтобы страницы не спотыкались.
+  function applyData(d) {
+    if (!d || !Array.isArray(d.users)) return false;
+    d.users.forEach(u => { u.friends ||= []; u.favs ||= []; });
+    (d.events || []).forEach(e => { e.invites ||= []; e.picks ||= {}; e.bowls ||= {}; e.paid ||= {}; e.comments ||= []; });
+    const codes = Array.isArray(d.phoneCodes) ? d.phoneCodes.map(c => digits(c)).filter(Boolean) : [];
+    if (codes.length) PHONE_CODES = codes;
+    db = d; CSRF = d.csrf || null;
+    return true;
+  }
+  // Свежие данные с сервера; false — не получилось (данные остаются прежними).
+  async function refresh() { try { return applyData(await api('GET', '/bootstrap')); } catch (e) { return false; } }
+  // 'server' — есть сервер; 'static' — сервера здесь нет и не было (GitHub Pages, файл с диска, приложение без сервера: на /api/health
+  // там 404) — это демо; 'offline' — сеть недоступна; 'down' — сервер есть, но ответил не так: лимит запросов (429), перезапуск (5xx).
+  // Ошибка в формате нашего сервера (JSON с полем error) запоминает, что сервер тут есть. Где он уже был, даже 404 — сбой, а не демо:
+  // демо-данные и демо-вход на сайте с сервером не показываются никогда.
+  async function detectServer(again = true) {
     if (location.protocol === 'file:') return 'static';
-    try { const r = await fetch('/api/health', { cache: 'no-store' }); return r.ok && (await r.json())?.mode === 'server' ? 'server' : 'static'; } catch (e) { return 'offline'; }
+    try {
+      const r = await fetch('/api/health', { cache: 'no-store' });
+      const j = await r.json().catch(() => null);
+      if (r.ok && j?.mode === 'server') return 'server';
+      if (!r.ok && r.status !== 404 && j?.error) prefs.set('mode', 'server');
+      return (r.ok || r.status === 404) && prefs.get('mode') !== 'server' ? 'static' : 'down';
+    } catch (e) {
+      // Мобильный интернет теряет запросы и на секунду: если браузер считает, что сеть есть, — ещё одна попытка.
+      if (again && navigator.onLine !== false) { await new Promise(r => setTimeout(r, 1000)); return detectServer(false); }
+      return 'offline';
+    }
   }
   // Одно действие пользователя: в демо меняем данные в браузере, на сервере — запрос и свежие данные в ответ.
   async function act(local, method, path, body) {
@@ -654,8 +784,10 @@
     }
   }
   const quiet = () => {};
-  // Номер для показа: полный — себе, друзьям и участникам общих сборов, иначе скрытый.
-  const phoneShown = (viewer, p) => p?.phone ? (canSeePhone(viewer, p) ? fmtPhone(p.phone) : maskedPhone(p.phone)) : (p?.phoneMasked || '');
+  // Номер для показа: полный — по правилу canSeePhone, иначе последние цифры. На сервере полный номер приходит только тем,
+  // кому его можно видеть, поэтому показываем то, что прислал сервер.
+  const phoneShown = (viewer, p) => SERVER ? (p?.phone ? fmtPhone(p.phone) : p?.phoneMasked || '')
+    : p?.phone ? (canSeePhone(viewer, p) ? fmtPhone(p.phone) : maskedPhone(p.phone)) : (p?.phoneMasked || '');
 
   // Напоминания хранятся в этом браузере в обоих режимах.
   const REM = 'hp.remind';
@@ -663,6 +795,9 @@
   const remindSet = (e, u, patch) => { const all = secRead(REM, {}), k = u.id + ':' + e.id; all[k] = { ...all[k], ...patch }; secWrite(REM, all); };
 
   const me = () => db.users.find(u => u.id === db.session) || null;
+  // Сессия из входа по коду из SMS меньше 15 минут назад: пароль можно сменить без текущего («Забыли пароль?»).
+  // На сервере это решает сервер (поле passwordResetAllowed в bootstrap), в демо — время входа по SMS в данных браузера.
+  const resetAllowed = () => !!me() && (SERVER ? !!db.passwordResetAllowed : db.viaSmsAt > 0 && Date.now() - db.viaSmsAt < SEC.smsResetMs);
   const userById = id => db.users.find(u => u.id === id);
   const userByPhone = p => db.users.find(u => u.phone === normPhone(p));
   const eventById = id => db.events.find(e => e.id === id);
@@ -670,9 +805,12 @@
   const isMember = (e, u) => !!u && (e.hostId === u.id || !!myInvite(e, u));
   const canVote = (e, u) => !!u && (e.hostId === u.id || myInvite(e, u)?.status === 'going');
   const goingIds = e => [e.hostId, ...e.invites.filter(i => i.status === 'going' && i.userId).map(i => i.userId)];
-  const isFriend = (a, b) => !!a && !!b && a.friends.includes(b.id);
+  // В друзьях — по своему списку (на сервере приходит только свой список друзей, чужих нет).
+  const isFriend = (a, b) => !!a && !!b && (a.friends || []).includes(b.id);
   const sharedEvents = (a, b) => db.events.filter(e => isMember(e, a) && isMember(e, b));
-  const canSeePhone = (viewer, u) => viewer && (viewer.id === u.id || isFriend(viewer, u) || sharedEvents(viewer, u).length > 0);
+  // Полный номер (то же правило, что на сервере): свой; взаимных друзей; гостя, который идёт на ваш сбор; организатора сбора, на который идёте вы.
+  const goesTo = (guest, host) => db.events.some(e => e.hostId === host.id && e.invites.some(i => i.userId === guest.id && i.status === 'going'));
+  const canSeePhone = (viewer, u) => !!viewer && !!u && (viewer.id === u.id || (isFriend(viewer, u) && isFriend(u, viewer)) || goesTo(u, viewer) || goesTo(viewer, u));
   const eventVenue = e => (e.venueId && venueById(e.venueId)) || VENUES.find(v => v.name === e.venue);
 
   // Подсчёт голосов: чем больше участников выбрали позицию, тем выше она в списке.
@@ -701,10 +839,14 @@
 
   // ---------- Картинки ----------
   const initials = n => String(n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  // Фото профиля: в демо — data:-адрес из браузера; на сервере в данных только версия фото, сама картинка — /api/avatar/<id>?v=<версия>
+  // (сервер отдаёт её тем, кто видит имя, браузер кеширует).
+  const avatarSrc = u => SERVER ? (/^[\w-]{4,64}$/.test(u.avatar || '') && /^[\w-]{1,40}$/.test(u.id) ? `/api/avatar/${u.id}?v=${u.avatar}` : '') : safeAvatar(u.avatar) || '';
   function avatar(u, size = '') {
     const cls = `av ${size ? 'av-' + size : ''}`;
     if (!u) return `<span class="${cls} av-ghost">?</span>`;
-    if (safeAvatar(u.avatar)) return `<img class="${cls}" src="${u.avatar}" alt="${esc(u.name)}">`;
+    const src = avatarSrc(u);
+    if (src) return `<img class="${cls}" src="${esc(src)}" alt="${esc(u.name)}" loading="lazy" decoding="async">`;
     return `<span class="${cls}" style="--h:${hashStr(u.id) % 360}" title="${esc(u.name)}">${esc(initials(u.name))}</span>`;
   }
   function avatarStack(ids, max = 5, size = 'sm') {
@@ -744,7 +886,10 @@
           const s = 256, c = document.createElement('canvas'), k = Math.min(img.width, img.height);
           c.width = c.height = s;
           c.getContext('2d').drawImage(img, (img.width - k) / 2, (img.height - k) / 2, k, k, 0, 0, s, s);
-          resolve(c.toDataURL('image/jpeg', .86));
+          // Сервер принимает фото до 100 КБ: очень пёстрый снимок пережимаем сильнее, пока не уложится.
+          let url = '';
+          for (const q of [.86, .75, .6, .45]) { url = c.toDataURL('image/jpeg', q); if (url.length <= AVATAR_MAX_URL) break; }
+          resolve(url);
         };
         img.src = r.result;
       };
@@ -932,7 +1077,7 @@
       <button class="icon-btn" type="button" data-action="cycleTheme" title="${L('Тема', 'Theme')}: ${themeName}" aria-label="${L('Тема', 'Theme')}: ${themeName}">${THEMES[theme][1]}</button>
       ${u ? `<button class="plus-btn" type="button" data-action="newEvent" title="${L('Создать сбор и пригласить друзей', 'Create an event and invite friends')}" aria-label="${L('Создать сбор', 'Create event')}">${ICON.plus}</button>
          <a class="me-link" href="#/profile" title="${L('Профиль', 'Profile')}">${avatar(u, 'sm')}</a>`
-        : `<a class="btn btn-primary btn-sm" href="#/login">${L('Войти', 'Sign in')}</a>`}`;
+        : wait ? '' : `<a class="btn btn-primary btn-sm" href="#/login">${L('Войти', 'Sign in')}</a>`}`;
     const tab = (k, icon, t) => `<a href="#/${k}" data-nav="${k}">${icon}${t}</a>`;
     $('#tabbar').innerHTML = tab('venues', ICON.home, L('Места', 'Places')) + tab('catalog', ICON.hookah, L('Кальян', 'Hookah'))
       + `<button type="button" class="tab-plus" data-action="newEvent" aria-label="${L('Создать сбор', 'Create event')}">${ICON.plus}</button>`
@@ -1326,7 +1471,7 @@
       [['Как позвать друга, которого нет в сервисе?', 'How do I invite a friend who is not on the service?'], ['Введите его номер в поле приглашения. Сбор появится у него сразу после регистрации с этим номером.', 'Enter their number in the invite field. The event appears for them as soon as they sign up with that number.']],
       [['Откуда данные о заведениях?', 'Where does the venue data come from?'], ['Из OpenStreetMap, открытой карты, которую заполняют сами пользователи. Часы работы могут устареть, поэтому перед походом проверьте их в 2ГИС или Google Картах.', 'From OpenStreetMap, an open map filled in by its users. Opening hours may be out of date, so check them in 2GIS or Google Maps before you go.']],
       [['Есть ли что-то без никотина?', 'Is there anything nicotine-free?'], ['Да, в каталоге есть бестабачные смеси. Включите фильтр «бестабачное».', 'Yes, the catalogue has tobacco-free blends. Use the “tobacco-free” filter.']],
-      [['Кто видит мой номер телефона?', 'Who can see my phone number?'], ['Полностью — только друзья и участники общих сборов. Остальные видят последние три цифры.', 'Only friends and people from shared events see it in full. Everyone else sees the last three digits.']]
+      [['Кто видит мой номер телефона?', 'Who can see my phone number?'], ['Полностью — взаимные друзья (вы добавили друг друга), организатор сбора, на который вы идёте, и гости, которые идут на ваш сбор. Остальные видят последние три цифры.', 'In full: mutual friends (you have added each other), the host of an event you are going to, and guests going to your event. Everyone else sees the last three digits.']]
     ];
     return `
       <section class="stats-band" aria-label="${L('Hookah Party в цифрах', 'Hookah Party in numbers')}">
@@ -1675,8 +1820,8 @@
     view.innerHTML = `<section class="section"><span class="eyebrow">${L('Помощь', 'Help')}</span><h1>${L('Как это работает', 'How it works')}</h1></section>
       ${stepsHtml()}
       <section class="panel"><h2>${L('Подтверждение телефона', 'Phone verification')}</h2><p class="muted" style="margin-top:8px;max-width:65ch">
-      ${L('При регистрации мы отправляем на номер четырёхзначный код. Пока номер не подтверждён, войти в сервис и получать приглашения нельзя. Полный номер видят только друзья и участники общих сборов.',
-        'When you sign up we text a four-digit code to your number. Until it is confirmed you cannot sign in or receive invitations. Only friends and people from shared events see your full number.')}</p></section>
+      ${L(`Принимаем номера с кодом ${phoneCodesText()}. При регистрации мы отправляем на номер шестизначный код. Пока номер не подтверждён, войти в сервис и получать приглашения нельзя. Полный номер видят взаимные друзья, а в сборе — организатор и те, кто идёт; остальные — последние три цифры.`,
+        `We accept numbers starting with ${phoneCodesText()}. When you sign up we text a six-digit code to your number. Until it is confirmed you cannot sign in or receive invitations. Your full number is visible to mutual friends and, within an event, between the host and the guests who are going; everyone else sees the last three digits.`)}</p></section>
       <section class="panel"><h2>${L('Складчина', 'Splitting the bill')}</h2><p class="muted" style="margin-top:8px;max-width:65ch">
       ${L('Организатор указывает, сколько кальянов заказать и сколько стоит один. Сумма делится поровну между теми, кто идёт. Организатор отмечает, кто уже перевёл деньги.',
         'The host sets how many hookahs to order and the price of one. The total is split evenly between everyone going. The host marks who has already paid.')}</p></section>
@@ -1685,6 +1830,9 @@
         'Turn on the bell on the event page and the site reminds you an hour before while it is open. For a guaranteed reminder, tap “Add to calendar”.')}</p></section>`;
   }
 
+  // Сбор, в котором организатор сейчас убирает гостей (режим «карандаша» в списке участников); при переходе на другую страницу — выключается.
+  let guestEdit = '';
+  window.addEventListener('hashchange', () => { guestEdit = ''; });
   function pageEvent(id) {
     const u = me();
     if (!u) return go('login');
@@ -1725,11 +1873,23 @@
     const statusLabel = { going: L('Идёт', 'Going'), pending: L('Ждём ответа', 'Awaiting'), declined: L('Не придёт', 'Not going') };
     const waTo = phone => /^996\d{9}$/.test(normPhone(phone)) && canVote(e, u) && !past
       ? `<button class="icon-btn wa-mini" data-action="shareEvent" data-id="${e.id}" data-via="wa" data-phone="${normPhone(phone)}" title="${L('Написать в WhatsApp', 'Message on WhatsApp')}" aria-label="${L('Отправить приглашение в WhatsApp', 'Send the invitation on WhatsApp')}">${ICON.wa}</button>` : '';
-    const personRow = (p, phone, pill) => `<li class="person">${avatar(p, 'sm')}<div class="person-name">
-      ${p ? `<a href="#/user/${p.id}"><b>${esc(p.name)}</b></a>` : `<b>${L('Ещё не в сервисе', 'Not on the service yet')}</b>`}<small class="mono">${fmtPhone(phone)}</small></div>${p ? '' : waTo(phone)}${pill}</li>`;
+    // Организатор может убрать человека из сбора: кнопка «карандаш» в шапке списка включает режим, где вместо ответа — «Убрать»
+    // (с подтверждением). Того, кого позвали по номеру, убирают по номеру.
+    const editing = isHost && guestEdit === e.id;
+    const dropBtn = (i, name) => editing && i.userId !== u.id && (i.userId || i.phone)
+      ? `<button class="btn btn-danger btn-sm drop-guest" type="button" data-action="removeGuest" data-id="${e.id}" ${i.userId ? `data-user="${esc(i.userId)}"` : `data-phone="${esc(normPhone(i.phone))}"`} aria-label="${esc(L(`Убрать из сбора: ${name}`, `Remove from the event: ${name}`))}">${L('Убрать', 'Remove')}</button>` : '';
+    // Номер приглашённого «по номеру» целиком видят только организатор и тот, кто позвал; кто это в сервисе — видно, когда человек ответит.
+    const personRow = (p, phoneHtml, pill, phone = '', drop = '') => `<li class="person">${avatar(p, 'sm')}<div class="person-name">
+      ${p ? `<a href="#/user/${p.id}"><b>${esc(p.name)}</b></a>` : `<b>${L('По номеру', 'By number')}</b>`}<small class="mono">${phoneHtml}</small></div>${p || drop ? '' : waTo(phone)}${drop || pill}</li>`;
     const people = [
-      personRow(host, host?.phone, `<span class="pill pill-host">${L('Организатор', 'Host')}</span>`),
-      ...e.invites.map(i => { const p = i.userId ? userById(i.userId) : null; return personRow(p, p ? p.phone : i.phone, `<span class="pill pill-${i.status}">${statusLabel[i.status]}</span>`); })
+      personRow(host, phoneShown(u, host), `<span class="pill pill-host">${L('Организатор', 'Host')}</span>`),
+      ...e.invites.map(i => {
+        const p = i.userId ? userById(i.userId) : null, pill = `<span class="pill pill-${i.status}">${statusLabel[i.status]}</span>`;
+        // В демо номер «по номеру» целиком виден только организатору; на сервере сервер сам решает, присылать ли его.
+        const full = i.phone && (SERVER || isHost) ? i.phone : '';
+        return p ? personRow(p, phoneShown(u, p), pill, '', dropBtn(i, p.name))
+          : personRow(null, full ? fmtPhone(full) : esc(i.phoneMasked || (i.phone ? maskedPhone(i.phone) : '')), pill, full, dropBtn(i, i.phoneMasked || L('приглашение по номеру', 'phone invitation')));
+      })
     ].join('');
     const paidLabel = paid => paid ? L('Скинул', 'Paid') : L('Не скинул', 'Not paid');
     const billHtml = b.total ? `
@@ -1806,7 +1966,8 @@
         <div class="ev-main">
           <aside class="panel">
             <div class="panel-head"><h2>${L('Участники', 'Guests')}</h2>
-              ${(isHost || inv?.status === 'going') && !past ? `<button class="plus-btn sm" data-action="invite" data-id="${e.id}" title="${L('Пригласить', 'Invite')}" aria-label="${L('Пригласить участников', 'Invite guests')}">${ICON.plus}</button>` : ''}</div>
+              <div class="btn-row">${isHost && e.invites.length ? `<button class="icon-btn guest-edit ${editing ? 'on' : ''}" type="button" data-action="guestEdit" data-id="${e.id}" aria-pressed="${editing}" title="${editing ? L('Готово', 'Done') : L('Убрать кого-то из сбора', 'Remove someone from the event')}" aria-label="${editing ? L('Готово', 'Done') : L('Убрать кого-то из сбора', 'Remove someone from the event')}">${editing ? ICON.check : ICON.edit}</button>` : ''}
+              ${(isHost || inv?.status === 'going') && !past ? `<button class="plus-btn sm" data-action="invite" data-id="${e.id}" title="${L('Пригласить', 'Invite')}" aria-label="${L('Пригласить участников', 'Invite guests')}">${ICON.plus}</button>` : ''}</div></div>
             <ul class="people">${people}</ul>
           </aside>
           <aside class="panel">
@@ -1909,10 +2070,11 @@
     Object.entries(c.reactions || {}).forEach(([who, em]) => (by[em] ||= []).push(who));
     const chips = Object.entries(by).sort((a, b) => b[1].length - a[1].length).map(([em, ids]) => {
       const mine = !!u && ids.includes(u.id), names = ids.map(i => userById(i)?.name).filter(Boolean).join(', ');
-      return `<button type="button" class="react-chip ${mine ? 'on' : ''}" data-action="react" data-scope="${scope}" data-id="${eventId}" data-comment="${c.id}" data-emoji="${em}" title="${esc(names)}" aria-pressed="${mine}"><span>${em}</span><b>${ids.length}</b></button>`;
+      // Смайлик и id — данные (в демо — из браузера), поэтому тоже через esc, как любой текст.
+      return `<button type="button" class="react-chip ${mine ? 'on' : ''}" data-action="react" data-scope="${scope}" data-id="${esc(eventId)}" data-comment="${esc(c.id)}" data-emoji="${esc(em)}" title="${esc(names)}" aria-pressed="${mine}"><span>${esc(em)}</span><b>${ids.length}</b></button>`;
     }).join('');
     if (!chips && !u) return '';
-    return `<div class="reacts">${chips}${u ? `<button type="button" class="react-add" data-action="reactPick" data-scope="${scope}" data-id="${eventId}" data-comment="${c.id}" data-pop-anchor aria-label="${L('Поставить реакцию', 'Add a reaction')}" title="${L('Реакция', 'Reaction')}">${SMILE}<span>+</span></button>` : ''}</div>`;
+    return `<div class="reacts">${chips}${u ? `<button type="button" class="react-add" data-action="reactPick" data-scope="${scope}" data-id="${esc(eventId)}" data-comment="${esc(c.id)}" data-pop-anchor aria-label="${L('Поставить реакцию', 'Add a reaction')}" title="${L('Реакция', 'Reaction')}">${SMILE}<span>+</span></button>` : ''}</div>`;
   }
   function commentItem(c, { scope, eventId, u, canDelete, delAction }) {
     const p = userById(c.userId);
@@ -1964,11 +2126,24 @@
     return h ? L(`${h} ч ${m % 60} мин`, `${h} h ${m % 60} min`) : L(`${m} мин`, `${m} min`);
   }
   const storyEvents = () => db.events.filter(e => e.story && isPast(e)).sort((a, b) => new Date(b.at) - new Date(a.at));
+  // Итоги вечера для «Истории». Свой вечер (и все вечера в демо) считаем по ответам и голосам гостей. О чужом вечере сервер
+  // присылает только итоги (summary): сколько было гостей и сколько раз выбирали каждый табак и чашу — без имён.
+  function storyStats(e) {
+    const s = e.summary, counts = m => Object.entries(m || {}).map(([id, n]) => ({ id, n: Math.max(0, +n || 0) }));
+    const rank = (list, nameOf) => list.filter(x => x.n > 0).sort((a, b) => b.n - a.n || nameOf(a.id).localeCompare(nameOf(b.id), 'ru'));
+    const tob = s ? rank(counts(s.tobaccos), tobaccoName) : ranking(e.picks, tobaccoName).map(r => ({ id: r.id, n: r.users.length }));
+    const bowls = s ? rank(counts(s.bowls), bowlName) : ranking(e.bowls, bowlName).map(r => ({ id: r.id, n: r.users.length }));
+    const going = s ? [] : goingIds(e), guests = s ? Math.max(1, +s.going || 1) : going.length, total = (e.hookahs || 0) * (e.price || 0);
+    return { going, guests, tob, bowl: bowls[0], per: guests ? total / guests : 0, total };
+  }
+  // «Огонь»: в демо — список тех, кто поставил; с сервера — число и поставил ли я.
+  const fireCount = st => Array.isArray(st.fire) ? st.fire.length : Math.max(0, +st.fire || 0);
+  const firedBy = (st, u) => !!u && (Array.isArray(st.fire) ? st.fire.includes(u.id) : !!st.fired);
 
   function storyCard(e, u) {
-    const st = e.story, host = userById(e.hostId), going = goingIds(e), b = bill(e), v = eventVenue(e);
-    const top = ranking(e.picks, tobaccoName).slice(0, 3).map(r => ({ t: tobacco(r.id), n: r.users.length })).filter(x => x.t);
-    const bw = ranking(e.bowls, bowlName)[0], fired = !!u && st.fire.includes(u.id), d = new Date(e.at);
+    const st = e.story, host = userById(e.hostId), s = storyStats(e), v = eventVenue(e);
+    const top = s.tob.slice(0, 3).map(r => ({ t: tobacco(r.id), n: r.n })).filter(x => x.t);
+    const bw = s.bowl, fired = firedBy(st, u), d = new Date(e.at);
     const commented = myStoryCommentToday(e, u);
     return `<article class="story" id="story-${e.id}">
       <div class="story-rail"><span class="story-dot"></span></div>
@@ -1989,15 +2164,15 @@
           <p class="story-text">${esc(st.text)}</p>
           ${st.highlights?.length ? `<ul class="story-highlights">${st.highlights.map(h => `<li>${esc(h)}</li>`).join('')}</ul>` : ''}
           <div class="story-facts">
-            <span>${avatarStack(going, 6, 'xs')}${going.length} ${pl(going.length, ['гость', 'гостя', 'гостей'], ['guest', 'guests'])}</span>
+            <span>${s.going.length ? avatarStack(s.going, 6, 'xs') : ICON.users}${s.guests} ${pl(s.guests, ['гость', 'гостя', 'гостей'], ['guest', 'guests'])}</span>
             ${e.hookahs ? `<span>${ICON.hookah}${e.hookahs} ${pl(e.hookahs, ['кальян', 'кальяна', 'кальянов'], ['hookah', 'hookahs'])}</span>` : ''}
             ${bw ? `<span>${tr(BOWL_TYPE[bowl(bw.id)?.type] || ['', ''])}: ${esc(bowlName(bw.id))}</span>` : ''}
-            ${b.total ? `<span>${ICON.wallet}${money(b.per)} ${L('с человека', 'per person')}</span>` : ''}
+            ${s.total ? `<span>${ICON.wallet}${money(s.per)} ${L('с человека', 'per person')}</span>` : ''}
           </div>
           <div class="story-actions">
             <button class="react-btn ${fired ? 'on' : ''}" type="button" data-action="storyFire" data-id="${e.id}" aria-pressed="${fired}">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c4.4 0 7-2.8 7-6.6 0-3.4-2.2-5.6-3.6-7.2-.3 1.8-1.3 3-2.4 3.4.6-3.6-1-6.8-4-9.1.2 3-1.5 5-3 6.8C4.7 11 5 12.5 5 15.4 5 19.2 7.6 22 12 22z"/></svg>
-              <span>${L('Огонь', 'Fire')}</span><b>${st.fire.length}</b></button>
+              <span>${L('Огонь', 'Fire')}</span><b>${fireCount(st)}</b></button>
             <button class="btn btn-sm" type="button" data-action="likeThis" data-id="${e.id}">${ICON.repeat}${L('Хочу так же', 'I want this too')}</button>
             <span class="muted story-count">${ICON.chat}${st.comments.length}</span>
           </div>
@@ -2018,12 +2193,14 @@
   function pageHistory() {
     const u = me(), all = storyEvents();
     const items = [{ key: 'all', label: L('Все вечера', 'All evenings'), count: all.length }];
-    if (u) items.push({ key: 'mine', label: L('Мои', 'Mine'), count: all.filter(e => isMember(e, u)).length }, { key: 'friends', label: L('Друзей', 'Friends'), count: all.filter(e => goingIds(e).some(id => u.friends.includes(id))).length });
+    // «Друзей»: вечера, где был кто-то из ваших друзей. У чужого вечера сервер не присылает гостей — там считается организатор.
+    const friendsWent = e => (e.summary ? [e.hostId] : goingIds(e)).some(id => isFriend(u, { id }));
+    if (u) items.push({ key: 'mine', label: L('Мои', 'Mine'), count: all.filter(e => isMember(e, u)).length }, { key: 'friends', label: L('Друзей', 'Friends'), count: all.filter(friendsWent).length });
     const key = tab.history = items.some(i => i.key === tab.history) ? tab.history : 'all';
-    const list = key === 'mine' ? all.filter(e => isMember(e, u)) : key === 'friends' ? all.filter(e => goingIds(e).some(id => u.friends.includes(id))) : all;
-    const guests = all.reduce((s, e) => s + goingIds(e).length, 0), hookahs = all.reduce((s, e) => s + (e.hookahs || 0), 0);
+    const list = key === 'mine' ? all.filter(e => isMember(e, u)) : key === 'friends' ? all.filter(friendsWent) : all;
+    const guests = all.reduce((s, e) => s + storyStats(e).guests, 0), hookahs = all.reduce((s, e) => s + (e.hookahs || 0), 0);
     const favCount = {};
-    all.forEach(e => ranking(e.picks, tobaccoName).forEach(r => { favCount[r.id] = (favCount[r.id] || 0) + r.users.length; }));
+    all.forEach(e => storyStats(e).tob.forEach(r => { favCount[r.id] = (favCount[r.id] || 0) + r.n; }));
     const fav = Object.entries(favCount).sort((a, b) => b[1] - a[1])[0];
     let body = '', month = '';
     for (const e of list) {
@@ -2063,7 +2240,7 @@
   function storyFormHtml(e) {
     return `<section class="panel story-compose">
       <div class="panel-head"><div><h2>${L('Расскажите, как прошло', 'Tell everyone how it went')}</h2>
-        <p class="muted" style="font-size:13.5px;margin-top:4px">${L('Рассказ появится в «Истории», его смогут прочитать и прокомментировать.', 'The story will appear in History where people can read and comment on it.')}</p></div></div>
+        <p class="muted" style="font-size:13.5px;margin-top:4px">${L('Рассказ появится в «Истории»: его смогут прочитать и прокомментировать все. Рядом будут итоги вечера — сколько было гостей, что курили и почём; адрес, описание и список гостей останутся только у участников.', 'The story will appear in History where everyone can read and comment on it, next to a summary of the evening: how many guests, what you smoked and the price. The address, notes and guest list stay visible only to guests.')}</p></div></div>
       <form class="form" id="story-form">
         <div class="field"><span class="label">${L('Оценка вечера', 'Evening rating')}</span>
           <div class="star-input" role="radiogroup" aria-label="${L('Оценка вечера', 'Evening rating')}">${[5, 4, 3, 2, 1].map(n => `<input type="radio" name="st-star" id="st-s${n}" value="${n}"><label for="st-s${n}" title="${n} / 5">★</label>`).join('')}</div></div>
@@ -2078,13 +2255,16 @@
   // ---------- Уведомления ----------
   // На сервере уведомления создаёт сам сервер. В демо-режиме они собираются из данных в браузере.
   const NOTIF_GROUPS = {
-    invites: { types: ['invite', 'cancelled', 'admin_removed_event'], label: ['Приглашения', 'Invitations'] },
+    invites: { types: ['invite', 'cancelled', 'removed', 'admin_removed_event'], label: ['Приглашения', 'Invitations'] },
     replies: { types: ['rsvp_going', 'rsvp_declined'], label: ['Ответы', 'Replies'] },
     messages: { types: ['comment', 'story_comment', 'admin_removed_comment'], label: ['Сообщения', 'Messages'] },
-    reactions: { types: ['reaction', 'fire', 'friend'], label: ['Реакции и друзья', 'Reactions & friends'] }
+    reactions: { types: ['reaction', 'fire', 'friend'], label: ['Реакции и друзья', 'Reactions & friends'] },
+    // Вход с нового устройства, смена пароля и сигналы владельцу сайта — только на сервере; выключить нельзя.
+    security: { types: ['new_login', 'password_changed', 'security_alert'], label: ['Безопасность', 'Security'], server: true, fixed: true }
   };
   const groupOf = type => Object.keys(NOTIF_GROUPS).find(g => NOTIF_GROUPS[g].types.includes(type));
-  const notifOff = () => secRead('hp.notifOff', []);
+  const shownGroups = () => Object.entries(NOTIF_GROUPS).filter(([, d]) => SERVER || !d.server);
+  const notifOff = () => { const v = secRead('hp.notifOff', []); return Array.isArray(v) ? v.filter(g => !NOTIF_GROUPS[g]?.fixed) : []; };
   function findComment(ref) {
     const cid = String(ref || '').split(':')[0];
     for (const e of db.events) for (const c of [...(e.comments || []), ...(e.story?.comments || [])]) if (c.id === cid) return c;
@@ -2115,28 +2295,81 @@
   const unreadCount = () => notifications().filter(n => !n.read).length;
   function notifText(n) {
     const who = `<b>${esc(userById(n.actorId)?.name || L('Кто-то', 'Someone'))}</b>`, e = eventById(n.eventId);
-    const ev = e ? `«${esc(e.title)}»` : n.ref && n.type === 'cancelled' ? `«${esc(n.ref)}»` : L('сбор', 'an event');
+    const ev = e ? `«${esc(e.title)}»` : n.ref && (n.type === 'cancelled' || n.type === 'removed') ? `«${esc(n.ref)}»` : L('сбор', 'an event');
     const c = ['comment', 'story_comment', 'reaction'].includes(n.type) ? findComment(n.ref) : null;
     const snip = c ? `<span class="nt-quote">${esc(c.text.length > 70 ? c.text.slice(0, 70) + '…' : c.text)}</span>` : '';
     return {
       invite: L(`${who} зовёт вас на ${ev}`, `${who} invites you to ${ev}`),
-      cancelled: L(`${who} отменяет сбор ${ev}`, `${who} cancelled ${ev}`),
+      // Без автора — организатор удалил аккаунт, и сервер отменил его сборы.
+      cancelled: n.actorId == null ? L(`Сбор ${ev} отменён: организатор удалил аккаунт`, `${ev} was cancelled: the host deleted their account`) : L(`${who} отменяет сбор ${ev}`, `${who} cancelled ${ev}`),
       rsvp_going: L(`${who} идёт на ${ev}`, `${who} is going to ${ev}`),
       rsvp_declined: L(`${who} не сможет прийти на ${ev}`, `${who} can’t make it to ${ev}`),
       comment: L(`${who} в ${ev}: `, `${who} in ${ev}: `) + snip,
       story_comment: L(`${who} комментирует ваш вечер ${ev}: `, `${who} commented on your evening ${ev}: `) + snip,
-      reaction: L(`${who} реагирует ${String(n.ref || '').split(':')[1] || ''} на ваше сообщение `, `${who} reacted ${String(n.ref || '').split(':')[1] || ''} to your message `) + snip,
+      reaction: L(`${who} реагирует ${esc(String(n.ref || '').split(':')[1] || '')} на ваше сообщение `, `${who} reacted ${esc(String(n.ref || '').split(':')[1] || '')} to your message `) + snip,
       fire: L(`${who} ставит огонь вашему вечеру ${ev}`, `${who} gave your evening ${ev} some fire`),
+      // Организатор убрал из сбора (ref — название: самого сбора человек больше не видит).
+      removed: L(`${who} убирает вас из сбора ${ev}`, `${who} removed you from ${ev}`),
       friend: L(`${who} добавляет вас в друзья`, `${who} added you as a friend`),
       admin_removed_event: L(`Администратор удалил сбор «${esc(n.ref || '')}»`, `An administrator removed the event “${esc(n.ref || '')}”`),
-      admin_removed_comment: L(`Администратор удалил ваше сообщение «${esc(n.ref || '')}»`, `An administrator removed your message “${esc(n.ref || '')}”`)
+      admin_removed_comment: L(`Администратор удалил ваше сообщение «${esc(n.ref || '')}»`, `An administrator removed your message “${esc(n.ref || '')}”`),
+      new_login: newLoginText(n.ref),
+      password_changed: passChangedText(n.ref),
+      security_alert: secAlertText(n.ref)
     }[n.type] || esc(n.type);
   }
-  const notifHref = n => n.type === 'friend' ? `#/user/${n.actorId}` : n.type === 'story_comment' || n.type === 'fire' ? '#/history' : n.eventId && eventById(n.eventId) ? `#/event/${n.eventId}` : '#/events';
-  const NOTIF_ICON = { admin_removed_event: 'shield', admin_removed_comment: 'shield', invite: 'mail', cancelled: 'x', rsvp_going: 'check', rsvp_declined: 'x', comment: 'chat', story_comment: 'chat', reaction: 'heart', fire: 'smoke', friend: 'users' };
+  // Устройство из уведомления о входе («Chrome · macOS»): общие слова — на языке интерфейса.
+  const DEVICE_WORDS = { 'Hookah Party app': ['Приложение Hookah Party', 'Hookah Party app'], 'Yandex Browser': ['Яндекс Браузер', 'Yandex Browser'], 'Android tablet': ['Android-планшет', 'Android tablet'], Browser: ['Браузер', 'Browser'], 'Unknown device': ['Неизвестное устройство', 'Unknown device'] };
+  const deviceName = label => String(label || '').split(' · ').map(p => DEVICE_WORDS[p] ? L(...DEVICE_WORDS[p]) : p).join(' · ');
+  const deviceIcon = label => / · (iPad|Android tablet)$/.test(label) ? ICON.tablet : / · (iPhone|Android)$/.test(label) ? ICON.mobile : ICON.laptop;
+  // Как у остальных уведомлений: первая строка жирным (вместо имени автора — что случилось), под ней подробности.
+  const sysNote = (title, body) => `<b>${title}</b><span>${body}</span>`;
+  // ref = «устройство · адрес»; адрес сервер присылает уже без последних цифр.
+  function newLoginText(ref) {
+    const s = String(ref || ''), i = s.lastIndexOf(' · '), dev = esc(deviceName(i > 0 ? s.slice(0, i) : s)), ip = esc(i > 0 ? s.slice(i + 3) : '?');
+    return sysNote(L('Вход с нового устройства', 'Sign-in from a new device'),
+      L(`${dev}, ${ip}. Если это были не вы — завершите все сессии в настройках`, `${dev}, ${ip}. If it wasn’t you, end all sessions in Settings`));
+  }
+  // Пароль изменён: ref — тоже «устройство · адрес», с которого его сменили (у старых записей может не быть).
+  function passChangedText(ref) {
+    const s = String(ref || ''), i = s.lastIndexOf(' · ');
+    const where = s ? `${esc(deviceName(i > 0 ? s.slice(0, i) : s))}${i > 0 ? ', ' + esc(s.slice(i + 3)) : ''}` : '';
+    // Адрес IPv6 уже кончается многоточием («2a02:8109:b6c0:…») — тогда без лишней точки.
+    return sysNote(L('Пароль изменён', 'Password changed'),
+      (where ? where + (where.endsWith('…') ? ' ' : '. ') : '') + L('Если это были не вы — войдите по SMS и смените пароль снова', 'If it wasn’t you, sign in with an SMS code and change your password again'));
+  }
+  // Сигналы владельцу сайта: ref = «вид:подробности», подробности через « · » (номер и адрес сервер уже скрыл).
+  const alertKind = ref => { const s = String(ref || ''), i = s.indexOf(':'); return [i > 0 ? s.slice(0, i) : s, i > 0 ? s.slice(i + 1) : '']; };
+  function secAlertText(ref) {
+    const [kind, rest] = alertKind(ref), p = rest.split(' · ').map(esc), at = k => p[k] || '?';
+    const [title, body] = {
+      login_locked: [L('Вход в аккаунт заблокирован', 'Account sign-in locked'),
+        L(`${at(0)}: 5 неверных паролей подряд, вход закрыт на 5 минут. Адрес ${at(1)}`, `${at(0)}: 5 wrong passwords in a row, sign-in is closed for 5 minutes. Address ${at(1)}`)],
+      admin_probe: [L('Кто-то ищет панель администратора', 'Someone is looking for the admin panel'),
+        L(`3 попытки за 10 минут с аккаунта ${at(0)}, адрес ${at(1)}`, `3 attempts in 10 minutes from account ${at(0)}, address ${at(1)}`)],
+      admin_lock: [L('Панель администратора заблокирована', 'Admin panel locked'),
+        L(`5 неверных паролей или кодов подряд, панель закрыта на 5 минут. Адрес ${at(0)}`, `5 wrong passwords or codes in a row, the panel is closed for 5 minutes. Address ${at(0)}`)],
+      csp_burst: [L('Браузеры блокируют подозрительный код', 'Browsers are blocking suspicious code'),
+        L(`5 отчётов за 10 минут, последний: ${p.join(' · ')}. Подробности — в журнале панели`, `5 reports in 10 minutes, the last one: ${p.join(' · ')}. Details are in the panel log`)],
+      admin_new_ip: [L('Панель администратора открыта с нового адреса', 'Admin panel opened from a new address'),
+        L(`Адрес ${at(0)}. Если это были не вы — завершите все сессии в настройках`, `Address ${at(0)}. If it wasn’t you, end all sessions in Settings`)],
+      // Бюджет SMS сервера (SMS_PER_HOUR, SMS_PER_DAY): 80% суточного и полная остановка.
+      sms_budget: [L('SMS: потрачено 80% суточного лимита', 'SMS: 80% of the daily limit used'),
+        L(`За сутки отправлено ${at(0)}. Если это не наплыв новых людей, кто-то может запрашивать коды на чужие номера — подробности в журнале панели`, `${at(0)} sent in the last 24 hours. If this is not a wave of new people, someone may be requesting codes for other people’s numbers — details are in the panel log`)],
+      sms_stopped: [L('SMS остановлены: лимит исчерпан', 'SMS stopped: the limit is used up'),
+        L(`За час ${at(0)}, за сутки ${at(1)}. Новые коды не уходят, пока лимит не освободится; вход паролем работает. Лимиты — SMS_PER_HOUR и SMS_PER_DAY в .env`, `${at(0)} in the last hour, ${at(1)} in the last 24 hours. No new codes are sent until the limit frees up; password sign-in still works. Limits: SMS_PER_HOUR and SMS_PER_DAY in .env`)]
+    }[kind] || [L('Сигнал безопасности', 'Security alert'), esc(String(ref || ''))];
+    return sysNote(title, body);
+  }
+  // Куда ведёт уведомление о безопасности: о входах и смене пароля — в Профиль → Настройки, остальные сигналы — в панель администратора.
+  const toSettings = n => n.type === 'new_login' || n.type === 'password_changed' || (n.type === 'security_alert' && alertKind(n.ref)[0] === 'admin_new_ip');
+  const notifHref = n => toSettings(n) ? '#/profile' : n.type === 'security_alert' ? '#/admin' : n.type === 'friend' ? `#/user/${n.actorId}` : n.type === 'story_comment' || n.type === 'fire' ? '#/history' : n.eventId && eventById(n.eventId) ? `#/event/${n.eventId}` : '#/events';
+  const NOTIF_ICON = { admin_removed_event: 'shield', admin_removed_comment: 'shield', invite: 'mail', cancelled: 'x', removed: 'x', rsvp_going: 'check', rsvp_declined: 'x', comment: 'chat', story_comment: 'chat', reaction: 'heart', fire: 'smoke', friend: 'users', new_login: 'shield', password_changed: 'key', security_alert: 'shield' };
   function notifItem(n) {
-    return `<li><button type="button" class="notif ${n.read ? '' : 'unread'}" data-action="openNotif" data-id="${esc(n.id)}" data-href="${esc(notifHref(n))}" data-story="${n.type === 'story_comment' || n.type === 'fire' ? esc(n.eventId || '') : ''}">
-      <span class="feed-av">${avatar(userById(n.actorId), 'sm')}<span class="feed-ic ic-${NOTIF_ICON[n.type] || 'chat'} nt-${groupOf(n.type)}">${ICON[NOTIF_ICON[n.type]] || ICON.chat}</span></span>
+    // У уведомлений о безопасности нет автора: вместо аватара — щит или ключ (вход с нового устройства и смена пароля — жёлтые, сигналы — красные).
+    const sys = groupOf(n.type) === 'security', warn = n.type === 'new_login' || n.type === 'password_changed';
+    return `<li><button type="button" class="notif ${n.read ? '' : 'unread'}" data-action="openNotif" data-id="${esc(n.id)}" data-href="${esc(notifHref(n))}" data-story="${n.type === 'story_comment' || n.type === 'fire' ? esc(n.eventId || '') : ''}" data-settings="${toSettings(n) ? 1 : ''}">
+      <span class="feed-av">${sys ? `<span class="av av-sm av-sys ${warn ? 'av-warn' : ''}">${ICON[NOTIF_ICON[n.type]] || ICON.shield}</span>` : `${avatar(userById(n.actorId), 'sm')}<span class="feed-ic ic-${NOTIF_ICON[n.type] || 'chat'} nt-${groupOf(n.type)}">${ICON[NOTIF_ICON[n.type]] || ICON.chat}</span>`}</span>
       <span class="notif-text">${notifText(n)}<time>${timeAgo(n.at)}</time></span>${n.read ? '' : '<i class="notif-dot" aria-label="' + L('Новое', 'New') + '"></i>'}</button></li>`;
   }
   async function markRead(ids) {
@@ -2151,7 +2384,7 @@
     if (!u) return go('login');
     const all = notifications(u), off = new Set(notifOff());
     const items = [{ key: 'all', label: L('Все', 'All'), count: all.filter(n => !n.read).length, alert: all.some(n => !n.read) }]
-      .concat(Object.entries(NOTIF_GROUPS).filter(([g]) => !off.has(g)).map(([g, d]) => ({ key: g, label: tr(d.label), count: all.filter(n => groupOf(n.type) === g && !n.read).length })));
+      .concat(shownGroups().filter(([g]) => !off.has(g)).map(([g, d]) => ({ key: g, label: tr(d.label), count: all.filter(n => groupOf(n.type) === g && !n.read).length })));
     tab.notif = items.some(i => i.key === tab.notif) ? tab.notif : 'all';
     const list = tab.notif === 'all' ? all : all.filter(n => groupOf(n.type) === tab.notif);
     const dayKey = iso => { const d = new Date(iso); d.setHours(0, 0, 0, 0); return d.getTime(); };
@@ -2171,7 +2404,9 @@
       ${tabPanel('notif', `${body || emptyState(L('Здесь пока пусто', 'Nothing here yet'), L('Сюда придут приглашения, ответы друзей, сообщения в ваших сборах и реакции на них.', 'Invitations, replies, messages in your events and reactions will show up here.'), `<a class="btn btn-sm" href="#/events">${L('К сборам', 'To events')}</a>`)}
         <section class="panel notif-settings"><div class="panel-head"><div><h2>${L('Что показывать', 'What to show')}</h2>
           <p class="muted" style="font-size:13.5px;margin-top:4px">${L('Выключенные типы не попадают в список и счётчик на колокольчике.', 'Hidden types are left out of the list and the bell counter.')}</p></div></div>
-          <div class="switches">${Object.entries(NOTIF_GROUPS).map(([g, d]) => `<label class="switch"><input type="checkbox" data-notif-group="${g}" ${off.has(g) ? '' : 'checked'}><span class="sw-track"><span></span></span>${tr(d.label)}</label>`).join('')}</div>
+          <div class="switches">${shownGroups().map(([g, d]) => d.fixed
+            ? `<label class="switch is-fixed" title="${L('Уведомления о безопасности не выключаются', 'Security notifications cannot be turned off')}"><input type="checkbox" checked disabled><span class="sw-track"><span></span></span>${tr(d.label)} <small class="muted">${L('всегда', 'always')}</small></label>`
+            : `<label class="switch"><input type="checkbox" data-notif-group="${g}" ${off.has(g) ? '' : 'checked'}><span class="sw-track"><span></span></span>${tr(d.label)}</label>`).join('')}</div>
         </section>`)}`;
     $$('[data-notif-group]').forEach(cb => cb.addEventListener('change', () => {
       const set = new Set(notifOff()); cb.checked ? set.delete(cb.dataset.notifGroup) : set.add(cb.dataset.notifGroup);
@@ -2223,7 +2458,7 @@
     view.innerHTML = `<p class="muted">${L('Загружаем панель…', 'Loading the panel…')}</p>`;
     loadAdmin().then(A => {
       if (location.hash !== '#/admin') return;
-      A.render({ view, L, esc, api, apiMsg, act, SERVER, getDb: () => db, setDb: applyData, save, me, userById, eventById, toast, openModal, closeModal, uTabs, tabPanel, tab, emptyState, avatar, fShort, fTime, timeAgo, plural, pl, ICON, secRead, secLog, checkPass, render, isPast, SEC_EVENTS });
+      A.render({ view, L, esc, api, apiMsg, act, SERVER, getDb: () => db, setDb: applyData, save, me, userById, eventById, toast, openModal, closeModal, uTabs, tabPanel, tab, emptyState, avatar, fShort, fTime, timeAgo, plural, pl, ICON, secRead, secLog, checkPass, render, isPast, SEC_EVENTS, copyText });
       inkAll();
     }).catch(() => { view.innerHTML = emptyState(L('Панель недоступна', 'Panel unavailable'), L('Не удалось загрузить панель администратора. Обновите страницу.', 'Could not load the admin panel. Reload the page.')); });
   }
@@ -2259,7 +2494,8 @@
   }
 
   // ---------- Подробности: чаша, аксессуар, микс ----------
-  const bowlVotes = id => db.events.reduce((n, e) => n + Object.values(e.bowls || {}).filter(b => b === id).length, 0);
+  // Голоса за чашу во всех видимых сборах; у чужих вечеров из «Истории» — из итогов (summary).
+  const bowlVotes = id => db.events.reduce((n, e) => n + (e.summary ? Math.max(0, +(e.summary.bowls || {})[id] || 0) : Object.values(e.bowls || {}).filter(b => b === id).length), 0);
   const specsHtml = rows => `<dl class="specs">${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
   const prosCons = (pros = [], cons = []) => `<div class="pros-cons">
     ${pros.length ? `<div><span class="label">${L('Плюсы', 'Pros')}</span><ul class="pc-list plus">${pros.map(x => `<li>${ICON.check}<span>${esc(tr(x))}</span></li>`).join('')}</ul></div>` : ''}
@@ -2435,7 +2671,7 @@
     const friends = others.filter(p => isFriend(u, p));
     view.innerHTML = `
       <section class="section"><span class="eyebrow">${L('Люди', 'People')}</span><h1>${L('Друзья и знакомые', 'Friends and contacts')}</h1>
-        <p class="muted">${L('Друзья первыми появляются в списке приглашений и видят ваш номер целиком.', 'Friends come first in the invite list and see your full number.')}</p></section>
+        <p class="muted">${L('Друзья первыми появляются в списке приглашений. Номер друг друга целиком вы увидите, когда добавите друг друга в друзья.', 'Friends come first in the invite list. You see each other’s full numbers once you have both added each other.')}</p></section>
       ${uTabs('people', [{ key: 'friends', label: L('Друзья', 'Friends'), count: friends.length }, { key: 'all', label: L('Все люди', 'Everyone'), count: others.length }])}
       ${tabPanel('people', `<div class="panel-tools"><input class="input" id="pp-q" type="search" placeholder="${L('Имя или номер', 'Name or number')}" value="${esc(peopleQ)}" aria-label="${L('Поиск людей', 'Search people')}"></div>
       <div class="people-grid" id="pp-grid"></div>`)}`;
@@ -2543,6 +2779,20 @@
           <div class="panel-head"><h2>${L('Демо-данные', 'Demo data')}</h2></div>
           <p class="muted" style="margin-bottom:14px">${L('Все данные этого шаблона хранятся в вашем браузере. Сброс вернёт тестовых пользователей, сборы, отзывы и миксы.', 'All template data lives in your browser. Resetting restores the test users, events, reviews and mixes.')}</p>
           <button class="btn btn-danger btn-sm" data-action="reset">${L('Сбросить демо-данные', 'Reset demo data')}</button>
+        </section>
+        <section class="panel danger-zone" aria-labelledby="dz-title">
+          <div class="panel-head"><div><h2 id="dz-title">${L('Удаление аккаунта', 'Delete account')}</h2>
+            <p class="muted">${L('Сразу и навсегда удалятся:', 'This deletes, immediately and for good:')}</p></div></div>
+          <ul class="dz-list">${[
+            L('профиль: имя, фото и номер телефона', 'your profile: name, photo and phone number'),
+            SERVER ? L('сборы, которые вы организуете, — гости получат уведомление об отмене', 'events you host — their guests are told they are cancelled') : L('сборы, которые вы организуете', 'events you host'),
+            L('ваши сообщения, реакции и комментарии к рассказам', 'your messages, reactions and story comments'),
+            L('ответы на приглашения и голоса за табак и чаши', 'your replies to invitations and votes for tobacco and bowls'),
+            L('отзывы, миксы и лайки', 'your reviews, mixes and likes'),
+            L('друзья — вы пропадёте и из их списков', 'friends — you disappear from their lists too')
+          ].map(x => `<li>${x}</li>`).join('')}</ul>
+          <p class="dz-note">${L('Восстановить аккаунт будет нельзя. Журнал безопасности хранится без привязки к вам до 90 дней.', 'The account cannot be restored. The security log is kept, no longer linked to you, for up to 90 days.')}</p>
+          <div><button class="btn btn-danger btn-sm" type="button" data-action="deleteAccount">${L('Удалить аккаунт', 'Delete account')}</button></div>
         </section>`
     };
     view.innerHTML = `
@@ -2571,8 +2821,15 @@
     if (SERVER && $('#srv-log')) api('GET', '/security/log').then(r => {
       const dt = t => `${fShort(new Date(t))}, ${fTime(new Date(t))}`, el = $('#srv-log'); if (!el) return;
       $('#srv-sessions').textContent = L(`активных сессий: ${r.sessions}`, `active sessions: ${r.sessions}`);
+      const devs = Array.isArray(r.devices) ? r.devices : [], dv = $('#srv-devices');
+      if (dv) dv.innerHTML = devs.length ? devs.map(x => `<li class="${x.current ? 'cur' : ''}"><span class="dev-ic">${deviceIcon(x.label)}</span><span class="dev-main"><span class="dev-name"><b>${esc(deviceName(x.label))}</b>${x.current ? `<em>${L('это устройство', 'this device')}</em>` : ''}</span>
+        <small>${L('впервые', 'first')} ${dt(x.firstAt)} · ${L('последний вход', 'last sign-in')} ${dt(x.lastAt)}</small></span></li>`).join('') : `<li class="muted">${L('Устройство появится здесь после следующего входа.', 'Your device will appear here after your next sign-in.')}</li>`;
       el.innerHTML = r.log.length ? r.log.map(x => { const ev = SEC_EVENTS[x.type] || [x.type, x.type, '']; return `<li class="${ev[2]}"><i></i><span><b>${L(ev[0], ev[1])}</b><small>${esc([x.detail, x.ip].filter(Boolean).join(' · '))}</small></span><time class="mono">${dt(x.at)}</time></li>`; }).join('') : `<li class="muted">${L('Событий пока нет.', 'No events yet.')}</li>`;
-    }).catch(() => { const el = $('#srv-log'); if (el) el.innerHTML = `<li class="muted">${L('Не удалось загрузить журнал.', 'Could not load the log.')}</li>`; });
+    }).catch(() => {
+      const el = $('#srv-log'), dv = $('#srv-devices');
+      if (el) el.innerHTML = `<li class="muted">${L('Не удалось загрузить журнал.', 'Could not load the log.')}</li>`;
+      if (dv) dv.innerHTML = `<li class="muted">${L('Не удалось загрузить список.', 'Could not load the list.')}</li>`;
+    });
     $('#profile-form')?.addEventListener('submit', ev => {
       ev.preventDefault();
       const name = clean($('#pf-name').value, 40);
@@ -2591,26 +2848,46 @@
     session_expired: ['Сессия истекла', 'Session expired', ''], storage_repaired: ['Данные восстановлены после ошибки', 'Data repaired after an error', 'warn'],
     logout_all: ['Выход на всех устройствах', 'Signed out everywhere', 'warn'], csrf_blocked: ['Отклонён запрос с чужого сайта', 'Cross-site request blocked', 'bad'],
     event_cancelled: ['Сбор отменён', 'Event cancelled', ''], admin_unlock: ['Вход в панель администратора', 'Admin panel unlocked', 'warn'],
-    admin_unlock_fail: ['Неверный пароль в панели администратора', 'Wrong admin password', 'bad'], admin_denied: ['Попытка открыть панель без прав', 'Admin access denied', 'bad'],
+    admin_unlock_fail: ['Неверный пароль или код в панели администратора', 'Wrong admin password or code', 'bad'], admin_denied: ['Попытка открыть панель без прав', 'Admin access denied', 'bad'],
+    admin_totp_setup: ['Выдан QR-код для приложения-аутентификатора', 'Authenticator QR code issued', 'warn'], admin_totp_enabled: ['Подключено приложение для кодов', 'Authenticator app set up', 'ok'],
+    admin_totp_reset: ['Приложение для кодов сброшено из консоли', 'Authenticator reset from the console', 'bad'],
+    csp_violation: ['Браузер заблокировал подозрительный код (CSP)', 'Browser blocked suspicious code (CSP)', 'bad'], new_device_login: ['Вход с нового устройства', 'Sign-in from a new device', 'warn'],
     admin_delete_comment: ['Администратор удалил сообщение', 'Admin removed a message', 'warn'], admin_delete_event: ['Администратор удалил сбор', 'Admin removed an event', 'warn'],
-    admin_granted: ['Выданы права администратора', 'Admin rights granted', 'warn'], admin_revoked: ['Сняты права администратора', 'Admin rights revoked', 'warn']
+    admin_granted: ['Выданы права администратора', 'Admin rights granted', 'warn'], admin_revoked: ['Сняты права администратора', 'Admin rights revoked', 'warn'],
+    data_key_rotated: ['Ключ шифрования данных сменён из консоли', 'Data encryption key rotated from the console', 'warn'],
+    delete_fail: ['Неверный пароль при удалении аккаунта', 'Wrong password when deleting the account', 'warn'],
+    delete_locked: ['Удаление аккаунта временно заблокировано', 'Account deletion temporarily locked', 'bad'], account_deleted: ['Аккаунт удалён', 'Account deleted', 'warn'],
+    password_changed: ['Пароль изменён', 'Password changed', 'warn'], password_change_fail: ['Неверный текущий пароль при смене пароля', 'Wrong current password when changing it', 'warn'],
+    password_change_locked: ['Смена пароля временно заблокирована', 'Password change temporarily locked', 'bad']
   };
   function securityPanel(u) {
-    const log = secRead(SEC_LOG, []).slice(0, 12), dt = t => `${fShort(new Date(t))}, ${fTime(new Date(t))}`;
+    const log = secLogRead().slice(0, 12), dt = t => `${fShort(new Date(t))}, ${fTime(new Date(t))}`;
     const rules = [
       L(`Политика безопасности браузера (CSP): скрипты только с этого сайта, без встроенного кода`, `Browser security policy (CSP): scripts only from this site, no inline code`),
       L('Фильтр разметки и экранирование всего, что вводят пользователи', 'Markup filter and escaping of everything users type'),
       SERVER ? L('Пароли хранятся хэшем Argon2id, номера телефонов зашифрованы (AES-256-GCM)', 'Passwords are stored as Argon2id hashes, phone numbers are encrypted (AES-256-GCM)') : L(`Пароли хранятся хэшем PBKDF2 (150 000 итераций)`, `Passwords are stored as PBKDF2 hashes (150,000 iterations)`),
       L(`${SEC.failsBeforeLock} неверных паролей — блокировка номера на 5 минут`, `${SEC.failsBeforeLock} wrong passwords lock the number for 5 minutes`),
+      ...(SERVER ? [L('О входе с нового устройства придёт уведомление', 'A sign-in from a new device sends you a notification')] : []),
       L(`Не больше ${SEC.authPerHour} попыток входа и SMS в час, ${SEC.smsPer10Min} кодов на номер за 10 минут`, `At most ${SEC.authPerHour} sign-in and SMS attempts per hour, ${SEC.smsPer10Min} codes per number per 10 minutes`),
       L(`Не больше ${SEC.accountsPerDevice} аккаунтов с одного устройства`, `At most ${SEC.accountsPerDevice} accounts per device`),
       L('Лимиты сообщений: раз в 3 минуты, 10 в сборе за сутки, 144 за 7 часов', 'Message limits: one per 3 minutes, 10 per event per day, 144 per 7 hours')
     ];
+    // Смена пароля: после входа по SMS (в первые 15 минут) — подсвечена, текущий пароль не нужен.
+    const reset = resetAllowed();
     return `<section class="panel sec-panel">
       <div class="panel-head"><div><h2>${L('Безопасность', 'Security')}</h2>
         <p class="muted" style="font-size:13.5px;margin-top:4px">${L('Сессия', 'Session')}: ${db.sessionAt ? `${L('вход', 'since')} ${dt(db.sessionAt)} · ` : ''}${L('действует до', 'valid until')} ${dt(db.sessionExp || Date.now())}</p></div>
         <div class="btn-row"><button class="btn btn-sm" data-action="logout">${L('Завершить сессию', 'End session')}</button>${SERVER ? `<button class="btn btn-danger btn-sm" data-action="logoutAll">${L('Выйти на всех устройствах', 'Sign out everywhere')}</button>` : ''}</div></div>
+      <div class="sec-pass ${reset ? 'sms' : ''}"><span class="sec-pass-ic">${ICON.key}</span>
+        <span class="sec-pass-main"><b>${L('Пароль', 'Password')}</b><small>${reset
+          ? L('Вы вошли по коду из SMS: в первые 15 минут после входа новый пароль можно задать без старого.', 'You signed in with an SMS code: for 15 minutes after signing in you can set a new password without the old one.')
+          : SERVER ? L('Пришло уведомление о входе, которого вы не узнаёте? Смените пароль: все остальные сеансы завершатся.', 'Got a notice about a sign-in you don’t recognise? Change your password: all other sessions will end.')
+            : L('Смените пароль, если кто-то мог его узнать.', 'Change your password if someone might know it.')}</small></span>
+        <button class="btn btn-sm ${reset ? 'btn-primary' : ''}" type="button" data-action="changePassword">${L('Сменить пароль', 'Change password')}</button></div>
       <ul class="sec-rules">${rules.map(r => `<li>${ICON.shield}<span>${r}</span></li>`).join('')}</ul>
+      ${SERVER ? `<div class="sec-log-head"><b>${L('Ваши устройства', 'Your devices')}</b></div>
+        <ul class="sec-devices" id="srv-devices"><li class="muted">${L('Загружаем…', 'Loading…')}</li></ul>
+        <p class="sec-hint">${L('Незнакомое устройство? Нажмите «Выйти на всех устройствах»: все сессии завершатся, а другие устройства забудутся — вход с них снова пришлёт уведомление.', 'Don’t recognise a device? Tap “Sign out everywhere”: all sessions end and the other devices are forgotten, so signing in from them notifies you again.')}</p>` : ''}
       ${SERVER ? `<div class="sec-log-head"><b>${L('Журнал безопасности на сервере', 'Server security log')}</b><span class="muted" id="srv-sessions"></span></div><ul class="sec-log" id="srv-log"><li class="muted">${L('Загружаем…', 'Loading…')}</li></ul>` : ''}
       <div class="sec-log-head"><b>${SERVER ? L('События в этом браузере', 'Events in this browser') : L('Журнал безопасности', 'Security log')}</b>${log.length ? `<button class="link-btn" type="button" data-action="clearSecLog">${L('Очистить', 'Clear')}</button>` : ''}</div>
       ${log.length ? `<ul class="sec-log">${log.map(x => { const ev = SEC_EVENTS[x.type] || [x.type, x.type, '']; return `<li class="${ev[2]}"><i></i><span><b>${L(ev[0], ev[1])}</b>${x.detail ? `<small>${esc(x.detail)}</small>` : ''}</span><time class="mono">${dt(x.at)}</time></li>`; }).join('')}</ul>`
@@ -2628,23 +2905,47 @@
   const phonePh = '+996 700 123 456';
   // Блокировка номера после серии неверных паролей.
   function lockLeft(phone) { const f = secRead('hp.sec.fails', {})[phone]; return f?.until > Date.now() ? f.until - Date.now() : 0; }
-  function failLogin(phone) {
+  function failLogin(phone, lockEvent = ['lockout', maskedPhone(phone)]) {
     const all = secRead('hp.sec.fails', {}), now = Date.now();
     const f = all[phone] && !(all[phone].until && all[phone].until <= now) ? all[phone] : { n: 0 };
     f.n = (f.n || 0) + 1;
-    if (f.n >= SEC.failsBeforeLock) { all[phone] = { n: 0, until: now + SEC.lockMs }; secWrite('hp.sec.fails', all); secLog('lockout', maskedPhone(phone)); return 0; }
+    if (f.n >= SEC.failsBeforeLock) { all[phone] = { n: 0, until: now + SEC.lockMs }; secWrite('hp.sec.fails', all); secLog(...lockEvent); return 0; }
     all[phone] = f; secWrite('hp.sec.fails', all);
     return SEC.failsBeforeLock - f.n;
   }
   function clearFails(phone) { const all = secRead('hp.sec.fails', {}); delete all[phone]; secWrite('hp.sec.fails', all); }
-  const secureCode = () => String(1000 + (crypto.getRandomValues ? crypto.getRandomValues(new Uint32Array(1))[0] % 9000 : Math.floor(Math.random() * 9000)));
+  // Код из SMS — 6 цифр, как на сервере. В демо — из криптостойкого генератора, без перекоса: числа от 4 294 000 000 отбрасываем.
+  const CODE_LEN = 6;
+  const secureCode = () => {
+    if (!crypto.getRandomValues) return String(Math.floor(Math.random() * 1e6)).padStart(CODE_LEN, '0');
+    let v; do v = crypto.getRandomValues(new Uint32Array(1))[0]; while (v >= 4294e6);
+    return String(v % 1e6).padStart(CODE_LEN, '0');
+  };
+  // Клетки для кода — по цифре; вставленный код раскладывается по клеткам, после последней цифры форма уходит сама.
+  const codeInputs = () => `<div class="code-inputs">${Array.from({ length: CODE_LEN }, (_, i) => `<input id="code-${i}" inputmode="numeric" autocomplete="${i === 0 ? 'one-time-code' : 'off'}" maxlength="1" aria-label="${L('Цифра', 'Digit')} ${i + 1}">`).join('')}</div>`;
+  function wireCodeInputs(card) {
+    const boxes = $$('.code-inputs input', card), last = boxes.length - 1;
+    boxes.forEach((b, i) => {
+      b.addEventListener('input', () => {
+        const v = digits(b.value);
+        if (v.length > 1) { v.split('').slice(0, boxes.length - i).forEach((c, k) => boxes[i + k].value = c); boxes[Math.min(i + v.length, last)].focus(); }
+        else { b.value = v; if (v && i < last) boxes[i + 1].focus(); }
+        if (boxes.every(x => x.value)) $('#code-form').requestSubmit();
+      });
+      b.addEventListener('keydown', e => { if (e.key === 'Backspace' && !b.value && i > 0) boxes[i - 1].focus(); });
+    });
+    boxes[0].focus();
+    return boxes;
+  }
+  const codeSentTo = phone => `${L(`Отправили ${CODE_LEN} цифр на`, `We sent ${CODE_LEN} digits to`)} <span class="mono">${fmtPhone(phone)}</span>. ${L('Код действует 5 минут.', 'The code is valid for 5 minutes.')}`;
 
   function renderLogin(card) {
     card.innerHTML = `
       <div><span class="eyebrow">${L('Вход', 'Sign in')}</span><h1 style="margin-top:8px">${L('С возвращением', 'Welcome back')}</h1></div>
       <form class="form" id="login-form" novalidate>
         <div class="field"><label for="lg-phone">${L('Номер телефона', 'Phone number')}</label><input id="lg-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="${phonePh}"></div>
-        <div class="field"><label for="lg-pass">${L('Пароль', 'Password')}</label><input id="lg-pass" type="password" autocomplete="current-password" maxlength="128"></div>
+        <div class="field"><label for="lg-pass">${L('Пароль', 'Password')}</label><input id="lg-pass" type="password" autocomplete="current-password" maxlength="128">
+          <button class="link-btn lg-forgot" type="button" id="lg-forgot">${L('Забыли пароль?', 'Forgot password?')}</button></div>
         <div class="error" id="lg-err" role="alert"></div>
         <button class="btn btn-primary" type="submit" id="lg-go">${L('Войти', 'Sign in')}</button>
         <button class="btn" type="button" id="lg-sms">${L('Войти по SMS-коду', 'Sign in with an SMS code')}</button>
@@ -2667,7 +2968,7 @@
         return;
       }
       const lock = lockLeft(phone);
-      if (lock) { err.textContent = L(`Слишком много неверных попыток. Вход для этого номера заблокирован ещё на ${waitText(lock)}.`, `Too many wrong attempts. Sign-in for this number is locked for ${waitText(lock)}.`); return; }
+      if (lock) { err.textContent = L(`Слишком много неверных попыток. Вход паролем для этого номера заблокирован ещё на ${waitText(lock)} — можно войти по SMS-коду.`, `Too many wrong attempts. Password sign-in for this number is locked for ${waitText(lock)} — you can sign in with an SMS code.`); return; }
       const r = rateHit('auth', SEC.authPerHour, 3600e3);
       if (!r.ok) { secLog('rate_limited', 'login'); err.textContent = L(`Слишком много попыток входа с этого устройства. Попробуйте через ${waitText(r.wait)}.`, `Too many sign-in attempts from this device. Try again in ${waitText(r.wait)}.`); return; }
       go1.disabled = true; go1.textContent = L('Проверяем…', 'Checking…');
@@ -2679,23 +2980,33 @@
         const left = failLogin(phone);
         secLog('login_fail', maskedPhone(phone));
         err.textContent = left > 0 ? L(`Неверный номер или пароль. Осталось попыток: ${left}.`, `Wrong number or password. Attempts left: ${left}.`)
-          : L(`Неверный пароль ${SEC.failsBeforeLock} раз подряд. Вход для номера заблокирован на 5 минут.`, `Wrong password ${SEC.failsBeforeLock} times in a row. Sign-in for this number is locked for 5 minutes.`);
+          : L(`Неверный пароль ${SEC.failsBeforeLock} раз подряд. Вход паролем для номера заблокирован на 5 минут — можно войти по SMS-коду.`, `Wrong password ${SEC.failsBeforeLock} times in a row. Password sign-in for this number is locked for 5 minutes — you can sign in with an SMS code.`);
         return;
       }
       clearFails(phone);
       if (!user.verified) { renderVerify(card, phone, () => { user.verified = true; signIn(user); }); return; }
       signIn(user);
     });
-    $('#lg-sms').addEventListener('click', () => {
+    // Вход по коду из SMS. «Забыли пароль?» — тот же вход, а после него сразу Настройки и окно смены пароля:
+    // в первые 15 минут после входа по SMS текущий пароль не нужен (на сервере это проверяет сервер).
+    const smsLogin = forgot => {
       const phone = normPhone($('#lg-phone').value), user = userByPhone(phone);
-      if (!validPhone(phone)) { err.textContent = L('Сначала введите номер телефона.', 'Enter your phone number first.'); return; }
-      if (SERVER) return void renderVerifyServer(card, phone, 'login', async code => {
-        applyData((await api('POST', '/auth/login-sms', { phone, code })).data);
-        toast(L(`Вы вошли как ${me().name}`, `Signed in as ${me().name}`)); afterAuth();
-      });
+      if (!validPhone(phone)) {
+        err.textContent = forgot ? L('Введите номер телефона — пришлём на него код для входа.', 'Enter your phone number and we’ll text you a sign-in code.') : L('Сначала введите номер телефона.', 'Enter your phone number first.');
+        $('#lg-phone').focus(); return;
+      }
+      if (!phoneAllowed(phone)) { err.textContent = phoneErr(phone); $('#lg-phone').focus(); return; }
+      const eyebrow = forgot ? L('Восстановление доступа', 'Account recovery') : undefined;
+      const done = () => { toast(L(`Вы вошли как ${me().name}`, `Signed in as ${me().name}`)); if (forgot) afterRecovery(); else afterAuth(); };
+      if (SERVER) return void renderVerifyServer(card, phone, 'login', async (code, challenge) => {
+        applyData((await api('POST', '/auth/login-sms', { phone, code, challenge })).data);
+        done();
+      }, eyebrow);
       if (!user) { err.textContent = L('Этот номер ещё не зарегистрирован.', 'This number is not registered yet.'); return; }
-      renderVerify(card, phone, () => { user.verified = true; clearFails(phone); signIn(user); });
-    });
+      renderVerify(card, phone, () => { user.verified = true; clearFails(phone); startSession(user, true); done(); }, eyebrow);
+    };
+    $('#lg-sms').addEventListener('click', () => smsLogin(false));
+    $('#lg-forgot').addEventListener('click', () => smsLogin(true));
   }
 
   function renderRegister(card) {
@@ -2707,32 +3018,27 @@
         <div class="field"><label for="rg-phone">${L('Номер телефона', 'Phone number')}</label><input id="rg-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="${phonePh}"></div>
         <div class="field"><label for="rg-pass">${L('Пароль', 'Password')}</label><input id="rg-pass" type="password" autocomplete="new-password" maxlength="128" placeholder="${L('Минимум 8 символов, буквы и цифры', 'At least 8 characters, letters and digits')}">
           <div class="pass-meter" aria-hidden="true"><i></i><i></i><i></i></div><small class="muted" id="rg-strength"></small></div>
-        <label class="check"><input type="checkbox" id="rg-age"> ${L('Мне исполнилось 18 лет, я принимаю <a href="#/terms">правила сервиса</a> и согласен на обработку номера телефона по <a href="#/privacy">политике конфиденциальности</a>', 'I am 18 or older, accept the <a href="#/terms">terms of use</a> and agree to the processing of my phone number under the <a href="#/privacy">privacy policy</a>')}</label>
+        <label class="check"><input type="checkbox" id="rg-age"> <span>${L('Мне исполнилось 18 лет, я принимаю <a href="#/terms">правила сервиса</a> и согласен на обработку номера телефона по <a href="#/privacy">политике конфиденциальности</a>', 'I am 18 or older, accept the <a href="#/terms">terms of use</a> and agree to the processing of my phone number under the <a href="#/privacy">privacy policy</a>')}</span></label>
         <div class="error" id="rg-err" role="alert"></div>
         <button class="btn btn-primary" type="submit">${L('Получить код по SMS', 'Get an SMS code')}</button>
       </form>
-      <p class="sec-note">${ICON.shield}${SERVER ? L('Номер подтверждается кодом из SMS. С одного адреса можно создать не больше 3 аккаунтов.', 'The number is confirmed by an SMS code. At most 3 accounts per address.') : L(`С одного устройства можно создать не больше ${SEC.accountsPerDevice} аккаунтов. Создано: ${regs.length}.`, `Up to ${SEC.accountsPerDevice} accounts can be created from one device. Created: ${regs.length}.`)}</p>
+      <p class="sec-note">${ICON.shield}${L(`Номера с кодом ${phoneCodesText()}, подтверждение кодом из SMS.`, `Numbers starting with ${phoneCodesText()}, confirmed by an SMS code.`)} ${SERVER ? L('С одного адреса можно создать не больше 3 аккаунтов в сутки.', 'At most 3 accounts per address per day.') : L(`С одного устройства можно создать не больше ${SEC.accountsPerDevice} аккаунтов. Создано: ${regs.length}.`, `Up to ${SEC.accountsPerDevice} accounts can be created from one device. Created: ${regs.length}.`)}</p>
       <p class="muted" style="text-align:center">${L('Уже есть аккаунт?', 'Already have an account?')} <a href="#/login" style="color:var(--accent)">${L('Войти', 'Sign in')}</a></p>`;
     maskPhone($('#rg-phone'));
-    const meter = $('.pass-meter'), strength = $('#rg-strength');
-    $('#rg-pass').addEventListener('input', e => {
-      const p = e.target.value, sc = p ? passScore(p) : -1, issue = p ? passIssues(p, $('#rg-phone').value) : '';
-      $('#rg-err').textContent = '';
-      meter.dataset.score = issue ? 0 : sc;
-      strength.textContent = !p ? '' : issue || [L('Слабый пароль', 'Weak password'), L('Неплохой пароль', 'Fair password'), L('Хороший пароль', 'Good password'), L('Надёжный пароль', 'Strong password')][sc];
-    });
+    passMeter($('#rg-pass'), $('.pass-meter', card), $('#rg-strength'), () => $('#rg-phone').value);
+    $('#rg-pass').addEventListener('input', () => { $('#rg-err').textContent = ''; });
     $('#reg-form').addEventListener('submit', ev => {
       ev.preventDefault();
       const err = $('#rg-err');
       const name = clean($('#rg-name').value, 40), phone = normPhone($('#rg-phone').value), pass = $('#rg-pass').value;
       if (!validName(name)) return void (err.textContent = L('Укажите имя буквами: от 2 до 40 символов.', 'Enter a name using letters: 2 to 40 characters.'));
-      if (!validPhone(phone)) return void (err.textContent = L('Введите номер полностью, вместе с кодом страны.', 'Enter the full number including the country code.'));
+      if (!phoneAllowed(phone)) return void (err.textContent = phoneErr(phone));
       if (userByPhone(phone)?.verified) return void (err.textContent = L('Этот номер уже зарегистрирован. Войдите или восстановите доступ по SMS.', 'This number is already registered. Sign in or recover access by SMS.'));
       const issue = passIssues(pass, phone);
       if (issue) return void (err.textContent = issue);
       if (!$('#rg-age').checked) return void (err.textContent = L('Сервис доступен только совершеннолетним.', 'The service is for adults only.'));
-      if (SERVER) return void renderVerifyServer(card, phone, 'register', async code => {
-        applyData((await api('POST', '/auth/register', { name, phone, password: pass, code, adult: true })).data);
+      if (SERVER) return void renderVerifyServer(card, phone, 'register', async (code, challenge) => {
+        applyData((await api('POST', '/auth/register', { name, phone, password: pass, code, challenge, adult: true })).data);
         renderAvatarStep(card, me());
       }, L('Регистрация · шаг 2 из 3', 'Sign up · step 2 of 3'));
       if (secRead('hp.sec.regs', []).length >= SEC.accountsPerDevice) {
@@ -2777,16 +3083,16 @@
     if (!send()) return;
     card.innerHTML = `
       <div><span class="eyebrow">${eyebrow}</span><h1 style="margin-top:8px">${L('Введите код из SMS', 'Enter the SMS code')}</h1>
-        <p class="muted" style="margin-top:8px">${L('Отправили 4 цифры на', 'We sent 4 digits to')} <span class="mono">${fmtPhone(phone)}</span>. ${L('Код действует 5 минут.', 'The code is valid for 5 minutes.')}</p></div>
+        <p class="muted" style="margin-top:8px">${codeSentTo(phone)}</p></div>
       <form class="form" id="code-form">
-        <div class="code-inputs">${[0, 1, 2, 3].map(i => `<input id="code-${i}" inputmode="numeric" autocomplete="${i === 0 ? 'one-time-code' : 'off'}" maxlength="1" aria-label="${L('Цифра', 'Digit')} ${i + 1}">`).join('')}</div>
+        ${codeInputs()}
         <div class="hint" id="sms-hint"></div>
         <div class="error" id="code-err" style="text-align:center" role="alert"></div>
         <button class="btn btn-primary" type="submit">${L('Подтвердить', 'Confirm')}</button>
         <div class="resend" id="resend"></div>
         <button class="link-btn" type="button" id="code-back">${L('Изменить номер', 'Change number')}</button>
       </form>`;
-    const boxes = $$('.code-inputs input', card);
+    const boxes = wireCodeInputs(card);
     const showHint = () => { $('#sms-hint').innerHTML = `${L('Демо-режим, SMS не отправляется. Ваш код:', 'Demo mode, no SMS is sent. Your code:')} <b>${code}</b>`; };
     const tick = () => {
       const r = $('#resend'); if (!r) return clearInterval(timer);
@@ -2798,16 +3104,6 @@
     };
     const start = () => { left = 30; clearInterval(timer); tick(); timer = setInterval(tick, 1000); };
     showHint(); start();
-    boxes.forEach((b, i) => {
-      b.addEventListener('input', () => {
-        const v = digits(b.value);
-        if (v.length > 1) { v.split('').slice(0, 4 - i).forEach((c, k) => boxes[i + k].value = c); boxes[Math.min(i + v.length, 3)].focus(); }
-        else { b.value = v; if (v && i < 3) boxes[i + 1].focus(); }
-        if (boxes.every(x => x.value)) $('#code-form').requestSubmit();
-      });
-      b.addEventListener('keydown', e => { if (e.key === 'Backspace' && !b.value && i > 0) boxes[i - 1].focus(); });
-    });
-    boxes[0].focus();
     $('#code-form').addEventListener('submit', async ev => {
       ev.preventDefault();
       const errEl = $('#code-err'), reset = () => { boxes.forEach(b => b.value = ''); boxes[0].focus(); };
@@ -2826,8 +3122,9 @@
     $('#code-back').addEventListener('click', () => { clearInterval(timer); route(); });
   }
   // Подтверждение номера на сервере: код приходит в SMS (в режиме разработки сервер показывает его здесь).
+  // Сервер отвечает одинаково, есть номер в базе или нет; код привязан к запросу — вместе с ним отправляем ключ запроса (challenge).
   async function renderVerifyServer(card, phone, purpose, onCode, eyebrow = L('Подтверждение номера', 'Number verification')) {
-    let timer = null, left = 0;
+    let timer = null, left = 0, challenge = '';
     const blocked = msg => {
       clearInterval(timer);
       card.innerHTML = `<div><span class="eyebrow">${eyebrow}</span><h1 style="margin-top:8px">${L('Код не отправлен', 'Code not sent')}</h1>
@@ -2835,7 +3132,7 @@
       $('#code-back').onclick = () => route();
     };
     const request = async () => {
-      try { const r = await api('POST', '/auth/sms', { phone, purpose }); return r.devCode || ''; }
+      try { const r = await api('POST', '/auth/sms', { phone, purpose }); challenge = r.challenge || ''; return r.devCode || ''; }
       catch (e) { blocked(apiMsg(e)); return null; }
     };
     card.innerHTML = `<div><span class="eyebrow">${eyebrow}</span><h1 style="margin-top:8px">${L('Отправляем код…', 'Sending the code…')}</h1></div>`;
@@ -2843,20 +3140,23 @@
     if (devCode === null) return;
     card.innerHTML = `
       <div><span class="eyebrow">${eyebrow}</span><h1 style="margin-top:8px">${L('Введите код из SMS', 'Enter the SMS code')}</h1>
-        <p class="muted" style="margin-top:8px">${L('Отправили 4 цифры на', 'We sent 4 digits to')} <span class="mono">${fmtPhone(phone)}</span>. ${L('Код действует 5 минут.', 'The code is valid for 5 minutes.')}</p></div>
+        <p class="muted" style="margin-top:8px">${codeSentTo(phone)}</p></div>
       <form class="form" id="code-form">
-        <div class="code-inputs">${[0, 1, 2, 3].map(i => `<input id="code-${i}" inputmode="numeric" autocomplete="${i === 0 ? 'one-time-code' : 'off'}" maxlength="1" aria-label="${L('Цифра', 'Digit')} ${i + 1}">`).join('')}</div>
+        ${codeInputs()}
         <div class="hint" id="sms-hint"></div>
         <div class="error" id="code-err" style="text-align:center" role="alert"></div>
         <button class="btn btn-primary" type="submit" id="code-go">${L('Подтвердить', 'Confirm')}</button>
         <div class="resend" id="resend"></div>
         <button class="link-btn" type="button" id="code-back">${L('Изменить номер', 'Change number')}</button>
       </form>`;
-    const boxes = $$('.code-inputs input', card);
+    const boxes = wireCodeInputs(card);
+    // Подсказка не зависит от того, есть ли номер в базе: код при входе приходит только на зарегистрированный номер,
+    // а при регистрации на уже зарегистрированный вместо кода приходит SMS об этом.
     const showHint = () => {
       const h = $('#sms-hint');
       h.innerHTML = devCode ? `${L('Режим разработки: SMS не отправляется. Ваш код:', 'Development mode: no SMS is sent. Your code:')} <b>${devCode}</b>`
-        : L('Если SMS не пришло за минуту, проверьте номер или запросите код ещё раз.', 'If the SMS does not arrive within a minute, check the number or request the code again.');
+        : purpose === 'register' ? L('Если SMS не пришло за минуту, проверьте номер или запросите код ещё раз. Если на этот номер уже есть аккаунт, вместо кода придёт SMS об этом — тогда просто войдите.', 'If the SMS does not arrive within a minute, check the number or request the code again. If this number already has an account, you will get an SMS saying so instead of a code — then just sign in.')
+          : L('Если SMS не пришло за минуту, проверьте номер — код приходит, только если с ним уже зарегистрирован аккаунт, — или запросите код ещё раз.', 'If the SMS does not arrive within a minute, check the number (the code is only sent if an account is registered with it) or request the code again.');
     };
     const tick = () => {
       const r = $('#resend'); if (!r) return clearInterval(timer);
@@ -2868,22 +3168,12 @@
     };
     const start = () => { left = 30; clearInterval(timer); tick(); timer = setInterval(tick, 1000); };
     showHint(); start();
-    boxes.forEach((b, i) => {
-      b.addEventListener('input', () => {
-        const v = digits(b.value);
-        if (v.length > 1) { v.split('').slice(0, 4 - i).forEach((c, k) => boxes[i + k].value = c); boxes[Math.min(i + v.length, 3)].focus(); }
-        else { b.value = v; if (v && i < 3) boxes[i + 1].focus(); }
-        if (boxes.every(x => x.value)) $('#code-form').requestSubmit();
-      });
-      b.addEventListener('keydown', e => { if (e.key === 'Backspace' && !b.value && i > 0) boxes[i - 1].focus(); });
-    });
-    boxes[0].focus();
     let busy = false;
     $('#code-form').addEventListener('submit', async ev => {
       ev.preventDefault();
       if (busy) return;
       busy = true; $('#code-go').disabled = true;
-      try { await onCode(boxes.map(b => b.value).join('')); clearInterval(timer); }
+      try { await onCode(boxes.map(b => b.value).join(''), challenge); clearInterval(timer); }
       catch (e) { $('#code-err').textContent = apiMsg(e); boxes.forEach(b => b.value = ''); boxes[0].focus(); }
       finally { busy = false; const g = $('#code-go'); if (g) g.disabled = false; }
     });
@@ -2904,11 +3194,110 @@
     };
     draw();
   }
-  function startSession(user) {
-    db.session = user.id; db.sessionAt = Date.now(); db.sessionExp = Date.now() + SEC.sessionDays * 864e5;
+  // viaSms — вход по коду из SMS: его время запоминается, первые 15 минут пароль можно сменить без текущего (resetAllowed).
+  function startSession(user, viaSms = false) {
+    db.session = user.id; db.sessionAt = Date.now(); db.sessionExp = Date.now() + SEC.sessionDays * 864e5; db.viaSmsAt = viaSms ? Date.now() : 0;
     save(); secLog('login_ok', user.name);
   }
   function signIn(user) { startSession(user); toast(L(`Вы вошли как ${user.name}`, `Signed in as ${user.name}`)); afterAuth(); }
+
+  // ---------- Смена пароля ----------
+  // На сервере проверяет и меняет сервер (POST /api/me/password): остальные сессии завершаются, приходит уведомление.
+  // В демо — те же правила на данных браузера: PBKDF2 (checkPass/makePass), 5 неверных текущих — блокировка на 5 минут,
+  // общий с входом лимит попыток с устройства. current = null — смена без текущего пароля после входа по SMS.
+  // Возвращает null при успехе или { field: 'cur' | 'new' | '', msg, needCurrent } — что показать и у какого поля.
+  async function changeMyPassword(u, current, next) {
+    const SAME = L('Новый пароль совпадает с текущим. Придумайте другой.', 'The new password is the same as the current one. Choose a different one.');
+    if (SERVER) {
+      let r;
+      try { r = await api('POST', '/me/password', current == null ? { next } : { current, next }); }
+      catch (e) {
+        const code = e.info?.error || '';
+        if (code === 'auth_required' || code === 'bad_csrf') refresh();
+        return { field: ['bad_password', 'locked', 'current_required'].includes(code) ? 'cur' : /^weak_|^same_password$/.test(code) ? 'new' : '', msg: apiMsg(e), needCurrent: code === 'current_required' };
+      }
+      applyData(r.data);
+      return null;
+    }
+    const sms = current == null, key = 'pass:' + u.id;
+    if (sms && !resetAllowed()) return { field: 'cur', needCurrent: true, msg: L('Введите текущий пароль: без него пароль можно сменить только в первые 15 минут после входа по коду из SMS.', 'Enter your current password: without it, the password can only be changed within 15 minutes of signing in with an SMS code.') };
+    const lock = sms ? 0 : lockLeft(key);
+    if (lock) return { field: 'cur', msg: L(`Слишком много неверных попыток. Смена пароля заблокирована ещё на ${waitText(lock)}.`, `Too many wrong attempts. Password change is locked for ${waitText(lock)}.`) };
+    const r = rateHit('auth', SEC.authPerHour, 3600e3);
+    if (!r.ok) { secLog('rate_limited', 'password'); return { field: '', msg: L(`Слишком много попыток с этого устройства. Попробуйте через ${waitText(r.wait)}.`, `Too many attempts from this device. Try again in ${waitText(r.wait)}.`) }; }
+    if (!sms && !(await checkPass(u, current))) {
+      const left = failLogin(key, ['password_change_locked', maskedPhone(u.phone)]);
+      if (left) secLog('password_change_fail', maskedPhone(u.phone));
+      return { field: 'cur', msg: left ? L(`Неверный текущий пароль. Осталось попыток: ${left}.`, `Wrong current password. Attempts left: ${left}.`)
+        : L(`Неверный пароль ${SEC.failsBeforeLock} раз подряд. Смена пароля заблокирована на 5 минут.`, `Wrong password ${SEC.failsBeforeLock} times in a row. Password change is locked for 5 minutes.`) };
+    }
+    // После входа по SMS текущий пароль не вводили — повтор узнаём, сверив новый с сохранённым хэшем.
+    if (sms && await checkPass(u, next)) return { field: 'new', msg: SAME };
+    clearFails(key);
+    u.pass = await makePass(next); db.viaSmsAt = 0;
+    save(); secLog('password_changed', maskedPhone(u.phone));
+    return null;
+  }
+
+  // ---------- Удаление аккаунта ----------
+  // На сервере пароль проверяет и всё стирает сервер (POST /api/me/delete). В демо — та же проверка пароля, что при входе
+  // (PBKDF2, 5 попыток, блокировка на 5 минут), и те же данные стираются из браузера. Возвращает текст ошибки или ''.
+  async function deleteMyAccount(u, pass) {
+    if (SERVER) {
+      let r;
+      try { r = await api('POST', '/me/delete', { password: pass }); }
+      catch (e) { if (['auth_required', 'bad_csrf'].includes(e.info?.error)) refresh(); return apiMsg(e); }
+      CSRF = null;
+      applyData(r?.data?.users ? r.data : emptyData());
+    } else {
+      const key = 'delete:' + u.id, lock = lockLeft(key);
+      if (lock) return L(`Слишком много неверных попыток. Удаление заблокировано ещё на ${waitText(lock)}.`, `Too many wrong attempts. Deletion is locked for ${waitText(lock)}.`);
+      const r = rateHit('auth', SEC.authPerHour, 3600e3);
+      if (!r.ok) { secLog('rate_limited', 'delete'); return L(`Слишком много попыток с этого устройства. Попробуйте через ${waitText(r.wait)}.`, `Too many attempts from this device. Try again in ${waitText(r.wait)}.`); }
+      if (!(await checkPass(u, pass))) {
+        const left = failLogin(key, ['delete_locked', maskedPhone(u.phone)]);
+        if (left) secLog('delete_fail', maskedPhone(u.phone));
+        return left ? L(`Неверный пароль. Осталось попыток: ${left}.`, `Wrong password. Attempts left: ${left}.`)
+          : L(`Неверный пароль ${SEC.failsBeforeLock} раз подряд. Удаление аккаунта заблокировано на 5 минут.`, `Wrong password ${SEC.failsBeforeLock} times in a row. Account deletion is locked for 5 minutes.`);
+      }
+      clearFails(key);
+      eraseDemoUser(u);
+    }
+    try { forgetLocal(u); } catch (e) { /* записи в браузере не должны мешать удалению */ }
+    secLog('account_deleted', maskedPhone(u.phone));
+    return '';
+  }
+  // Демо: пользователь и всё, что с ним связано, — то же, что сервер стирает в lib/retention.js.
+  function eraseDemoUser(u) {
+    const id = u.id, hosted = new Set(db.events.filter(e => e.hostId === id).map(e => e.id));
+    const keep = c => c.userId !== id, unreact = c => { if (c.reactions) delete c.reactions[id]; return c; };
+    db.events = db.events.filter(e => !hosted.has(e.id));
+    for (const e of db.events) {
+      e.invites = e.invites.filter(i => i.userId !== id && !(i.phone && normPhone(i.phone) === u.phone));
+      for (const k of ['picks', 'bowls', 'paid', 'remind', 'notified']) if (e[k]) delete e[k][id];
+      e.comments = (e.comments || []).filter(keep).map(unreact);
+      if (e.story) { e.story.fire = (e.story.fire || []).filter(x => x !== id); e.story.comments = (e.story.comments || []).filter(keep).map(unreact); }
+    }
+    db.reviews = db.reviews.filter(r => r.userId !== id);
+    db.mixes = db.mixes.filter(m => m.authorId !== id);
+    for (const m of db.mixes) m.likes = (m.likes || []).filter(x => x !== id);
+    db.users = db.users.filter(x => x.id !== id);
+    for (const x of db.users) x.friends = (x.friends || []).filter(f => f !== id);
+    db.session = null; db.sessionAt = null; db.sessionExp = null; db.viaSmsAt = 0;
+    for (const eid of hosted) try { localStorage.removeItem('hp.sent.' + eid); } catch (e) { /* хранилище недоступно */ }
+    save();
+  }
+  // Следы аккаунта в этом браузере (в обоих режимах): напоминания, прочитанные уведомления, счётчики, имя в журнале.
+  function forgetLocal(u) {
+    const id = u.id, rem = secRead(REM, {}), fails = secRead('hp.sec.fails', {}), rl = secRead('hp.sec.rl', {});
+    for (const k of Object.keys(rem)) if (k.startsWith(id + ':')) delete rem[k];
+    secWrite(REM, rem);
+    secWrite('hp.notifRead', [].concat(secRead('hp.notifRead', [])).filter(n => !String(n).split(':').includes(id)));
+    secWrite('hp.evlog', [].concat(secRead('hp.evlog', [])).filter(x => x?.u !== id));
+    delete fails[u.phone]; delete fails['delete:' + id]; delete fails['pass:' + id]; secWrite('hp.sec.fails', fails);
+    delete rl['sms:' + u.phone]; secWrite('hp.sec.rl', rl);
+    secWrite(SEC_LOG, secLogRead().map(x => x.detail === u.name ? { ...x, detail: '' } : x));
+  }
 
   // ---------- Пикер приглашений ----------
   function invitePicker(root, exclude, preset = []) {
@@ -2928,7 +3317,8 @@
         .sort((a, b) => isFriend(u, b) - isFriend(u, a) || a.name.localeCompare(b.name, 'ru')).slice(0, 6);
       let html = found.map(p => `<button type="button" data-u="${p.id}">${avatar(p, 'sm')}<span>${esc(p.name)}${isFriend(u, p) ? ` <em class="tag-friend">${L('друг', 'friend')}</em>` : ''}</span><small>${phoneShown(u, p)}</small></button>`).join('');
       const np = normPhone(qd);
-      if (validPhone(np) && !userByPhone(np) && !t.has(np)) html += `<button type="button" data-p="${np}"><span class="av av-sm av-ghost">+</span><span>${L('Пригласить по номеру', 'Invite by number')}</span><small>${fmtPhone(np)}</small></button>`;
+      if (phoneAllowed(np) && !userByPhone(np) && !t.has(np)) html += `<button type="button" data-p="${np}"><span class="av av-sm av-ghost">+</span><span>${L('Пригласить по номеру', 'Invite by number')}</span><small>${fmtPhone(np)}</small></button>`;
+      else if (!html && validPhone(np) && !phoneAllowed(np)) html = `<p class="muted" style="padding:8px;font-size:13.5px">${phoneErr(np)}</p>`;
       sug.innerHTML = html || `<p class="muted" style="padding:8px;font-size:13.5px">${text ? L('Никого не нашли. Введите номер полностью, чтобы пригласить по SMS.', 'Nobody found. Enter the full number to invite by SMS.') : L('Все ваши знакомые уже приглашены.', 'Everyone you know is already invited.')}</p>`;
     };
     q.addEventListener('input', draw);
@@ -3007,7 +3397,7 @@
 
   // Напоминания работают, пока сайт открыт. Надёжный вариант — файл .ics с будильником.
   function checkReminders() {
-    const u = me(); if (!u) return;
+    const u = me(); if (!u || wait) return;
     for (const e of db.events) {
       if (!remindOn(e, u) || secRead(REM, {})[u.id + ':' + e.id]?.done === e.at) continue;
       const left = new Date(e.at) - Date.now();
@@ -3057,14 +3447,14 @@
       title: L('Политика конфиденциальности', 'Privacy policy'),
       parts: [
         [L('Коротко', 'In short'), L('Мы собираем только то, без чего сервис не работает: номер телефона, имя и то, что вы сами публикуете. Номер хранится зашифрованным, пароль — только в виде необратимого хэша. Мы не продаём данные и не показываем рекламу.', 'We collect only what the service needs to work: your phone number, name and what you publish yourself. The number is stored encrypted and the password only as an irreversible hash. We do not sell data or show ads.')],
-        [L('Какие данные мы храним', 'What we store'), L('Номер телефона — для входа и чтобы друзья могли вас пригласить. Имя и фото профиля, если вы его загрузили. Сборы, ответы на приглашения, выбор табака, сообщения, оценки и отзывы. Для защиты от взлома — время входов, IP-адрес и тип устройства в журнале безопасности.', 'Your phone number, to sign in and so friends can invite you. Your name and profile photo if you upload one. Events, replies to invitations, tobacco picks, messages, ratings and reviews. For protection against break-ins: sign-in times, IP address and device type in the security log.')],
-        [L('Кто видит ваши данные', 'Who sees your data'), L('Имя и фото видят другие пользователи. Полный номер видят только ваши друзья и участники общих сборов, остальные — последние цифры. Сообщения в обсуждении сбора видят только его участники. Рассказы в «Истории» видят все.', 'Other users see your name and photo. Only your friends and people from shared events see your full number; others see the last digits. Event discussion messages are visible only to its guests. Stories in History are public.')],
-        [L('Как мы защищаем данные', 'How we protect data'), L('Соединение с сайтом шифруется (HTTPS). Номера в базе зашифрованы, пароли хранятся как хэш Argon2. Вход защищён кодом из SMS и ограничением числа попыток. Сессия хранится в защищённом cookie, недоступном скриптам.', 'The connection is encrypted (HTTPS). Numbers in the database are encrypted and passwords stored as an Argon2 hash. Sign-in is protected by an SMS code and attempt limits. The session lives in a protected cookie that scripts cannot read.')],
-        [L('Сколько храним', 'How long we keep it'), L('Пока у вас есть аккаунт. Отменённые сборы удаляются сразу вместе с сообщениями. Журнал безопасности хранится до 90 дней. По запросу удалим аккаунт и все связанные данные в течение 30 дней.', 'As long as you have an account. Cancelled events are deleted immediately together with their messages. The security log is kept for up to 90 days. On request we delete the account and all related data within 30 days.')],
+        [L('Какие данные мы храним', 'What we store'), L('Номер телефона — для входа и чтобы друзья могли вас пригласить. Имя и фото профиля, если вы его загрузили. Сборы, ответы на приглашения, выбор табака, сообщения, оценки и отзывы. Для защиты от взлома — время входов, IP-адрес и тип устройства (браузер и система, без версий) в журнале безопасности и в записях о сеансах, а также IP-адрес, с которого создан аккаунт.', 'Your phone number, to sign in and so friends can invite you. Your name and profile photo if you upload one. Events, replies to invitations, tobacco picks, messages, ratings and reviews. For protection against break-ins: sign-in times, IP address and device type (browser and system, no versions) in the security log and in session records, and the IP address the account was created from.')],
+        [L('Кто видит ваши данные', 'Who sees your data'), L('Без входа на сайте видны только «История» и каталог (и страница сбора — тому, у кого есть ссылка-приглашение): рассказы о вечерах с итогами (сколько было гостей, что курили), комментарии к ним, отзывы и миксы — с именем и фото авторов. После входа другие пользователи видят ваше имя, фото, любимое заведение и любимые табаки, но не ваш список друзей. Полный номер видят только взаимные друзья (вы добавили друг друга), организатор сбора, на который вы идёте, и гости, которые идут на ваш сбор; остальные — последние три цифры. Если вас пригласили по номеру, целиком его видят только организатор и тот, кто позвал, а кто вы в сервисе, они узнают, когда вы ответите. Описание, список гостей, ответы, голоса и обсуждение сбора видят только его участники — и после того, как организатор расскажет о вечере в «Истории»: там видны только рассказ и итоги. По ссылке-приглашению, пока сбор не прошёл, видны лишь его название, место, адрес, время, имя организатора и сколько человек идёт. Организатор может убрать человека из сбора и сменить ссылку-приглашение.', 'Without signing in, only History and the catalogue are visible (plus an event’s page to anyone who has its invitation link): stories about past evenings with a summary (how many guests, what was smoked), comments on them, reviews and mixes, with their authors’ names and photos. Once signed in, other users see your name, photo, favourite venue and favourite tobaccos, but not your friends list. Your full number is visible only to mutual friends (you have added each other), the host of an event you are going to, and guests going to your event; everyone else sees the last three digits. If you were invited by number, only the host and the person who invited you see it in full, and they learn which account it is once you reply. An event’s notes, guest list, replies, votes and discussion are visible only to its guests, also after the host shares a story in History: only the story and a summary are shown there. Until the event is over, its invitation link shows only the title, venue, address, time, the host’s name and how many people are going. The host can remove a person from the event and replace the invitation link.')],
+        [L('Как мы защищаем данные', 'How we protect data'), L('Соединение с сайтом шифруется (HTTPS). Номера в базе зашифрованы, пароли хранятся как хэш Argon2. Вход защищён кодом из SMS и ограничением числа попыток. О входе с нового устройства и о смене пароля мы присылаем уведомление. Сессия хранится в защищённом cookie, недоступном скриптам.', 'The connection is encrypted (HTTPS). Numbers in the database are encrypted and passwords stored as an Argon2 hash. Sign-in is protected by an SMS code and attempt limits. We notify you when someone signs in from a new device or changes your password. The session lives in a protected cookie that scripts cannot read.')],
+        [L('Сколько храним', 'How long we keep it'), L('Пока у вас есть аккаунт. Отменённые сборы удаляются сразу вместе с сообщениями. Журнал безопасности и IP-адрес, с которого создан аккаунт, хранятся до 90 дней, потом удаляются автоматически. Запись о сеансе (адрес и устройство) удаляется, когда вы выходите или сеанс истекает — через 30 дней. Список ваших устройств (браузер и система, без версий) нужен для уведомлений о входе: устройство, с которого не входили год, удаляется из него. Уведомления хранятся до полугода. Удалённый аккаунт стирается сразу, и не только из записей: база затирает удалённое, поэтому в резервных копиях, сделанных после удаления, его данных уже нет. Зашифрованные резервные копии хранятся 14 дней: за это время из них исчезают и удалённые данные, и записи журнала старше 90 дней.', 'As long as you have an account. Cancelled events are deleted immediately together with their messages. The security log and the IP address the account was created from are kept for up to 90 days and then deleted automatically. A session record (address and device) is deleted when you sign out or the session expires after 30 days. The list of your devices (browser and system, no versions) is used for sign-in notifications: a device not used to sign in for a year is removed from it. Notifications are kept for up to six months. A deleted account is erased immediately, not just hidden: the database overwrites deleted data, so backups made after the deletion no longer contain it. Encrypted backups are kept for 14 days, so within that time deleted data and log entries older than 90 days disappear from them too.')],
         [L('Cookie и хранилище браузера', 'Cookies and browser storage'), L('Один cookie нужен, чтобы вы оставались в аккаунте. В хранилище браузера сохраняются настройки: язык, тема, открытые вкладки. Сторонних счётчиков и рекламных cookie нет.', 'One cookie keeps you signed in. Browser storage keeps your settings: language, theme, open tabs. There are no third-party trackers or advertising cookies.')],
-        [L('Ваши права', 'Your rights'), L('Вы можете узнать, какие данные о вас хранятся, исправить их или попросить удалить. Обработка ведётся в соответствии с Законом Кыргызской Республики «Об информации персонального характера».', 'You can find out what data we hold about you, correct it or ask us to delete it. Processing follows the Law of the Kyrgyz Republic “On Personal Information”.')],
-        [L('Сторонние сервисы', 'Third-party services'), L('Коды подтверждения отправляет SMS-провайдер: ему передаётся только номер и текст сообщения. Ссылки на Google Карты, 2ГИС, Telegram и WhatsApp открывают эти сервисы, у них свои правила.', 'Confirmation codes are sent by an SMS provider, which receives only the number and the message text. Links to Google Maps, 2GIS, Telegram and WhatsApp open those services, which have their own policies.')],
-        [L('Контакты', 'Contact'), L('Вопросы и запросы на удаление данных: hello@hookahparty.app.', 'Questions and data deletion requests: hello@hookahparty.app.')]
+        [L('Ваши права', 'Your rights'), L('Вы можете узнать, какие данные о вас хранятся, исправить их или удалить аккаунт сами: Профиль → Настройки → «Удаление аккаунта». Данные стираются сразу, записи журнала безопасности остаются без привязки к вам до 90 дней. Забыли пароль — войдите по коду из SMS и задайте новый. Если войти не получается совсем, напишите на hello@hookahparty.app: убедившись, что номер ваш, мы удалим аккаунт вручную. Обработка ведётся в соответствии с Законом Кыргызской Республики «Об информации персонального характера».', 'You can find out what data we hold about you, correct it or delete your account yourself: Profile → Settings → “Delete account”. Your data is erased immediately; security log entries stay, no longer linked to you, for up to 90 days. Forgot your password? Sign in with an SMS code and set a new one. If you cannot sign in at all, write to hello@hookahparty.app: once we have made sure the number is yours, we will delete the account manually. Processing follows the Law of the Kyrgyz Republic “On Personal Information”.')],
+        [L('Сторонние сервисы', 'Third-party services'), L('Сайт целиком, включая шрифты, загружается с нашего сервера: открывая страницы, ваш браузер не обращается ни к Google Fonts, ни к счётчикам, ни к другим чужим серверам, поэтому ваш IP-адрес не узнаёт никто, кроме нас. Коды подтверждения отправляет SMS-провайдер: ему передаётся только номер и текст сообщения. Ссылки на Google Карты, 2ГИС, Telegram и WhatsApp открывают эти сервисы, у них свои правила.', 'The whole site, fonts included, loads from our server: when you open its pages your browser does not contact Google Fonts, analytics or any other third-party server, so nobody but us learns your IP address. Confirmation codes are sent by an SMS provider, which receives only the number and the message text. Links to Google Maps, 2GIS, Telegram and WhatsApp open those services, which have their own policies.')],
+        [L('Контакты', 'Contact'), L('Вопросы о данных и просьбы удалить аккаунт, в который не получается войти: hello@hookahparty.app.', 'Questions about your data and requests to delete an account you cannot sign in to: hello@hookahparty.app.')]
       ]
     }),
     terms: () => ({
@@ -3085,7 +3475,7 @@
     const doc = LEGAL[kind]();
     view.innerHTML = `<article class="legal">
       <div class="legal-switch"><a href="#/privacy" class="${kind === 'privacy' ? 'on' : ''}">${L('Конфиденциальность', 'Privacy')}</a><a href="#/terms" class="${kind === 'terms' ? 'on' : ''}">${L('Правила', 'Terms')}</a></div>
-      <h1>${doc.title}</h1><p class="muted">${L('Редакция от 23 октября 2026 года', 'Version of 23 October 2026')}</p>
+      <h1>${doc.title}</h1><p class="muted">${L('Редакция от 24 октября 2026 года', 'Version of 24 October 2026')}</p>
       ${doc.parts.map(([h, t]) => `<section><h2>${h}</h2><p>${t}</p></section>`).join('')}
     </article>`;
   }
@@ -3158,9 +3548,22 @@
         <a class="share-btn share-wa" href="${esc(waShare(full, phone))}" target="_blank" rel="noopener noreferrer">${ICON.wa}<span>WhatsApp<small>${phone ? fmtPhone(phone) : L('выбрать чат', 'pick a chat')}</small></span></a>
         ${navigator.share ? `<button class="share-btn" type="button" id="sh-more">${ICON.share}<span>${L('Другое', 'More')}<small>${L('SMS, почта…', 'SMS, email…')}</small></span></button>` : ''}
         <button class="share-btn" type="button" id="sh-copy">${ICON.link}<span>${L('Скопировать', 'Copy')}<small>${L('текст и ссылку', 'text and link')}</small></span></button>
-      </div>`, m => {
+      </div>
+      ${SERVER && !phone && e.hostId === me()?.id ? `<p class="share-reset"><button class="link-btn" type="button" id="sh-reset">${ICON.repeat}${L('Сбросить ссылку', 'Reset the link')}</button>
+        <small>${L('Если ссылку переслали тем, кого вы не звали: старая перестанет работать, а вы отправите новую.', 'If the link reached people you didn’t invite: the old one stops working and you send a new one.')}</small></p>` : ''}`, m => {
       $('#sh-copy', m).onclick = () => copyText(full);
       const more = $('#sh-more', m); if (more) more.onclick = () => navigator.share({ title: e.title, text, url }).catch(() => {});
+      const rs = $('#sh-reset', m); if (rs) rs.onclick = () => resetLink(e);
+    });
+  }
+  // Сменить ссылку на сбор (только организатор, только на сервере): старая сразу перестаёт работать у всех.
+  function resetLink(e) {
+    openModal(L('Сбросить ссылку?', 'Reset the link?'), `<p class="muted">${L('Старая ссылка перестанет работать у всех, кому её отправили. Кто уже ответил, остаётся в сборе. Тем, кого вы ещё ждёте, отправьте новую.', 'The old link stops working for everyone you sent it to. People who already replied stay in the event. Send the new link to those you are still waiting for.')}</p>
+      <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">${L('Оставить', 'Keep it')}</button><button class="btn btn-danger" type="button" id="rs-ok">${L('Сбросить', 'Reset')}</button></div>`, m => {
+      $('#rs-ok', m).onclick = async () => {
+        try { const r = await api('POST', `/events/${e.id}/link/reset`); shareModal(e, siteBase() + '#/join/' + r.token); toast(L('Новая ссылка готова, старая больше не работает', 'New link ready, the old one no longer works')); }
+        catch (err) { toast(apiMsg(err), 'err'); }
+      };
     });
   }
 
@@ -3171,6 +3574,9 @@
     const back = sess.get(BACK); sess.set(BACK, null);
     if (back && /^#\/join\/[\w-]{1,900}$/.test(back)) location.hash = back; else go('');
   }
+  // После входа по SMS из «Забыли пароль?»: Профиль → Настройки и сразу окно смены пароля (route() откроет его после перехода).
+  // Если вход начинался со ссылки-приглашения, туда вернёмся после смены пароля.
+  function afterRecovery() { tab.profile = 'settings'; prefs.set('tab.profile', 'settings'); pendingPassword = true; go('profile'); }
   async function pageJoin(code) {
     const hash = location.hash, u = me();
     let ev = null, status = null;
@@ -3190,8 +3596,9 @@
     if (SERVER && u && pending && pending.startsWith(code + ':') && !status) { sess.set(JOIN_ANSWER, null); return actions.joinAnswer({ code, status: pending.split(':').pop() }); }
     const v = ev.venueId ? venueById(ev.venueId) : VENUES.find(x => x.name === ev.venue);
     const q = placeQuery(ev.venue, ev.address);
-    const answered = { going: L('Вы ответили: иду', 'You replied: going'), declined: L('Вы ответили: не смогу', 'You replied: can’t make it'), pending: L('Вы ещё не ответили', 'You haven’t replied yet'), host: L('Это ваш сбор', 'This is your event') };
-    const memberLink = SERVER ? (status ? ev.id : '') : (status === 'host' ? ev.id : '');
+    const answered = { going: L('Вы ответили: иду', 'You replied: going'), declined: L('Вы ответили: не смогу', 'You replied: can’t make it'), pending: L('Вы ещё не ответили', 'You haven’t replied yet'), host: L('Это ваш сбор', 'This is your event'),
+      removed: L('Организатор убрал вас из этого сбора', 'The host removed you from this event') };
+    const memberLink = status === 'removed' ? '' : SERVER ? (status ? ev.id : '') : (status === 'host' ? ev.id : '');
     const replyBtns = `<button class="btn btn-primary" data-action="joinAnswer" data-code="${code}" data-status="going">${ICON.check}${L('Иду', 'Going')}</button>
       <button class="btn" data-action="joinAnswer" data-code="${code}" data-status="declined">${L('Не смогу', 'Can’t make it')}</button>`;
     view.innerHTML = `
@@ -3208,7 +3615,7 @@
           </div>
           ${ev.past ? `<p class="muted">${L('Этот сбор уже прошёл.', 'This event has already passed.')}</p>`
             : status && status !== 'pending' ? `<div class="join-status"><b>${answered[status] || ''}</b>${memberLink ? `<a class="btn btn-sm" href="#/event/${memberLink}">${L('Открыть сбор', 'Open the event')} →</a>` : ''}
-                ${status !== 'host' ? `<button class="link-btn" data-action="joinChange" data-code="${code}" data-key="${esc(ev.id || code.slice(1, 40))}">${L('Изменить ответ', 'Change reply')}</button>` : ''}</div>
+                ${status !== 'host' && status !== 'removed' ? `<button class="link-btn" data-action="joinChange" data-code="${code}" data-key="${esc(ev.id || code.slice(1, 40))}">${L('Изменить ответ', 'Change reply')}</button>` : ''}</div>
                 ${!SERVER && status !== 'host' ? `<div id="join-reply"></div>` : ''}`
             : `<div class="join-reply-btns">${replyBtns}</div>
                ${SERVER && !u ? `<p class="muted join-note">${L('Чтобы ответить, войдите или зарегистрируйтесь по номеру. Это займёт минуту, ответ сохранится.', 'To reply, sign in or sign up with your number. It takes a minute and your reply is kept.')}</p>` : ''}
@@ -3276,8 +3683,9 @@
       const e = eventById(id), u = me(); if (!e || !u || createBlocked()) return;
       const next = new Date(e.at);
       do next.setDate(next.getDate() + 7); while (next < Date.now());
+      // Приглашённых «по номеру» повторяем, только если номер виден вам целиком (вы организатор или сами их позвали).
       const preset = [...(e.hostId !== u.id ? [{ userId: e.hostId }] : []),
-        ...e.invites.filter(i => i.userId !== u.id && i.status !== 'declined').map(i => i.userId ? { userId: i.userId } : { phone: i.phone })];
+        ...e.invites.filter(i => i.userId !== u.id && i.status !== 'declined' && (i.userId || i.phone)).map(i => i.userId ? { userId: i.userId } : { phone: i.phone })];
       eventForm({ heading: L('Повторить сбор', 'Repeat event'), submitLabel: L('Создать и пригласить', 'Create and invite'), data: { ...e, at: next.toISOString() }, preset, onSave: createEvent });
     },
     editEvent({ id }) {
@@ -3346,6 +3754,22 @@
         toast(status === 'going' ? L('Отлично, ждём вас! Выберите табаки.', 'Great, see you there! Pick your tobacco.') : L('Организатор узнает, что вы не придёте', 'The host will know you can’t make it'));
         go('event/' + r.eventId);
       } catch (err) { toast(apiMsg(err), 'err'); render(); }
+    },
+    guestEdit({ id }) { guestEdit = guestEdit === id ? '' : id; render(); },
+    // Организатор убирает человека из сбора (на сервере он к тому же не вернётся по ссылке и получит уведомление).
+    removeGuest({ id, user, phone }) {
+      const e = eventById(id), u = me(); if (!e || !u || e.hostId !== u.id || (!user && !phone)) return;
+      const p = user && userById(user), who = p ? p.name : fmtPhone(phone);
+      openModal(L('Убрать из сбора?', 'Remove from the event?'), `<p class="muted">${p
+        ? L(`${esc(who)} больше не увидит этот сбор и обсуждение, ответ и голоса удалятся. Вернуться по ссылке не получится — только если вы позовёте снова. Мы сообщим об этом.`, `${esc(who)} will no longer see this event or its discussion, and their reply and votes are removed. They can’t come back through the link unless you invite them again. We’ll let them know.`)
+        : L(`Приглашение на номер ${esc(who)} отменится.`, `The invitation to ${esc(who)} will be withdrawn.`)}</p>
+        <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">${L('Оставить', 'Keep')}</button><button class="btn btn-danger" type="button" id="rg-ok">${L('Убрать', 'Remove')}</button></div>`, m => {
+        $('#rg-ok', m).onclick = () => act(() => {
+          e.invites = e.invites.filter(i => user ? i.userId !== user : !(i.phone && normPhone(i.phone) === normPhone(phone)));
+          if (user) { delete e.picks[user]; delete e.bowls[user]; delete e.paid[user]; }
+        }, 'DELETE', `/events/${id}/invites`, user ? { userId: user } : { phone: normPhone(phone) })
+          .then(() => { closeModal(); toast(p ? L(`${who} больше не в сборе`, `${who} is no longer in the event`) : L('Приглашение отменено', 'Invitation withdrawn')); render(); }, quiet);
+      });
     },
     deleteComment({ id, comment }) {
       const e = eventById(id); if (!e) return;
@@ -3485,10 +3909,12 @@
     switchTab({ tabs, tab: t }) { switchTo(tabs, t); },
     bell(_, el) { openBell(el); },
     async readAll() { closePop(); await markRead('all'); render(); },
-    async openNotif({ id, href, story }) {
+    async openNotif({ id, href, story, settings }) {
       closePop();
       await markRead([id]);
       if (story) { pendingStory = story; tab.history = 'all'; }
+      // Уведомление о входе ведёт в Профиль → Настройки, к панели «Безопасность».
+      if (settings) { tab.profile = 'settings'; prefs.set('tab.profile', 'settings'); pendingSec = true; }
       if (location.hash === href) route(); else location.hash = href;
     },
     reactPick({ scope, id, comment }, el) { openEmojiPop(el, [[null, QUICK]], em => setReaction(scope, id, comment, em), 'r' + comment); },
@@ -3500,7 +3926,7 @@
     storyFire({ id }) {
       if (!requireUser()) return;
       const e = eventById(id), u = me(); if (!e?.story) return;
-      act(() => { e.story.fire = e.story.fire.includes(u.id) ? e.story.fire.filter(x => x !== u.id) : [...e.story.fire, u.id]; }, 'POST', `/events/${id}/story/fire`).then(() => render(), quiet);
+      act(() => { const f = [].concat(e.story.fire || []); e.story.fire = f.includes(u.id) ? f.filter(x => x !== u.id) : [...f, u.id]; }, 'POST', `/events/${id}/story/fire`).then(() => render(), quiet);
     },
     deleteStoryComment({ id, comment }) {
       const e = eventById(id), u = me(); if (!e?.story || !u) return;
@@ -3509,7 +3935,8 @@
     likeThis({ id }) {
       if (!requireUser()) return;
       const e = eventById(id);
-      newEventForm({ data: { title: L(`Как «${e.title}»`, `Like “${e.title}”`), venue: e.venue, address: e.address, hookahs: e.hookahs, price: e.price } });
+      // Адрес чужого вечера сервер не присылает — берём адрес заведения с карты.
+      newEventForm({ data: { title: L(`Как «${e.title}»`, `Like “${e.title}”`), venue: e.venue, address: e.address || eventVenue(e)?.addr || '', hookahs: e.hookahs, price: e.price } });
     },
     openStory({ id }) { pendingStory = id; tab.history = 'all'; go('history'); },
     homeView({ view: v }) { prefs.set('homeView', v); render(); },
@@ -3517,12 +3944,17 @@
     calDay({ day }) { cal.day = cal.day === day ? null : day; render(); },
     toggleFriend({ id }) {
       const u = me(), p = userById(id); if (!u || !p) return;
-      // В демо дружба взаимная сразу; на сервере здесь будет заявка в друзья.
+      // В демо дружба взаимная сразу (будто друг сразу добавил в ответ). На сервере кнопка меняет только вашу сторону:
+      // человеку приходит уведомление, а номера друг друга целиком откроются, когда он тоже добавит вас.
       const was = isFriend(u, p);
       act(() => {
         if (was) { u.friends = u.friends.filter(x => x !== id); p.friends = p.friends.filter(x => x !== u.id); }
         else { u.friends.push(id); if (!p.friends.includes(u.id)) p.friends.push(u.id); }
-      }, 'POST', `/friends/${id}`).then(() => { toast(was ? L(`${p.name} удалён из друзей`, `${p.name} removed from friends`) : L(`${p.name} теперь в друзьях`, `${p.name} is now your friend`)); render(); }, quiet);
+      }, 'POST', `/friends/${id}`).then(() => {
+        // Номер пришёл — значит, он уже добавил вас (или вы вместе идёте на сбор); нет — откроется, когда добавит в ответ.
+        toast(was ? L(`${p.name} удалён из друзей`, `${p.name} removed from friends`) : SERVER && !userById(id)?.phone ? L(`${p.name} в ваших друзьях. Номера друг друга откроются, когда ${p.name} добавит вас в ответ`, `${p.name} is in your friends. You’ll see each other’s numbers once ${p.name} adds you back`) : L(`${p.name} теперь в друзьях`, `${p.name} is now your friend`));
+        render();
+      }, quiet);
     },
     setLang({ lang: l }) { if (l === lang) return; lang = l; prefs.set('lang', l); applyLook(); render(); },
     cycleTheme() {
@@ -3541,11 +3973,98 @@
     uploadAvatar() { const u = me(); pickAvatarFile(url => act(() => { u.avatar = url; }, 'PUT', '/me/avatar', { dataUrl: url }).then(() => { toast(L('Фото обновлено', 'Photo updated')); render(); }, quiet)); },
     removeAvatar() { const u = me(); act(() => { u.avatar = null; }, 'DELETE', '/me/avatar').then(() => render(), quiet); },
     logout() {
-      act(() => { secLog('logout'); db.session = null; db.sessionExp = null; }, 'POST', '/auth/logout', {})
+      act(() => { secLog('logout'); db.session = null; db.sessionExp = null; db.viaSmsAt = 0; }, 'POST', '/auth/logout', {})
         .then(() => { toast(L('Вы вышли из аккаунта', 'You have signed out')); go(''); }, quiet);
     },
     logoutAll() {
       act(null, 'POST', '/auth/logout-all', {}).then(() => { toast(L('Все сессии завершены', 'All sessions ended')); go(''); }, quiet);
+    },
+    // Смена пароля: текущий, новый с индикатором надёжности и повтор; ошибки — у своих полей.
+    // После входа по SMS (первые 15 минут) поле текущего пароля скрыто; если время вышло, сервер скажет — поле появится.
+    changePassword({ recovery } = {}) {
+      const u = me(); if (!u) return;
+      const viaSms = resetAllowed();
+      openModal(L('Смена пароля', 'Change password'), `<form class="form" id="pw-form" novalidate>
+        <p class="pw-sms" id="pw-sms" ${viaSms ? '' : 'hidden'}>${ICON.shield}<span>${L('Вы вошли по коду из SMS, поэтому текущий пароль не нужен: так можно в течение 15 минут после входа.', 'You signed in with an SMS code, so your current password isn’t needed: this works for 15 minutes after signing in.')}</span></p>
+        <div class="field" id="pw-cur-f" ${viaSms ? 'hidden' : ''}><label for="pw-cur">${L('Текущий пароль', 'Current password')}</label>
+          <input id="pw-cur" type="password" autocomplete="current-password" maxlength="128"><div class="field-err" id="pw-cur-err" role="alert"></div>
+          <small class="muted">${L('Не помните его? Выйдите и нажмите «Забыли пароль?» на странице входа — придёт код по SMS.', 'Don’t remember it? Sign out and tap “Forgot password?” on the sign-in page to get an SMS code.')}</small></div>
+        <div class="field"><label for="pw-new">${L('Новый пароль', 'New password')}</label>
+          <input id="pw-new" type="password" autocomplete="new-password" maxlength="128" placeholder="${L('Минимум 8 символов, буквы и цифры', 'At least 8 characters, letters and digits')}">
+          <div class="pass-meter" aria-hidden="true"><i></i><i></i><i></i></div><small class="muted" id="pw-strength"></small><div class="field-err" id="pw-new-err" role="alert"></div></div>
+        <div class="field"><label for="pw-rep">${L('Новый пароль ещё раз', 'Repeat the new password')}</label>
+          <input id="pw-rep" type="password" autocomplete="new-password" maxlength="128"><div class="field-err" id="pw-rep-err" role="alert"></div></div>
+        <p class="muted pw-note">${SERVER ? L('Все остальные сеансы завершатся: на других устройствах нужно будет войти заново.', 'All other sessions will end: you’ll need to sign in again on your other devices.')
+          : L('В демо-режиме пароль меняется только в этом браузере.', 'In demo mode the password changes only in this browser.')}</p>
+        <div class="error" id="pw-err" role="alert"></div>
+        <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">${L('Отмена', 'Cancel')}</button>
+          <button class="btn btn-primary" type="submit" id="pw-go">${L('Сменить пароль', 'Change password')}</button></div>
+      </form>`, m => {
+        const f = id => $('#' + id, m);
+        const inputs = { cur: f('pw-cur'), new: f('pw-new'), rep: f('pw-rep') }, errs = { cur: f('pw-cur-err'), new: f('pw-new-err'), rep: f('pw-rep-err') };
+        const btn = f('pw-go'), general = f('pw-err');
+        passMeter(inputs.new, $('.pass-meter', m), f('pw-strength'), () => u.phone);
+        const clearErr = k => { errs[k].textContent = ''; inputs[k].removeAttribute('aria-invalid'); };
+        const showErr = (k, msg) => {
+          if (!errs[k]) { general.textContent = msg; return; }
+          errs[k].textContent = msg; inputs[k].setAttribute('aria-invalid', 'true'); inputs[k].focus();
+          if (k === 'new') f('pw-strength').textContent = ''; // подпись индикатора не повторяет ошибку; при вводе вернётся
+        };
+        for (const k of Object.keys(inputs)) inputs[k].addEventListener('input', () => { clearErr(k); general.textContent = ''; });
+        let busy = false;
+        f('pw-form').addEventListener('submit', async ev => {
+          ev.preventDefault();
+          if (busy) return;
+          Object.keys(errs).forEach(clearErr); general.textContent = '';
+          const sms = f('pw-cur-f').hidden, cur = inputs.cur.value, next = inputs.new.value;
+          if (!sms && !cur) return showErr('cur', L('Введите текущий пароль.', 'Enter your current password.'));
+          const issue = passIssues(next, u.phone);
+          if (issue) return showErr('new', issue);
+          if (inputs.rep.value !== next) return showErr('rep', L('Пароли не совпадают.', 'The passwords don’t match.'));
+          if (!sms && cur === next) return showErr('new', L('Новый пароль совпадает с текущим. Придумайте другой.', 'The new password is the same as the current one. Choose a different one.'));
+          busy = true; btn.disabled = true; btn.textContent = L('Сохраняем…', 'Saving…');
+          let res;
+          try { res = await changeMyPassword(u, sms ? null : cur, next); }
+          catch (e) { res = { field: '', msg: L('Не получилось сменить пароль. Попробуйте ещё раз.', 'Could not change the password. Please try again.') }; }
+          busy = false; btn.disabled = false; btn.textContent = L('Сменить пароль', 'Change password');
+          if (res) {
+            // 15 минут после входа по SMS прошли: показываем поле текущего пароля.
+            if (res.needCurrent) { f('pw-cur-f').hidden = false; f('pw-sms').hidden = true; }
+            if (res.field === 'cur') inputs.cur.value = '';
+            return showErr(res.field, res.msg);
+          }
+          closeModal(); toast(L('Пароль изменён, остальные сеансы завершены', 'Password changed, other sessions ended'));
+          // Пришли из «Забыли пароль?» по ссылке-приглашению — возвращаемся к ней (ответ отправится сам).
+          if (recovery && sess.get(BACK)) afterAuth(); else render();
+        });
+      });
+      if (viaSms) $('#pw-new')?.focus();
+    },
+    deleteAccount() {
+      const u = me(); if (!u) return;
+      openModal(L('Удалить аккаунт?', 'Delete your account?'), `<form class="form" id="del-acc-form" novalidate>
+        <p class="muted">${L('Профиль, номер телефона, ваши сборы, сообщения, голоса, отзывы, миксы и друзья будут стёрты сразу. Для подтверждения введите пароль.', 'Your profile, phone number, events you host, messages, votes, reviews, mixes and friends are erased right away. Enter your password to confirm.')}</p>
+        <div class="field"><label for="da-pass">${L('Пароль', 'Password')}</label><input id="da-pass" type="password" autocomplete="current-password" maxlength="128"></div>
+        <label class="check"><input type="checkbox" id="da-sure"> ${L('Понимаю, что восстановить аккаунт нельзя', 'I understand that the account cannot be restored')}</label>
+        <div class="error" id="da-err" role="alert"></div>
+        <div class="modal-foot"><button class="btn btn-ghost" type="button" data-action="closeModal">${L('Отмена', 'Cancel')}</button>
+          <button class="btn btn-danger-solid" type="submit" id="da-go" disabled>${L('Удалить навсегда', 'Delete forever')}</button></div>
+      </form>`, m => {
+        const pass = $('#da-pass', m), sure = $('#da-sure', m), btn = $('#da-go', m), err = $('#da-err', m);
+        let busy = false;
+        sure.addEventListener('change', () => { btn.disabled = busy || !sure.checked; });
+        $('#del-acc-form', m).addEventListener('submit', async ev => {
+          ev.preventDefault();
+          if (busy || !sure.checked) return;
+          if (!pass.value) { err.textContent = L('Введите пароль.', 'Enter your password.'); pass.focus(); return; }
+          busy = true; btn.disabled = true; err.textContent = ''; btn.textContent = L('Удаляем…', 'Deleting…');
+          let msg;
+          try { msg = await deleteMyAccount(u, pass.value); } catch (e) { msg = L('Не получилось удалить аккаунт. Попробуйте ещё раз.', 'Could not delete the account. Please try again.'); }
+          busy = false; btn.disabled = !sure.checked; btn.textContent = L('Удалить навсегда', 'Delete forever');
+          if (msg) { err.textContent = msg; pass.value = ''; pass.focus(); return; }
+          closeModal(); toast(L('Аккаунт удалён', 'Account deleted')); go('');
+        });
+      });
     },
     async installApp() {
       // Android и компьютеры: системное окно установки. iPhone: инструкция «Поделиться → На экран „Домой“».
@@ -3567,7 +4086,7 @@
     info({ key }) {
       const texts = {
         rules: [['Правила сервиса', 'Terms of use'], ['Сервис предназначен для лиц старше 18 лет. Организатор отвечает за бронь в заведении. Запрещено приглашать людей без их согласия и рассылать рекламу.', 'The service is for people aged 18 and over. The host is responsible for the booking. Inviting people without consent and sending ads is not allowed.']],
-        privacy: [['Конфиденциальность', 'Privacy'], ['Номер телефона нужен для входа и чтобы друзья могли пригласить вас. Полный номер видят только друзья и участники общих сборов. Мы не передаём данные третьим лицам.', 'Your phone number is used to sign in and so friends can invite you. Only friends and people from shared events see the full number. We do not share data with third parties.']],
+        privacy: [['Конфиденциальность', 'Privacy'], ['Номер телефона нужен для входа и чтобы друзья могли пригласить вас. Полный номер видят только взаимные друзья, а в сборе — организатор и те, кто идёт. Мы не передаём данные третьим лицам.', 'Your phone number is used to sign in and so friends can invite you. Only mutual friends and, within an event, the host and the guests who are going see the full number. We do not share data with third parties.']],
         venues: [['Заведениям', 'For venues'], ['Хотите оказаться на карте Hookah Party или поправить данные о своём заведении? Напишите на hello@hookahparty.app.', 'Want to appear on the Hookah Party map or correct your venue details? Write to hello@hookahparty.app.']],
         faq: [['Вопросы и ответы', 'FAQ'], ['Как пригласить друга без аккаунта? Введите его номер в поле приглашения. Сбор появится у него сразу после регистрации с этим номером.', 'How do I invite a friend without an account? Enter their number in the invite field. The event appears for them as soon as they sign up with that number.']]
       };
@@ -3590,6 +4109,7 @@
   const PAGES = new Set(['', 'venues', 'events', 'event', 'catalog', 'people', 'user', 'how', 'profile', 'login', 'register', 'history', 'notifications', 'admin', 'join', 'privacy', 'terms']);
   const NEEDS_ARG = new Set(['event', 'user', 'join']);
   function render() {
+    if (wait) return renderWait();
     const hash = location.hash.replace(/^#\/?/, '');
     let [page = '', arg, extra] = hash.split('/');
     // Ссылка-приглашение в демо длиннее обычных адресов: в ней лежат данные сбора.
@@ -3624,11 +4144,23 @@
     }
     inkAll();
   }
-  let pendingStory = null;
+  // Экран вместо страниц, пока сервер недоступен: меню на месте, но ни демо-данных, ни чужого входа, и переходы его не обходят.
+  function renderWait() {
+    if (wait === 'boot') return;
+    renderChrome('');
+    const again = `<button class="btn btn-primary btn-sm" type="button" data-action="reload">${L('Обновить', 'Reload')}</button>`;
+    view.innerHTML = wait === 'down'
+      ? emptyState(L('Сервер ненадолго недоступен', 'The server is briefly unavailable'), L('Обычно это пара минут: идёт обновление или сервер перегружен. Страница откроется сама, как только сервер ответит.', 'This usually takes a couple of minutes: an update is in progress or the server is busy. The page will open by itself as soon as the server answers.'), again)
+      : emptyState(L('Нет соединения', 'No connection'), L('Сайт открылся без интернета. Ваши сборы и сообщения появятся, как только сеть вернётся.', 'The site opened without internet. Your events and messages will appear as soon as you are back online.'), again);
+  }
+  let pendingStory = null, pendingSec = false, pendingPassword = false;
   function route() {
     closeModal(); render(); window.scrollTo(0, 0); checkReminders();
     if (!reduceMotion()) { view.classList.remove('view-enter'); void view.offsetWidth; view.classList.add('view-enter'); }
     if (pendingStory) { const el = $('#story-' + pendingStory); pendingStory = null; if (el) { el.scrollIntoView({ block: 'start' }); window.scrollBy(0, -90); el.classList.add('flash'); } }
+    if (pendingSec) { const el = $('.sec-panel'); pendingSec = false; if (el) { el.scrollIntoView({ block: 'start' }); window.scrollBy(0, -90); el.classList.add('flash'); } }
+    // «Забыли пароль?»: после входа по SMS — окно смены пароля поверх настроек.
+    if (pendingPassword) { pendingPassword = false; if (me() && location.hash === '#/profile') actions.changePassword({ recovery: true }); }
   }
   // Кнопка «Наверх» появляется после прокрутки.
   const toTop = document.createElement('button');
@@ -3661,18 +4193,25 @@
   if ('serviceWorker' in navigator && !IN_APP && window.top === window && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
   }
-  (async () => {
-    const mode = await detectServer();
-    if (mode === 'server') { SERVER = true; prefs.set('mode', 'server'); document.documentElement.dataset.mode = 'server'; await refresh(); }
-    // Сайт с сервером открылся из офлайн-кеша: показываем честный экран, а не демо-данные вместо ваших.
-    if (mode === 'offline' && prefs.get('mode') === 'server') {
-      renderChrome('');
-      view.innerHTML = emptyState(L('Нет соединения', 'No connection'), L('Сайт открылся без интернета. Ваши сборы и сообщения появятся, как только сеть вернётся.', 'The site opened without internet. Your events and messages will appear as soon as you are back online.'),
-        `<button class="btn btn-primary btn-sm" type="button" data-action="reload">${L('Обновить', 'Reload')}</button>`);
-      window.addEventListener('online', () => location.reload(), { once: true });
+  // Запуск: есть ли сервер, данные с него, первая страница. Сервер есть, но ответил не так (лимит, перезапуск, сбой) или сеть
+  // пропала — вместо страниц честный экран (renderWait) с пустыми данными, а раз в 20 секунд тихая повторная попытка:
+  // сервер ответил — страница открывается сама. Без сервера (демо) и без сети сайт работает на данных браузера, как раньше.
+  const reload = () => location.reload();
+  async function boot() {
+    let mode = await detectServer();
+    if (mode === 'static' && wait !== 'boot') return reload(); // ждали, а сервер тут не нужен (сайт без сервера снова отвечает) — начисто, в демо
+    if (mode === 'server') {
+      SERVER = true; prefs.set('mode', 'server'); document.documentElement.dataset.mode = 'server'; forgetDemo();
+      if (!await refresh()) mode = 'down';
+    }
+    if (mode === 'down' || (mode === 'offline' && prefs.get('mode') === 'server')) {
+      if (wait === 'boot') { db = emptyData(); window.addEventListener('online', reload, { once: true }); }
+      if (wait !== mode) { wait = mode; route(); }
+      setTimeout(boot, 20e3);
       return;
     }
-    route();
-    ageGate();
-  })();
+    window.removeEventListener('online', reload);
+    wait = ''; route(); ageGate();
+  }
+  boot();
 })();
