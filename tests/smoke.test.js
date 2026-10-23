@@ -12,6 +12,8 @@ vc.on('error', e => errors.push('console.error: ' + e));
 const dom = new JSDOM(html, { url: 'https://example.test/', runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole: vc });
 const w = dom.window, d = w.document;
 w.scrollTo = () => {};
+// В jsdom нет TextEncoder/TextDecoder, а в настоящих браузерах они есть всегда.
+if (!w.TextEncoder) Object.assign(w, { TextEncoder, TextDecoder });
 w.Element.prototype.scrollIntoView = () => {};
 w.addEventListener('error', e => errors.push('window error: ' + e.message));
 w.eval(fs.readFileSync(dir + '/map-data.js', 'utf8'));
@@ -30,6 +32,11 @@ const tabTo = async (n, k) => { click($(`.utabs[data-tabs="${n}"] [data-tab="${k
 (async () => {
   try {
     await sleep(20);
+    ok(!!$('.age-gate') && /18/.test($('.age-gate').textContent), 'возраст: при первом визите спрашиваем 18+');
+    click($('.age-gate [data-age="no"]')); await sleep(5);
+    ok(!$('.age-gate .age-no').hidden && !!$('.age-gate'), 'возраст: «Нет» не пускает дальше');
+    click($('.age-gate [data-age="yes"]')); await sleep(5);
+    ok(!$('.age-gate') && w.localStorage.getItem('hp.age18') === 'yes', 'возраст: «Да» запоминается');
     ok($$('.tiles .tile').length === 3, 'главная: три плитки');
     const today = new Date(), m = today.getMonth() + 1, dd = today.getDate();
     const expect = (m === 10 && dd >= 23) || (m === 11 && dd <= 3) ? 'halloween' : (m === 12 && dd >= 22) || (m === 1 && dd <= 10) ? 'newyear' : undefined;
@@ -117,7 +124,7 @@ const tabTo = async (n, k) => { click($(`.utabs[data-tabs="${n}"] [data-tab="${k
     ok($$('.comment').length === before + 1, 'сбор: комментарий');
     ok($('#comment-text').disabled && /через/.test($('.quota').textContent) && !!$('[data-until]'), 'сообщения: пауза 3 минуты после отправки');
     click($('.comment .react-add')); await sleep(10);
-    click(d.querySelector('.emoji-pop [data-e="🔥"]')); await sleep(10);
+    click($$('.emoji-pop [data-e]').find(b => b.dataset.e === '🔥')); await sleep(10);
     ok(/🔥/.test($('.comment .reacts').textContent), 'сообщения: реакция смайликом');
     click($('.comment .react-chip.on')); await sleep(10);
     ok(!$('.comment .react-chip.on'), 'сообщения: повторное нажатие снимает реакцию');
@@ -164,11 +171,44 @@ const tabTo = async (n, k) => { click($(`.utabs[data-tabs="${n}"] [data-tab="${k
     ok(!probe.querySelector('[onerror], script') && probe.querySelector('a').getAttribute('href') === '#' && /ok/.test(probe.textContent), 'защита: фильтр вырезает опасную разметку');
     probe.remove();
     await go('#/event/<script>'); ok(/Такой страницы нет/.test(text()), 'защита: неизвестные адреса не открываются');
+
+    // Приглашение ссылкой в Telegram и WhatsApp
+    await go('#/event/e1');
+    ok(!!$('.share-strip [data-via="tg"]') && !!$('.share-strip [data-via="wa"]'), 'приглашение: кнопки Telegram и WhatsApp на странице сбора');
+    click($('.share-strip [data-via="tg"]')); await sleep(30);
+    const tgA = $('.modal a.share-tg');
+    ok(!!tgA && /^https:\/\/t\.me\/share\/url\?url=/.test(tgA.getAttribute('href')), 'приглашение: ссылка Telegram');
+    ok(/^https:\/\/wa\.me\/\?text=/.test($('.modal a.share-wa').getAttribute('href')), 'приглашение: ссылка WhatsApp');
+    ok(/Зову на кальян/.test($('.share-preview').textContent), 'приглашение: готовый текст');
+    const inviteUrl = new w.URL(tgA.getAttribute('href')).searchParams.get('url');
+    ok(inviteUrl.startsWith('https://marlendiusheew-sudo.github.io/hookah-party/#/join/d'), 'приглашение: ссылка ведёт на настоящий сайт');
+    const inviteHash = '#' + inviteUrl.split('#')[1];
+    click($('.modal-x')); await sleep(5);
+    await go(inviteHash);
+    ok(!!$('.join-card') && /Это ваш сбор/.test(text()), 'приглашение: организатор видит свой сбор');
+    await go('#/join/dAAAA-bad'); ok(/Приглашение не найдено/.test(text()), 'приглашение: испорченная ссылка');
+    click($('[data-action="ics"]') || $('a')); await sleep(5);
+    await go('#/event/e1'); click($('[data-action="ics"]')); await sleep(10);
+    ok(/calendar\.google\.com/.test($('.modal').innerHTML) && !!$('#cal-ics'), 'календарь: Google и файл .ics');
+    click($('.modal-x')); await sleep(5);
+
+    // Правила и конфиденциальность
+    await go('#/privacy'); ok(/Политика конфиденциальности/.test(text()) && $$('.legal section').length >= 8, 'страница: конфиденциальность');
+    await go('#/terms'); ok(/Правила сервиса/.test(text()) && /18 лет/.test(text()), 'страница: правила');
+    const sw = fs.readFileSync(dir + '/sw.js', 'utf8'), ver = /VERSION = (\d+)/.exec(sw)[1];
+    ok(fs.readFileSync(dir + '/index.html', 'utf8').match(/\?v=(\d+)/g).every(x => x === '?v=' + ver), 'офлайн: версия кеша совпадает с ?v= в index.html');
     await go('#/profile'); click($('.utabs [data-tab="settings"]')); await sleep(10);
     ok(!!$('.sec-panel') && /Журнал безопасности/.test($('.sec-panel').textContent), 'защита: панель безопасности в профиле');
     click($('[data-action="logout"]')); await sleep(40);
     ok(/Добро пожаловать в Hookah Party!/.test(text()) && $$('.tiles .tile').length === 3, 'гость: главная');
     await go('#/events'); ok(/Войдите, чтобы видеть свои сборы/.test(text()), 'гость: события просят войти');
+    w.localStorage.removeItem('hp.sent.e1'); // как будто ссылку открыли на другом устройстве
+    await go(inviteHash);
+    ok(/Алекс зовёт вас/.test(text()) && $$('.join-reply-btns .btn').length === 2 && !!$('.join-about'), 'приглашение: гость видит сбор и кнопки ответа');
+    click($('.join-reply-btns [data-status="going"]')); await sleep(10);
+    ok(/Вы ответили: иду/.test(text()) && !!$('#join-reply a.share-tg') && !!$('#join-reply a.share-wa'), 'приглашение: ответ уходит организатору в мессенджер');
+    click($('[data-action="joinChange"]')); await sleep(10);
+    ok($$('.join-reply-btns .btn').length === 2, 'приглашение: ответ можно изменить');
     await go('#/login');
     for (let i = 0; i < 5; i++) { setVal('#lg-phone', '0700000001'); $('#lg-pass').value = 'wrong'; $('#login-form').requestSubmit(); await sleep(450); }
     ok(/заблокирован/.test($('#lg-err').textContent), 'защита: блокировка после 5 неверных паролей');

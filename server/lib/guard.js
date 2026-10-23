@@ -14,7 +14,9 @@ const LIMITS = {
   codeTtlMs: 5 * 60e3, codeAttempts: 5,
   sessionMs: 30 * 864e5,
   eventsPerDay: 12,                 // созданий сборов за сутки (и отдельно 12 отмен)
-  adminStepUpMs: 15 * 60e3,         // доступ к панели администратора после ввода пароля
+  adminStepUpMs: 15 * 60e3,
+  invitesPerEvent: 60,              // всего приглашённых в одном сборе (по ссылке больше не добавить)
+  clientErrors: [20, 3600e3],       // отчётов об ошибках со страницы с одного IP в час         // доступ к панели администратора после ввода пароля
   chatCooldownMs: 3 * 60e3, chatPerEvent: [10, 864e5], chatGlobal: [144, 7 * 3600e3]
 };
 

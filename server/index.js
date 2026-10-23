@@ -32,13 +32,14 @@ const STATIC = {
   '/art.js': ['art.js', 'text/javascript; charset=utf-8'], '/map-data.js': ['map-data.js', 'text/javascript; charset=utf-8'],
   '/.well-known/security.txt': ['.well-known/security.txt', 'text/plain; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icon-192.png': ['icon-192.png', 'image/png'],
-  '/icon-512.png': ['icon-512.png', 'image/png'], '/apple-touch-icon.png': ['apple-touch-icon.png', 'image/png']
+  '/icon-512.png': ['icon-512.png', 'image/png'], '/apple-touch-icon.png': ['apple-touch-icon.png', 'image/png'],
+  '/sw.js': ['sw.js', 'text/javascript; charset=utf-8'], '/og.png': ['og.png', 'image/png']
 };
 
 const CSP = ["default-src 'none'", "script-src 'self'", "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'",
   "style-src-elem 'self' https://fonts.googleapis.com", "style-src-attr 'unsafe-inline'", "font-src https://fonts.gstatic.com",
   "img-src 'self' data: blob:", "connect-src 'self'", "manifest-src 'self'", "media-src 'none'", "object-src 'none'", "frame-src 'none'",
-  "worker-src 'none'", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'", "require-trusted-types-for 'script'", "trusted-types default"].join('; ');
+  "worker-src 'self'", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'", "require-trusted-types-for 'script'", "trusted-types default"].join('; ');
 
 function securityHeaders(req, res) {
   res.setHeader('Content-Security-Policy', CSP);
@@ -149,7 +150,7 @@ function serveStatic(req, res, url, db) {
   fs.readFile(path.join(ROOT, file), (err, data) => {
     if (err) { res.writeHead(404); return res.end(); }
     // HTML — всегда свежий, остальное — кешируется (в адресах файлов есть ?v=версия).
-    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': type.startsWith('text/html') ? 'no-cache' : 'public, max-age=86400' });
+    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': type.startsWith('text/html') || file === 'sw.js' ? 'no-cache' : 'public, max-age=86400' });
     res.end(req.method === 'HEAD' ? undefined : data);
   });
 }

@@ -1604,3 +1604,83 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 @media (prefers-reduced-motion: reduce) {
   .view.view-enter > *, .view.view-enter .tiles .tile, .ii-card, .toast, .modal, .modal-backdrop { animation: none !important; }
 }
+
+/* ================= Приглашение ссылкой ================= */
+.share-strip {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 14px 16px; border-radius: var(--r);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+.share-strip b { display: block; font-size: 15px; }
+.share-strip small { color: var(--muted); font-size: 13px; }
+/* Цвета мессенджеров только на значке — кнопки остаются в стиле сайта. */
+.share-tg svg { color: #2aabee; }
+.share-wa svg { color: #25d366; }
+.share-preview {
+  white-space: pre-line; font-size: 14px; line-height: 1.55; padding: 14px 16px; border-radius: var(--r); background: var(--surface-2);
+  border-left: 3px solid var(--accent); margin: 12px 0 16px; overflow-wrap: anywhere;
+}
+.share-preview .mono { display: block; margin-top: 6px; color: var(--accent); font-size: 12px; max-height: 3.2em; overflow: hidden; }
+.share-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.share-btn {
+  display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface);
+  color: var(--fg); font: 600 14.5px var(--f-body); text-align: left; cursor: pointer; text-decoration: none;
+  transition: transform .4s var(--ease-spring), border-color var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out);
+}
+.share-btn:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.share-btn:active { transform: scale(.97); }
+.share-btn svg { width: 24px; height: 24px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.share-btn span { display: grid; gap: 1px; min-width: 0; }
+.share-btn small { font-weight: 400; font-size: 12px; color: var(--muted); }
+.wa-mini { width: 32px; height: 32px; margin-right: 6px; }
+.wa-mini svg { color: #25d366; width: 17px; height: 17px; }
+
+/* Страница, которую открывает друг по ссылке */
+.join { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; align-items: start; padding-top: 12px; }
+.join.solo { grid-template-columns: minmax(0, 760px); justify-content: center; }
+.join-card { display: grid; gap: 16px; padding: 28px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--elev); }
+.join-card h1 { font-size: clamp(28px, 5vw, 44px); }
+.join-count { display: flex; align-items: center; gap: 10px; color: var(--muted); margin: -4px 0 0; }
+.join-reply-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.join-reply-btns .btn { justify-content: center; padding-block: 14px; font-size: 16px; }
+.join-status { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border-radius: var(--r); background: var(--smoke); }
+.join-status b { margin-right: auto; }
+.join-note { font-size: 13.5px; margin: -6px 0 0; }
+.join-about { padding: 24px; border-radius: var(--r-lg); border: 1px dashed var(--line); display: grid; gap: 14px; }
+.join-about h2 { font-size: 18px; }
+.join-about ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.join-about li { display: flex; gap: 12px; align-items: flex-start; color: var(--muted); font-size: 14.5px; line-height: 1.5; }
+.join-about li svg { width: 22px; height: 22px; flex: none; stroke: var(--accent); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.join-about .btn { justify-self: start; }
+@media (max-width: 820px) { .join { grid-template-columns: 1fr; } .join-card { padding: 20px; } }
+
+/* ================= Правила и конфиденциальность ================= */
+.legal { max-width: 760px; margin: 0 auto; padding: 12px 0 40px; display: grid; gap: 14px; }
+.legal h1 { margin-top: 6px; }
+.legal section { padding: 18px 0 0; border-top: 1px solid var(--line); }
+.legal h2 { font-size: 17px; margin-bottom: 8px; }
+.legal p { color: var(--muted); line-height: 1.65; margin: 0; }
+.legal-switch { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; border: 1px solid var(--line); justify-self: start; background: var(--surface); }
+.legal-switch a { padding: 7px 14px; border-radius: 999px; font-size: 13.5px; font-weight: 600; color: var(--muted); text-decoration: none; transition: background-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out); }
+.legal-switch a.on { background: var(--fg); color: var(--bg); }
+.check a { color: var(--accent); }
+
+/* ================= Проверка возраста ================= */
+.age-gate {
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 16px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  animation: backdropIn .35s var(--ease-out);
+}
+.age-gate.out { animation: backdropOut .3s var(--ease-in-out) forwards; }
+.age-card {
+  width: min(440px, 100%); padding: 30px 28px 22px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line);
+  box-shadow: var(--elev); text-align: center; display: grid; gap: 14px; justify-items: center; animation: modalIn .5s var(--ease-out);
+}
+.age-gate.out .age-card { animation: modalOut .3s var(--ease-in-out) forwards; }
+.age-badge { font: 700 22px var(--f-display); color: var(--accent); border: 2px solid currentColor; border-radius: 14px; padding: 6px 12px; }
+.age-card h2 { font-size: 22px; }
+.age-card p { margin: 0; }
+.age-card .btn-row { justify-content: center; }
+.age-no { color: var(--danger); font-weight: 600; }
+.age-links { font-size: 12.5px; color: var(--muted); }
+.age-links a { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .age-gate, .age-card { animation: none !important; } }

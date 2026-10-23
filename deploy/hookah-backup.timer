@@ -1,0 +1,12 @@
+# systemd: /etc/systemd/system/hookah-backup.timer
+# sudo systemctl daemon-reload && sudo systemctl enable --now hookah-backup.timer
+[Unit]
+Description=Hookah Party: резервная копия базы каждую ночь
+
+[Timer]
+OnCalendar=*-*-* 05:30:00
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

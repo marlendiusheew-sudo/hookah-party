@@ -2,7 +2,7 @@
 // API Hookah Party. Каждая точка: проверка входа, прав, лимитов и данных; все SQL-запросы подготовленные.
 const { crypto, encrypt, decrypt, phoneIndex, hashPassword, verifyPassword, burnTime, sha256, sameHash, smsCode } = require('./secure');
 const { normPhone, validPhone, maskPhone, clean, validName, safeUrl, safeAvatar, isId, passIssue, fail, uid, nowIso } = require('./util');
-const { LIMITS, hit, lockLeft, failAttempt, clearFails, audit } = require('./guard');
+const { LIMITS, hit, lockLeft, failAttempt, clearFails, audit, log } = require('./guard');
 const { TOBACCOS, BOWLS, EMOJI, venueById } = require('./catalog');
 const { sendSms, exposeCode } = require('./sms');
 
@@ -342,6 +342,43 @@ on('POST', '/api/events/:id/invites', ctx => {
   if (!canVote(ctx.db, e, ctx.user.id)) fail(403, 'forbidden', 'Приглашать могут организатор и те, кто идёт.', 'Only the host and guests who are going can invite.');
   ctx.db.tx(() => addInvites(ctx.db, e, ctx.user, ctx.body.invites));
 }, { auth: true, data: true });
+// ---------- Приглашение по ссылке ----------
+// Ссылку на сбор отправляют в Telegram или WhatsApp. По ней видно только название, место, время и имя организатора;
+// ответить можно после входа — тогда человек появляется среди приглашённых.
+const joinEvent = (db, token) => (/^[\w-]{20,40}$/.test(token) && db.q('SELECT * FROM events WHERE join_token = ?').get(token))
+  || fail(404, 'not_found', 'Ссылка устарела или сбор отменили.', 'The link has expired or the event was cancelled.');
+on('POST', '/api/events/:id/link', ctx => {
+  const e = getEvent(ctx.db, ctx.params.id); needUpcoming(e);
+  if (!canVote(ctx.db, e, ctx.user.id)) fail(403, 'forbidden', 'Приглашать могут организатор и те, кто идёт.', 'Only the host and guests who are going can invite.');
+  if (e.join_token) return { token: e.join_token };
+  const token = crypto.randomBytes(18).toString('base64url');
+  ctx.db.q('UPDATE events SET join_token = ? WHERE id = ?').run(token, e.id);
+  return { token };
+}, { auth: true });
+on('GET', '/api/join/:token', ctx => {
+  const e = joinEvent(ctx.db, ctx.params.token), host = ctx.db.q('SELECT name FROM users WHERE id = ?').get(e.host_id);
+  const inv = ctx.user && myInvite(ctx.db, e.id, ctx.user.id);
+  return {
+    event: { id: e.id, title: e.title, venue: e.venue, venueId: e.venue_id, address: e.address, at: e.at, host: host?.name || '', going: goingIds(ctx.db, e).length, past: isPast(e.at) },
+    status: !ctx.user ? null : e.host_id === ctx.user.id ? 'host' : inv?.status || null
+  };
+});
+on('POST', '/api/join/:token', ctx => {
+  const e = joinEvent(ctx.db, ctx.params.token); needUpcoming(e);
+  if (e.host_id === ctx.user.id) return;
+  const status = ctx.body.status === 'going' ? 'going' : 'declined';
+  const inv = myInvite(ctx.db, e.id, ctx.user.id);
+  if (!inv && ctx.db.q('SELECT COUNT(*) AS n FROM invites WHERE event_id = ?').get(e.id).n >= LIMITS.invitesPerEvent)
+    fail(409, 'event_full', 'В этом сборе уже слишком много приглашённых.', 'This event already has too many guests.');
+  ctx.db.tx(() => {
+    if (inv) ctx.db.q('UPDATE invites SET status = ?, at = ? WHERE id = ?').run(status, nowIso(), inv.id);
+    else ctx.db.q('INSERT INTO invites (event_id, user_id, status, at) VALUES (?, ?, ?, ?)').run(e.id, ctx.user.id, status, nowIso());
+    if (status !== 'going') for (const t of ['picks', 'bowls', 'paid']) ctx.db.q(`DELETE FROM ${t} WHERE event_id = ? AND user_id = ?`).run(e.id, ctx.user.id);
+    notify(ctx.db, e.host_id, status === 'going' ? 'rsvp_going' : 'rsvp_declined', ctx.user.id, e.id);
+  });
+  return { ok: true, eventId: e.id, data: bootstrap(ctx.db, ctx.user, ctx.session) };
+}, { auth: true });
+
 on('POST', '/api/events/:id/rsvp', ctx => {
   const e = getEvent(ctx.db, ctx.params.id); needUpcoming(e);
   const inv = myInvite(ctx.db, e.id, ctx.user.id) || fail(403, 'forbidden', 'Вас не приглашали на этот сбор.', 'You are not invited to this event.');
@@ -514,6 +551,14 @@ on('DELETE', '/api/admin/events/:id', ctx => {
   audit(ctx.db, { type: 'admin_delete_event', userId: ctx.user.id, ip: ctx.ip, detail: `${e.id} (${e.host_id})` });
   return { ok: true };
 }, { auth: true });
+
+// Ошибки со страниц пользователей попадают в журнал сервера — так поломки видно до того, как о них напишут.
+on('POST', '/api/client-errors', ctx => {
+  if (!hit('cerr:' + ctx.ip, LIMITS.clientErrors).ok) return { ok: true };
+  const b = ctx.body || {}, str = (v, n) => String(v ?? '').replace(/[\u0000-\u001f]/g, ' ').slice(0, n);
+  log('warn', 'Ошибка на странице', { msg: str(b.msg, 300), src: str(b.src, 120), line: +b.line || 0, page: str(b.page, 60), ua: str(ctx.req.headers['user-agent'], 120), user: ctx.user?.id || null });
+  return { ok: true };
+});
 
 function match(method, path) {
   for (const r of routes) { if (r.method !== method) continue; const m = r.re.exec(path); if (m) return { route: r, params: m.groups || {} }; }

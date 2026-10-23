@@ -1,0 +1,14 @@
+# systemd: ежедневная резервная копия базы (запускается таймером hookah-backup.timer)
+[Unit]
+Description=Hookah Party: резервная копия базы
+
+[Service]
+Type=oneshot
+User=hookah
+WorkingDirectory=/opt/hookah-party
+EnvironmentFile=/opt/hookah-party/.env
+ExecStart=/usr/bin/node server/backup.js /opt/hookah-party/server/data/backups
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/hookah-party/server/data

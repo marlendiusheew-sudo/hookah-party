@@ -71,7 +71,7 @@
         window.trustedTypes.createPolicy('default', {
           createHTML: sanitizeHTML,
           // Скрипт можно подключить только один: панель администратора с нашего сайта.
-          createScriptURL: u => { if (/^admin\.js\?v=\d+$/.test(u)) return u; secLog('html_blocked', 'script ' + String(u).slice(0, 40)); throw new TypeError('Скрипт запрещён'); }
+          createScriptURL: u => { if (/^admin\.js\?v=\d+$/.test(u) || u === 'sw.js') return u; secLog('html_blocked', 'script ' + String(u).slice(0, 40)); throw new TypeError('Скрипт запрещён'); }
         });
         return;
       }
@@ -279,7 +279,11 @@
     hookah: svg('<path d="M9 4h6l-1.2 3h-3.6zM12 7v6M9.5 9.5h5M12 13c-3.2 0-5 2.2-5 4.4C7 19.4 9 20.5 12 20.5s5-1.1 5-3.1c0-2.2-1.8-4.4-5-4.4zM14.5 11c3 0 5.5 1.4 6 4.5"/>'),
     mail: svg('<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 8l9 6 9-6"/>'),
     list: svg('<path d="M4 6h16M4 12h16M4 18h10"/>'),
-    shield: svg('<path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6z"/><path d="M9 12l2 2 4-4"/>')
+    shield: svg('<path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6z"/><path d="M9 12l2 2 4-4"/>'),
+    tg: svg('<path d="M21 4.5L2.8 11.4c-.8.3-.8 1.4 0 1.7l4.6 1.6 1.8 5.4c.2.7 1.1.9 1.6.4l2.6-2.5 4.6 3.4c.6.4 1.4.1 1.6-.6L22.3 5.8c.2-.9-.6-1.6-1.3-1.3z"/><path d="M7.4 14.7L18 7.5l-8.2 8.8"/>'),
+    wa: svg('<path d="M3.5 20.5l1.3-4.3A8.6 8.6 0 1 1 8 19.3z"/><path d="M9 8.3c-.4 2.6 3.5 6.6 6.4 6.3.6 0 1.2-.6 1.3-1.3l-1.9-1-1 .9c-1.1-.4-2.4-1.6-2.8-2.8l.9-1-1-1.9c-.7 0-1.4.4-1.9.8z"/>'),
+    share: svg('<path d="M12 15V3.5M8 7l4-4 4 4M6 11H5v9.5h14V11h-1"/>'),
+    link: svg('<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/>')
   };
 
   // ---------- Каталог ----------
@@ -567,9 +571,10 @@
     : navigator.onLine === false ? L('Нет соединения с интернетом.', 'No internet connection.') : L('Не удалось связаться с сервером. Попробуйте ещё раз.', 'Could not reach the server. Try again.');
   function applyData(d) { if (d && Array.isArray(d.users)) { db = d; CSRF = d.csrf || null; } }
   async function refresh() { try { applyData(await api('GET', '/bootstrap')); } catch (e) { /* покажем то, что есть */ } }
+  // 'server' — есть сервер; 'static' — сайт без сервера (демо); 'offline' — сеть недоступна.
   async function detectServer() {
-    if (location.protocol === 'file:') return false;
-    try { const r = await fetch('/api/health', { cache: 'no-store' }); return r.ok && (await r.json())?.mode === 'server'; } catch (e) { return false; }
+    if (location.protocol === 'file:') return 'static';
+    try { const r = await fetch('/api/health', { cache: 'no-store' }); return r.ok && (await r.json())?.mode === 'server' ? 'server' : 'static'; } catch (e) { return 'offline'; }
   }
   // Одно действие пользователя: в демо меняем данные в браузере, на сервере — запрос и свежие данные в ответ.
   async function act(local, method, path, body) {
@@ -875,8 +880,8 @@
           <a href="#/catalog" data-action="catTab" data-tab="mixes">${L('Миксы', 'Mixes')}</a><a href="#/events">${L('События', 'Events')}</a><a href="#/history">${L('История', 'History')}</a><a href="#/notifications">${L('Уведомления', 'Notifications')}</a>
           <a href="#/people">${L('Люди', 'People')}</a><a href="#/how">${L('Как это работает', 'How it works')}</a></div>
         <div class="footer-col"><h4>${L('Помощь', 'Help')}</h4>
-          <a href="#/" data-action="info" data-key="rules">${L('Правила сервиса', 'Terms of use')}</a>
-          <a href="#/" data-action="info" data-key="privacy">${L('Конфиденциальность', 'Privacy')}</a>
+          <a href="#/terms">${L('Правила сервиса', 'Terms of use')}</a>
+          <a href="#/privacy">${L('Конфиденциальность', 'Privacy')}</a>
           <a href="#/" data-action="info" data-key="venues">${L('Заведениям', 'For venues')}</a>
           <a href="#/" data-action="info" data-key="faq">${L('Вопросы и ответы', 'FAQ')}</a>
           ${IN_APP ? '' : `<a href="#/" data-action="installApp">${L('Установить приложение', 'Install the app')}</a>`}</div>
@@ -1649,8 +1654,10 @@
     };
 
     const statusLabel = { going: L('Идёт', 'Going'), pending: L('Ждём ответа', 'Awaiting'), declined: L('Не придёт', 'Not going') };
+    const waTo = phone => /^996\d{9}$/.test(normPhone(phone)) && canVote(e, u) && !past
+      ? `<button class="icon-btn wa-mini" data-action="shareEvent" data-id="${e.id}" data-via="wa" data-phone="${normPhone(phone)}" title="${L('Написать в WhatsApp', 'Message on WhatsApp')}" aria-label="${L('Отправить приглашение в WhatsApp', 'Send the invitation on WhatsApp')}">${ICON.wa}</button>` : '';
     const personRow = (p, phone, pill) => `<li class="person">${avatar(p, 'sm')}<div class="person-name">
-      ${p ? `<a href="#/user/${p.id}"><b>${esc(p.name)}</b></a>` : `<b>${L('Ещё не в сервисе', 'Not on the service yet')}</b>`}<small class="mono">${fmtPhone(phone)}</small></div>${pill}</li>`;
+      ${p ? `<a href="#/user/${p.id}"><b>${esc(p.name)}</b></a>` : `<b>${L('Ещё не в сервисе', 'Not on the service yet')}</b>`}<small class="mono">${fmtPhone(phone)}</small></div>${p ? '' : waTo(phone)}${pill}</li>`;
     const people = [
       personRow(host, host?.phone, `<span class="pill pill-host">${L('Организатор', 'Host')}</span>`),
       ...e.invites.map(i => { const p = i.userId ? userById(i.userId) : null; return personRow(p, p ? p.phone : i.phone, `<span class="pill pill-${i.status}">${statusLabel[i.status]}</span>`); })
@@ -1684,6 +1691,10 @@
           <div class="fact"><small>${L('Когда', 'When')}</small><b>${cap(fFull(d))}, ${fTime(d)}</b></div>
           <div class="fact"><small>${L('Участники', 'Guests')}</small><b>${going.length} ${pl(going.length, ['идёт', 'идут', 'идут'], ['going', 'going'])} · ${e.invites.length + 1} ${pl(e.invites.length + 1, ['приглашён', 'приглашены', 'приглашены'], ['invited', 'invited'])}</b></div>
         </div>
+        ${canVote(e, u) && !past ? `<div class="share-strip"><div><b>${L('Позовите друзей ссылкой', 'Invite friends with a link')}</b><small>${L('Отправьте сбор в чат, а друзья ответят «Иду» в одно касание', 'Send the event to a chat and friends reply “Going” in one tap')}</small></div>
+          <div class="btn-row"><button class="btn btn-sm share-tg" data-action="shareEvent" data-id="${e.id}" data-via="tg">${ICON.tg}Telegram</button>
+          <button class="btn btn-sm share-wa" data-action="shareEvent" data-id="${e.id}" data-via="wa">${ICON.wa}WhatsApp</button>
+          <button class="btn btn-sm" data-action="shareEvent" data-id="${e.id}">${ICON.link}${L('Ссылка', 'Link')}</button></div></div>` : ''}
         <div class="btn-row">
           ${v ? `<button class="btn btn-sm" data-action="showVenue" data-vid="${v.id}">${ICON.home}${L('На нашей карте', 'On our map')}</button>` : ''}
           <a class="btn btn-sm" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">${ICON.pin}Google ${L('Карты', 'Maps')}</a>
@@ -2506,7 +2517,7 @@
       if (!validPhone(phone)) { err.textContent = L('Введите номер полностью, вместе с кодом страны.', 'Enter the full number including the country code.'); return; }
       if (SERVER) {
         go1.disabled = true; go1.textContent = L('Проверяем…', 'Checking…');
-        try { applyData((await api('POST', '/auth/login', { phone, password: pass })).data); toast(L(`Вы вошли как ${me().name}`, `Signed in as ${me().name}`)); go(''); }
+        try { applyData((await api('POST', '/auth/login', { phone, password: pass })).data); toast(L(`Вы вошли как ${me().name}`, `Signed in as ${me().name}`)); afterAuth(); }
         catch (e) { err.textContent = apiMsg(e); }
         finally { go1.disabled = false; go1.textContent = L('Войти', 'Sign in'); }
         return;
@@ -2536,7 +2547,7 @@
       if (!validPhone(phone)) { err.textContent = L('Сначала введите номер телефона.', 'Enter your phone number first.'); return; }
       if (SERVER) return void renderVerifyServer(card, phone, 'login', async code => {
         applyData((await api('POST', '/auth/login-sms', { phone, code })).data);
-        toast(L(`Вы вошли как ${me().name}`, `Signed in as ${me().name}`)); go('');
+        toast(L(`Вы вошли как ${me().name}`, `Signed in as ${me().name}`)); afterAuth();
       });
       if (!user) { err.textContent = L('Этот номер ещё не зарегистрирован.', 'This number is not registered yet.'); return; }
       renderVerify(card, phone, () => { user.verified = true; clearFails(phone); signIn(user); });
@@ -2552,7 +2563,7 @@
         <div class="field"><label for="rg-phone">${L('Номер телефона', 'Phone number')}</label><input id="rg-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="${phonePh}"></div>
         <div class="field"><label for="rg-pass">${L('Пароль', 'Password')}</label><input id="rg-pass" type="password" autocomplete="new-password" maxlength="128" placeholder="${L('Минимум 8 символов, буквы и цифры', 'At least 8 characters, letters and digits')}">
           <div class="pass-meter" aria-hidden="true"><i></i><i></i><i></i></div><small class="muted" id="rg-strength"></small></div>
-        <label class="check"><input type="checkbox" id="rg-age"> ${L('Мне исполнилось 18 лет, я принимаю правила сервиса и согласен на обработку номера телефона', 'I am 18 or older, accept the terms of use and agree to the processing of my phone number')}</label>
+        <label class="check"><input type="checkbox" id="rg-age"> ${L('Мне исполнилось 18 лет, я принимаю <a href="#/terms">правила сервиса</a> и согласен на обработку номера телефона по <a href="#/privacy">политике конфиденциальности</a>', 'I am 18 or older, accept the <a href="#/terms">terms of use</a> and agree to the processing of my phone number under the <a href="#/privacy">privacy policy</a>')}</label>
         <div class="error" id="rg-err" role="alert"></div>
         <button class="btn btn-primary" type="submit">${L('Получить код по SMS', 'Get an SMS code')}</button>
       </form>
@@ -2745,7 +2756,7 @@
           <div class="avatar-actions"><button class="btn" type="button" id="av-up">${user.avatar ? L('Выбрать другое', 'Choose another') : L('Загрузить фото', 'Upload photo')}</button></div></div>
         <button class="btn btn-primary" type="button" id="av-done">${user.avatar ? L('Готово', 'Done') : L('Пропустить', 'Skip')}</button>`;
       $('#av-up').onclick = () => pickAvatarFile(url => act(() => { user.avatar = url; }, 'PUT', '/me/avatar', { dataUrl: url }).then(() => { user = me() || user; draw(); }, quiet));
-      $('#av-done').onclick = () => { toast(L(`Добро пожаловать, ${user.name}!`, `Welcome, ${user.name}!`)); go(''); };
+      $('#av-done').onclick = () => { toast(L(`Добро пожаловать, ${user.name}!`, `Welcome, ${user.name}!`)); afterAuth(); };
     };
     draw();
   }
@@ -2753,7 +2764,7 @@
     db.session = user.id; db.sessionAt = Date.now(); db.sessionExp = Date.now() + SEC.sessionDays * 864e5;
     save(); secLog('login_ok', user.name);
   }
-  function signIn(user) { startSession(user); toast(L(`Вы вошли как ${user.name}`, `Signed in as ${user.name}`)); go(''); }
+  function signIn(user) { startSession(user); toast(L(`Вы вошли как ${user.name}`, `Signed in as ${user.name}`)); afterAuth(); }
 
   // ---------- Пикер приглашений ----------
   function invitePicker(root, exclude, preset = []) {
@@ -2865,6 +2876,19 @@
     }
   }
   setInterval(() => { checkReminders(); $$('[data-countdown]').forEach(el => { el.textContent = countdown(el.dataset.countdown); }); }, 30000);
+  const calTimes = e => { const s = new Date(e.at); return [s, new Date(s.getTime() + 3 * 3600e3)]; };
+  const icsStamp = d => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
+  const googleCal = e => { const [s, end] = calTimes(e);
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(e.title)}&dates=${icsStamp(s)}/${icsStamp(end)}&location=${encodeURIComponent([e.venue, e.address].filter(Boolean).join(', '))}&details=${encodeURIComponent(e.desc || 'Hookah Party')}`; };
+  function calendarModal(e) {
+    openModal(L('Добавить в календарь', 'Add to calendar'), `<p class="muted">${L('Календарь сам напомнит о сборе за день и за час, даже если сайт закрыт.', 'Your calendar will remind you a day and an hour before, even when the site is closed.')}</p>
+      <div class="share-grid">
+        <button class="share-btn" type="button" id="cal-ics">${ICON.cal}<span>${L('Apple, Outlook и другие', 'Apple, Outlook and others')}<small>${L('файл .ics', '.ics file')}</small></span></button>
+        <a class="share-btn" href="${esc(googleCal(e))}" target="_blank" rel="noopener noreferrer">${ICON.cal}<span>Google ${L('Календарь', 'Calendar')}<small>${L('в браузере или на Android', 'in the browser or on Android')}</small></span></a>
+      </div>`, m => {
+      $('#cal-ics', m).onclick = () => { downloadIcs(e); closeModal(); toast(L('Файл календаря скачан. Откройте его, чтобы добавить сбор.', 'Calendar file downloaded. Open it to add the event.')); };
+    });
+  }
   function downloadIcs(e) {
     const f = d => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
     const x = t => String(t || '').replace(/[\\,;]/g, m => '\\' + m).replace(/\n/g, '\\n');
@@ -2872,13 +2896,203 @@
     const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Hookah Party//RU', 'BEGIN:VEVENT',
       `UID:${e.id}@hookahparty`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(s)}`, `DTEND:${f(end)}`,
       `SUMMARY:${x(e.title)}`, `LOCATION:${x([e.venue, e.address].filter(Boolean).join(', '))}`, `DESCRIPTION:${x(e.desc)}`,
+      'BEGIN:VALARM', 'TRIGGER:-P1D', 'ACTION:DISPLAY', `DESCRIPTION:${x(L('Завтра кальянный сбор', 'Hookah meet-up tomorrow'))}`, 'END:VALARM',
       'BEGIN:VALARM', 'TRIGGER:-PT60M', 'ACTION:DISPLAY', `DESCRIPTION:${x(L('Через час кальянный сбор', 'Hookah meet-up in one hour'))}`, 'END:VALARM',
       'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
-    a.download = `hookah-party-${e.id}.ics`;
+    a.download = `hookah-party-${e.id || 'event'}.ics`;
     document.body.append(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  // ---------- Правила и конфиденциальность ----------
+  // Отдельные страницы со своими адресами: на них ссылаются регистрация, App Store и магазины приложений.
+  const LEGAL = {
+    privacy: () => ({
+      title: L('Политика конфиденциальности', 'Privacy policy'),
+      parts: [
+        [L('Коротко', 'In short'), L('Мы собираем только то, без чего сервис не работает: номер телефона, имя и то, что вы сами публикуете. Номер хранится зашифрованным, пароль — только в виде необратимого хэша. Мы не продаём данные и не показываем рекламу.', 'We collect only what the service needs to work: your phone number, name and what you publish yourself. The number is stored encrypted and the password only as an irreversible hash. We do not sell data or show ads.')],
+        [L('Какие данные мы храним', 'What we store'), L('Номер телефона — для входа и чтобы друзья могли вас пригласить. Имя и фото профиля, если вы его загрузили. Сборы, ответы на приглашения, выбор табака, сообщения, оценки и отзывы. Для защиты от взлома — время входов, IP-адрес и тип устройства в журнале безопасности.', 'Your phone number, to sign in and so friends can invite you. Your name and profile photo if you upload one. Events, replies to invitations, tobacco picks, messages, ratings and reviews. For protection against break-ins: sign-in times, IP address and device type in the security log.')],
+        [L('Кто видит ваши данные', 'Who sees your data'), L('Имя и фото видят другие пользователи. Полный номер видят только ваши друзья и участники общих сборов, остальные — последние цифры. Сообщения в обсуждении сбора видят только его участники. Рассказы в «Истории» видят все.', 'Other users see your name and photo. Only your friends and people from shared events see your full number; others see the last digits. Event discussion messages are visible only to its guests. Stories in History are public.')],
+        [L('Как мы защищаем данные', 'How we protect data'), L('Соединение с сайтом шифруется (HTTPS). Номера в базе зашифрованы, пароли хранятся как хэш Argon2. Вход защищён кодом из SMS и ограничением числа попыток. Сессия хранится в защищённом cookie, недоступном скриптам.', 'The connection is encrypted (HTTPS). Numbers in the database are encrypted and passwords stored as an Argon2 hash. Sign-in is protected by an SMS code and attempt limits. The session lives in a protected cookie that scripts cannot read.')],
+        [L('Сколько храним', 'How long we keep it'), L('Пока у вас есть аккаунт. Отменённые сборы удаляются сразу вместе с сообщениями. Журнал безопасности хранится до 90 дней. По запросу удалим аккаунт и все связанные данные в течение 30 дней.', 'As long as you have an account. Cancelled events are deleted immediately together with their messages. The security log is kept for up to 90 days. On request we delete the account and all related data within 30 days.')],
+        [L('Cookie и хранилище браузера', 'Cookies and browser storage'), L('Один cookie нужен, чтобы вы оставались в аккаунте. В хранилище браузера сохраняются настройки: язык, тема, открытые вкладки. Сторонних счётчиков и рекламных cookie нет.', 'One cookie keeps you signed in. Browser storage keeps your settings: language, theme, open tabs. There are no third-party trackers or advertising cookies.')],
+        [L('Ваши права', 'Your rights'), L('Вы можете узнать, какие данные о вас хранятся, исправить их или попросить удалить. Обработка ведётся в соответствии с Законом Кыргызской Республики «Об информации персонального характера».', 'You can find out what data we hold about you, correct it or ask us to delete it. Processing follows the Law of the Kyrgyz Republic “On Personal Information”.')],
+        [L('Сторонние сервисы', 'Third-party services'), L('Коды подтверждения отправляет SMS-провайдер: ему передаётся только номер и текст сообщения. Ссылки на Google Карты, 2ГИС, Telegram и WhatsApp открывают эти сервисы, у них свои правила.', 'Confirmation codes are sent by an SMS provider, which receives only the number and the message text. Links to Google Maps, 2GIS, Telegram and WhatsApp open those services, which have their own policies.')],
+        [L('Контакты', 'Contact'), L('Вопросы и запросы на удаление данных: hello@hookahparty.app.', 'Questions and data deletion requests: hello@hookahparty.app.')]
+      ]
+    }),
+    terms: () => ({
+      title: L('Правила сервиса', 'Terms of use'),
+      parts: [
+        [L('Только 18+', '18+ only'), L('Hookah Party предназначен только для совершеннолетних. Регистрируясь, вы подтверждаете, что вам исполнилось 18 лет. Курение вредит вашему здоровью.', 'Hookah Party is for adults only. By signing up you confirm that you are 18 or older. Smoking harms your health.')],
+        [L('Что делает сервис', 'What the service does'), L('Помогает собрать друзей в кальянной: выбрать место, позвать людей, договориться о табаке и поделить счёт. Мы не продаём табак, не принимаем оплату и не бронируем столы.', 'It helps you get friends together at a hookah lounge: pick a place, invite people, agree on tobacco and split the bill. We do not sell tobacco, take payments or book tables.')],
+        [L('Организатор сбора', 'The event host'), L('Организатор сам бронирует стол и договаривается с заведением. Один человек может вести один активный сбор; за сутки можно создать и отменить не больше 12 сборов.', 'The host books the table and deals with the venue. One person can run one active event at a time; at most 12 events can be created and 12 cancelled per day.')],
+        [L('Что запрещено', 'What is not allowed'), L('Приглашать людей без их согласия, рассылать рекламу и спам, оскорблять других, публиковать чужие личные данные, выдавать себя за другого человека, пытаться обойти ограничения и защиту сервиса.', 'Inviting people without their consent, sending ads and spam, insulting others, posting other people’s personal data, impersonating someone, trying to bypass limits and protection.')],
+        [L('Сообщения и модерация', 'Messages and moderation'), L('Чтобы обсуждения не превращались в поток, действуют ограничения: одно сообщение в 3 минуты, до 10 в одном сборе за сутки. Администраторы могут удалять сообщения и сборы, нарушающие правила.', 'To keep discussions readable there are limits: one message every 3 minutes, up to 10 per event per day. Administrators may remove messages and events that break the rules.')],
+        [L('Данные о заведениях', 'Venue information'), L('Адреса и часы работы взяты из открытых источников (OpenStreetMap) и могут устареть. Перед походом уточняйте их у заведения.', 'Addresses and opening hours come from open sources (OpenStreetMap) and may be out of date. Check with the venue before you go.')],
+        [L('Ответственность', 'Liability'), L('Сервис предоставляется «как есть». Мы стараемся, чтобы всё работало, но не отвечаем за действия заведений и других пользователей.', 'The service is provided “as is”. We do our best to keep it working but are not responsible for the actions of venues or other users.')],
+        [L('Изменения правил', 'Changes'), L('О важных изменениях мы предупредим на сайте заранее.', 'We will announce important changes on the site in advance.')]
+      ]
+    })
+  };
+  function pageLegal(kind) {
+    const doc = LEGAL[kind]();
+    view.innerHTML = `<article class="legal">
+      <div class="legal-switch"><a href="#/privacy" class="${kind === 'privacy' ? 'on' : ''}">${L('Конфиденциальность', 'Privacy')}</a><a href="#/terms" class="${kind === 'terms' ? 'on' : ''}">${L('Правила', 'Terms')}</a></div>
+      <h1>${doc.title}</h1><p class="muted">${L('Редакция от 23 октября 2026 года', 'Version of 23 October 2026')}</p>
+      ${doc.parts.map(([h, t]) => `<section><h2>${h}</h2><p>${t}</p></section>`).join('')}
+    </article>`;
+  }
+
+  // Сервис о табаке: при первом визите спрашиваем возраст.
+  function ageGate() {
+    if (prefs.get('age18') === 'yes') return;
+    const g = document.createElement('div');
+    g.className = 'age-gate'; g.setAttribute('role', 'dialog'); g.setAttribute('aria-modal', 'true'); g.setAttribute('aria-labelledby', 'age-h');
+    g.innerHTML = `<div class="age-card"><span class="age-badge">18+</span><h2 id="age-h">${L('Вам уже исполнилось 18 лет?', 'Are you 18 or older?')}</h2>
+      <p class="muted">${L('Hookah Party — сервис о кальянах, он только для совершеннолетних. Курение вредит вашему здоровью.', 'Hookah Party is about hookah and is for adults only. Smoking harms your health.')}</p>
+      <div class="btn-row"><button class="btn btn-primary" type="button" data-age="yes">${L('Да, мне есть 18', 'Yes, I’m 18+')}</button><button class="btn" type="button" data-age="no">${L('Нет', 'No')}</button></div>
+      <p class="age-no" hidden>${L('Извините, сайт доступен только с 18 лет.', 'Sorry, this site is for adults only.')}</p>
+      <p class="age-links"><a href="#/terms">${L('Правила', 'Terms')}</a> · <a href="#/privacy">${L('Конфиденциальность', 'Privacy')}</a></p></div>`;
+    document.body.append(g); document.body.classList.add('locked');
+    g.addEventListener('click', ev => {
+      const b = ev.target.closest('[data-age]'); if (!b) return;
+      if (b.dataset.age === 'no') { $('.age-no', g).hidden = false; return; }
+      prefs.set('age18', 'yes'); document.body.classList.remove('locked');
+      g.classList.add('out'); setTimeout(() => g.remove(), reduceMotion() ? 0 : 320);
+    });
+    $('[data-age="yes"]', g).focus();
+  }
+
+  // ---------- Приглашение ссылкой: Telegram, WhatsApp ----------
+  // Ссылки ведут на настоящий сайт, даже если их создали в приложении или в превью.
+  const PUBLIC_URL = 'https://marlendiusheew-sudo.github.io/hookah-party/';
+  const siteBase = () => SERVER ? location.origin + location.pathname : PUBLIC_URL;
+  const b64u = {
+    enc: str => btoa(String.fromCharCode(...new TextEncoder().encode(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
+    dec: str => new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(atob(str.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)))
+  };
+  // В демо сервера нет, поэтому всё нужное о сборе лежит в самой ссылке: название, место, время, имя организатора.
+  function demoInviteCode(e) {
+    return 'd' + b64u.enc(JSON.stringify({ i: e.id, t: e.title, v: e.venue, a: e.address || '', at: e.at, h: userById(e.hostId)?.name || '', vid: eventVenue(e)?.id || '' }));
+  }
+  function readDemoInvite(code) {
+    try {
+      const o = JSON.parse(b64u.dec(code.slice(1))), at = new Date(o?.at);
+      if (!o || typeof o !== 'object' || isNaN(at)) return null;
+      return { id: /^[\w-]{1,40}$/.test(o.i) ? o.i : '', title: clean(o.t, 80) || L('Кальянный сбор', 'Hookah meet-up'), venue: clean(o.v, 80), address: clean(o.a, 120),
+        at: at.toISOString(), host: clean(o.h, 40), venueId: VENUES.some(v => v.id === o.vid) ? o.vid : '', past: isPast({ at: at.toISOString() }) };
+    } catch (err) { return null; }
+  }
+  async function inviteLink(e) {
+    if (!SERVER) { prefs.set('sent.' + e.id, '1'); return siteBase() + '#/join/' + demoInviteCode(e); }
+    return siteBase() + '#/join/' + (await api('POST', `/events/${e.id}/link`)).token;
+  }
+  const whenText = at => { const d = new Date(at); return `${fFull(d)}, ${fTime(d)}`; };
+  const inviteText = e => L(`Зову на кальян: «${e.title}»\n📍 ${[e.venue, e.address].filter(Boolean).join(', ')}\n🕗 ${whenText(e.at)}\nОтветь по ссылке, придёшь или нет:`,
+    `Join me for hookah: “${e.title}”\n📍 ${[e.venue, e.address].filter(Boolean).join(', ')}\n🕗 ${whenText(e.at)}\nLet me know if you’re coming:`);
+  const tgShare = (url, text) => `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+  const waShare = (text, phone = '') => `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); }
+    catch (err) {
+      const t = document.createElement('textarea'); t.value = text; t.setAttribute('readonly', ''); t.style.cssText = 'position:fixed;opacity:0';
+      document.body.append(t); t.select(); try { document.execCommand('copy'); } catch (e2) { /* копирование недоступно */ } t.remove();
+    }
+    toast(L('Скопировано', 'Copied'));
+  }
+  function shareModal(e, url, phone = '') {
+    const text = inviteText(e), full = text + '\n' + url;
+    openModal(L('Позвать на сбор', 'Invite to the event'), `
+      <p class="muted">${SERVER ? L('Друг откроет ссылку, войдёт по номеру и ответит «Иду» или «Не смогу». Вам придёт уведомление.', 'Your friend opens the link, signs in with their number and replies “Going” or “Can’t make it”. You get a notification.')
+        : L('Друг откроет ссылку и увидит место, время и карту. Ответ он пришлёт вам в мессенджер.', 'Your friend opens the link and sees the place, time and map. They send their reply to you in the messenger.')}</p>
+      <div class="share-preview">${esc(text)}<span class="mono">${esc(url)}</span></div>
+      <div class="share-grid">
+        ${phone ? '' : `<a class="share-btn share-tg" href="${esc(tgShare(url, text))}" target="_blank" rel="noopener noreferrer">${ICON.tg}<span>Telegram<small>${L('выбрать чат', 'pick a chat')}</small></span></a>`}
+        <a class="share-btn share-wa" href="${esc(waShare(full, phone))}" target="_blank" rel="noopener noreferrer">${ICON.wa}<span>WhatsApp<small>${phone ? fmtPhone(phone) : L('выбрать чат', 'pick a chat')}</small></span></a>
+        ${navigator.share ? `<button class="share-btn" type="button" id="sh-more">${ICON.share}<span>${L('Другое', 'More')}<small>${L('SMS, почта…', 'SMS, email…')}</small></span></button>` : ''}
+        <button class="share-btn" type="button" id="sh-copy">${ICON.link}<span>${L('Скопировать', 'Copy')}<small>${L('текст и ссылку', 'text and link')}</small></span></button>
+      </div>`, m => {
+      $('#sh-copy', m).onclick = () => copyText(full);
+      const more = $('#sh-more', m); if (more) more.onclick = () => navigator.share({ title: e.title, text, url }).catch(() => {});
+    });
+  }
+
+  // Страница, которую видит друг, открыв ссылку-приглашение. Вход не обязателен, чтобы посмотреть.
+  const JOIN_ANSWER = 'hp.joinAnswer', BACK = 'hp.back';
+  const sess = { get: k => { try { return sessionStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) { /* недоступно */ } } };
+  function afterAuth() {
+    const back = sess.get(BACK); sess.set(BACK, null);
+    if (back && /^#\/join\/[\w-]{1,900}$/.test(back)) location.hash = back; else go('');
+  }
+  async function pageJoin(code) {
+    const hash = location.hash, u = me();
+    let ev = null, status = null;
+    if (code[0] === 'd' && code.length > 20) {
+      ev = readDemoInvite(code);
+      // В демо у всех одни и те же примерные данные, поэтому «ваш сбор» — только там, где ссылку создали.
+      if (ev?.id && prefs.get('sent.' + ev.id) && eventById(ev.id)) status = 'host';
+      if (!status && ev) status = prefs.get('join.' + (ev.id || code.slice(1, 40))) || null;
+    } else if (SERVER) {
+      view.innerHTML = `<p class="muted" style="padding:40px 0;text-align:center">${L('Загружаем приглашение…', 'Loading the invitation…')}</p>`;
+      try { const r = await api('GET', '/join/' + code); ev = r.event; status = r.status; } catch (err) { ev = null; }
+      if (location.hash !== hash) return;
+    }
+    if (!ev) { view.innerHTML = emptyState(L('Приглашение не найдено', 'Invitation not found'), L('Ссылка устарела или сбор отменили. Попросите организатора прислать новую.', 'The link has expired or the event was cancelled. Ask the host to send a new one.'), `<a class="btn btn-primary btn-sm" href="#/">${L('На главную', 'Go home')}</a>`); return; }
+    // Ответ, выбранный до входа, отправляем сразу после возвращения.
+    const pending = sess.get(JOIN_ANSWER);
+    if (SERVER && u && pending && pending.startsWith(code + ':') && !status) { sess.set(JOIN_ANSWER, null); return actions.joinAnswer({ code, status: pending.split(':').pop() }); }
+    const v = ev.venueId ? venueById(ev.venueId) : VENUES.find(x => x.name === ev.venue);
+    const q = placeQuery(ev.venue, ev.address);
+    const answered = { going: L('Вы ответили: иду', 'You replied: going'), declined: L('Вы ответили: не смогу', 'You replied: can’t make it'), pending: L('Вы ещё не ответили', 'You haven’t replied yet'), host: L('Это ваш сбор', 'This is your event') };
+    const memberLink = SERVER ? (status ? ev.id : '') : (status === 'host' ? ev.id : '');
+    const replyBtns = `<button class="btn btn-primary" data-action="joinAnswer" data-code="${code}" data-status="going">${ICON.check}${L('Иду', 'Going')}</button>
+      <button class="btn" data-action="joinAnswer" data-code="${code}" data-status="declined">${L('Не смогу', 'Can’t make it')}</button>`;
+    view.innerHTML = `
+      <section class="join ${u ? 'solo' : ''}">
+        <div class="join-card">
+          <span class="eyebrow">${ev.host ? L(`${esc(ev.host)} зовёт вас`, `${esc(ev.host)} invites you`) : L('Вас зовут на кальян', 'You’re invited for hookah')}</span>
+          <h1>${esc(ev.title)}</h1>
+          ${ev.past ? '' : `<p class="join-count"><span class="soon-dot"></span><span data-countdown="${ev.at}">${countdown(ev.at)}</span>${ev.going ? ` · ${L(`уже идут: ${ev.going}`, `${ev.going} going`)}` : ''}</p>`}
+          <div class="ev-facts">
+            <div class="fact"><small>${L('Заведение', 'Venue')}</small><b>${esc(ev.venue)}</b></div>
+            ${ev.address ? `<div class="fact"><small>${L('Адрес', 'Address')}</small><b>${esc(ev.address)}</b></div>` : ''}
+            <div class="fact"><small>${L('Когда', 'When')}</small><b>${cap(whenText(ev.at))}</b></div>
+            ${v ? `<div class="fact"><small>${L('Часы работы', 'Opening hours')}</small><b>${esc(venueStatus(v).hours || '—')}</b></div>` : ''}
+          </div>
+          ${ev.past ? `<p class="muted">${L('Этот сбор уже прошёл.', 'This event has already passed.')}</p>`
+            : status && status !== 'pending' ? `<div class="join-status"><b>${answered[status] || ''}</b>${memberLink ? `<a class="btn btn-sm" href="#/event/${memberLink}">${L('Открыть сбор', 'Open the event')} →</a>` : ''}
+                ${status !== 'host' ? `<button class="link-btn" data-action="joinChange" data-code="${code}" data-key="${esc(ev.id || code.slice(1, 40))}">${L('Изменить ответ', 'Change reply')}</button>` : ''}</div>
+                ${!SERVER && status !== 'host' ? `<div id="join-reply"></div>` : ''}`
+            : `<div class="join-reply-btns">${replyBtns}</div>
+               ${SERVER && !u ? `<p class="muted join-note">${L('Чтобы ответить, войдите или зарегистрируйтесь по номеру. Это займёт минуту, ответ сохранится.', 'To reply, sign in or sign up with your number. It takes a minute and your reply is kept.')}</p>` : ''}
+               ${!SERVER ? `<p class="muted join-note">${L('Ответ уйдёт организатору сообщением в Telegram или WhatsApp.', 'Your reply goes to the host as a Telegram or WhatsApp message.')}</p>` : ''}`}
+          <div class="btn-row">
+            ${v ? `<button class="btn btn-sm" data-action="showVenue" data-vid="${v.id}">${ICON.home}${L('На нашей карте', 'On our map')}</button>` : ''}
+            <a class="btn btn-sm" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">${ICON.pin}Google ${L('Карты', 'Maps')}</a>
+            <a class="btn btn-sm" href="https://2gis.kg/bishkek/search/${encodeURIComponent(ev.venue)}${v ? `?m=${v.lon},${v.lat}/18` : ''}" target="_blank" rel="noopener noreferrer">${ICON.pin}2ГИС</a>
+            ${ev.past ? '' : `<button class="btn btn-sm" data-action="joinCalendar">${ICON.cal}${L('В календарь', 'Add to calendar')}</button>`}
+          </div>
+        </div>
+        ${u ? '' : `<aside class="join-about"><h2>${L('Что такое Hookah Party', 'What is Hookah Party')}</h2>
+          <ul><li>${ICON.home}<span>${L('Кальянные Бишкека на одной карте: адреса, часы, что открыто сейчас', 'Bishkek hookah lounges on one map: addresses, hours, what’s open now')}</span></li>
+          <li>${ICON.hookah}<span>${L('Общий выбор табака: каждый отмечает вкусы, популярное поднимается наверх', 'A shared tobacco pick: everyone marks flavours, popular ones rise to the top')}</span></li>
+          <li>${ICON.wallet}<span>${L('Счёт поровну и напоминание о встрече', 'An even bill split and a reminder before you meet')}</span></li></ul>
+          <a class="btn btn-sm" href="#/register">${L('Создать аккаунт', 'Create account')}</a></aside>`}
+      </section>`;
+    view._join = ev;
+    if (!SERVER && status && status !== 'host' && status !== 'pending') replyToHost($('#join-reply'), ev, status);
+  }
+  // В демо ответ организатору — готовое сообщение в мессенджер.
+  function replyToHost(box, ev, status) {
+    if (!box) return;
+    const text = status === 'going' ? L(`Иду на «${ev.title}» (${whenText(ev.at)}) 🙌`, `I’m coming to “${ev.title}” (${whenText(ev.at)}) 🙌`)
+      : L(`Не смогу прийти на «${ev.title}», в другой раз!`, `Can’t make it to “${ev.title}”, next time!`);
+    box.innerHTML = `<p class="muted" style="margin:10px 0 8px">${L('Сообщите организатору:', 'Let the host know:')}</p><div class="btn-row">
+      <a class="btn btn-sm share-tg" href="${esc(tgShare(location.href, text))}" target="_blank" rel="noopener noreferrer">${ICON.tg}Telegram</a>
+      <a class="btn btn-sm share-wa" href="${esc(waShare(text))}" target="_blank" rel="noopener noreferrer">${ICON.wa}WhatsApp</a></div>`;
   }
 
   // ---------- Действия ----------
@@ -2962,7 +3176,33 @@
       try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {}); } catch (err) { /* уведомления недоступны */ }
       checkReminders();
     },
-    ics({ id }) { const e = eventById(id); if (e) { downloadIcs(e); toast(L('Файл календаря скачан. Откройте его, чтобы добавить сбор.', 'Calendar file downloaded. Open it to add the event.')); } },
+    ics({ id }) { const e = eventById(id); if (e) calendarModal(e); },
+    async shareEvent({ id, via, phone }) {
+      const e = eventById(id); if (!e) return;
+      let url; try { url = await inviteLink(e); } catch (err) { return toast(apiMsg(err), 'err'); }
+      shareModal(e, url, /^996\d{9}$/.test(phone || '') ? phone : '');
+      if (via) $(`.modal .share-${via}`)?.focus();
+    },
+    joinCalendar() { const ev = view._join; if (ev) calendarModal({ id: ev.id, title: ev.title, venue: ev.venue, address: ev.address, at: ev.at, desc: ev.host ? L(`Зовёт ${ev.host}`, `Invited by ${ev.host}`) : '' }); },
+    joinChange({ code, key }) {
+      if (SERVER) { $('.join-status')?.replaceWith(Object.assign(document.createElement('div'), { className: 'join-reply-btns' })); $('.join-reply-btns').innerHTML = `<button class="btn btn-primary" data-action="joinAnswer" data-code="${code}" data-status="going">${ICON.check}${L('Иду', 'Going')}</button><button class="btn" data-action="joinAnswer" data-code="${code}" data-status="declined">${L('Не смогу', 'Can’t make it')}</button>`; return; }
+      prefs.set('join.' + key, ''); render();
+    },
+    async joinAnswer({ code, status }) {
+      status = status === 'going' ? 'going' : 'declined';
+      if (!SERVER) {
+        const ev = view._join || readDemoInvite(code); if (!ev) return;
+        prefs.set('join.' + (ev.id || code.slice(1, 40)), status);
+        render(); return;
+      }
+      if (!me()) { sess.set(BACK, '#/join/' + code); sess.set(JOIN_ANSWER, code + ':' + status); toast(L('Войдите — и ответ сразу уйдёт организатору', 'Sign in and your reply goes straight to the host')); return go('login'); }
+      try {
+        const r = await api('POST', '/join/' + code, { status });
+        applyData(r.data);
+        toast(status === 'going' ? L('Отлично, ждём вас! Выберите табаки.', 'Great, see you there! Pick your tobacco.') : L('Организатор узнает, что вы не придёте', 'The host will know you can’t make it'));
+        go('event/' + r.eventId);
+      } catch (err) { toast(apiMsg(err), 'err'); render(); }
+    },
     deleteComment({ id, comment }) {
       const e = eventById(id); if (!e) return;
       act(() => { e.comments = e.comments.filter(c => c.id !== comment); }, 'DELETE', `/comments/${comment}`).then(() => render(), quiet);
@@ -3172,6 +3412,7 @@
     },
     clearSecLog() { secWrite(SEC_LOG, []); render(); },
     reset() { db = withStories(seed()); save(); toast(L('Демо-данные восстановлены', 'Demo data restored')); go(''); },
+    reload() { location.reload(); },
     info({ key }) {
       const texts = {
         rules: [['Правила сервиса', 'Terms of use'], ['Сервис предназначен для лиц старше 18 лет. Организатор отвечает за бронь в заведении. Запрещено приглашать людей без их согласия и рассылать рекламу.', 'The service is for people aged 18 and over. The host is responsible for the booking. Inviting people without consent and sending ads is not allowed.']],
@@ -3194,14 +3435,16 @@
   // ---------- Роутер ----------
   const view = $('#view');
   // render() перерисовывает текущую страницу без прокрутки наверх; route() — полный переход.
-  const navFor = () => ({ admin: 'admin', notifications: 'notifications', history: 'history', venues: 'venues', catalog: 'catalog', events: 'events', event: 'events', people: 'people', user: 'people', profile: 'profile', login: 'profile', register: 'profile' })[location.hash.replace(/^#\/?/, '').split('/')[0]] || '';
-  const PAGES = new Set(['', 'venues', 'events', 'event', 'catalog', 'people', 'user', 'how', 'profile', 'login', 'register', 'history', 'notifications', 'admin']);
-  const NEEDS_ARG = new Set(['event', 'user']);
+  const navFor = () => ({ join: 'events', admin: 'admin', notifications: 'notifications', history: 'history', venues: 'venues', catalog: 'catalog', events: 'events', event: 'events', people: 'people', user: 'people', profile: 'profile', login: 'profile', register: 'profile' })[location.hash.replace(/^#\/?/, '').split('/')[0]] || '';
+  const PAGES = new Set(['', 'venues', 'events', 'event', 'catalog', 'people', 'user', 'how', 'profile', 'login', 'register', 'history', 'notifications', 'admin', 'join', 'privacy', 'terms']);
+  const NEEDS_ARG = new Set(['event', 'user', 'join']);
   function render() {
     const hash = location.hash.replace(/^#\/?/, '');
     let [page = '', arg, extra] = hash.split('/');
-    const badArg = arg !== undefined && !/^[\w-]{1,40}$/.test(arg);
-    if (!PAGES.has(page) || badArg || extra !== undefined || hash.length > 120 || (NEEDS_ARG.has(page) && !arg)) {
+    // Ссылка-приглашение в демо длиннее обычных адресов: в ней лежат данные сбора.
+    const long = page === 'join';
+    const badArg = arg !== undefined && !(long ? /^[\w-]{1,900}$/ : /^[\w-]{1,40}$/).test(arg);
+    if (!PAGES.has(page) || badArg || extra !== undefined || hash.length > (long ? 960 : 120) || (NEEDS_ARG.has(page) && !arg)) {
       if (/[<>"'`]|script|%3c/i.test(hash)) secLog('bad_url', hash.slice(0, 60));
       page = 'notfound';
     }
@@ -3220,6 +3463,8 @@
       case 'history': pageHistory(); break;
       case 'notifications': pageNotifications(); break;
       case 'admin': pageAdmin(); break;
+      case 'join': pageJoin(arg); break;
+      case 'privacy': case 'terms': pageLegal(page); break;
       case 'notfound': view.innerHTML = emptyState(L('Такой страницы нет', 'Page not found'), L('Возможно, ссылка устарела или в ней опечатка.', 'The link may be outdated or contain a typo.'), `<a class="btn btn-primary btn-sm" href="#/">${L('На главную', 'Go home')}</a>`); break;
       case 'profile': pageProfile(); break;
       case 'login': pageAuth('login'); break;
@@ -3253,8 +3498,30 @@
       if ((d.notifications || []).map(n => n.id + n.read).join() !== before) { applyData(d); renderChrome(navFor()); updateTitle(); if (location.hash === '#/notifications') render(); }
     } catch (e) { /* сеть недоступна — попробуем позже */ }
   }, 60e3);
+  // Ошибки на странице отправляем на сервер (не больше 5 за визит), чтобы видеть поломки раньше пользователей.
+  let errSent = 0;
+  const reportError = (msg, src = '', line = 0) => {
+    if (!SERVER || errSent++ >= 5) return;
+    api('POST', '/client-errors', { msg: String(msg).slice(0, 300), src: String(src).split('/').pop().slice(0, 120), line: line | 0, page: location.hash.split('/')[1] || 'home' }).catch(() => {});
+  };
+  window.addEventListener('error', ev => reportError(ev.message, ev.filename, ev.lineno));
+  window.addEventListener('unhandledrejection', ev => reportError('promise: ' + (ev.reason?.message || ev.reason)));
+  // Офлайн-режим: сайт открывается без сети и мгновенно. Не в приложении и не внутри чужой страницы.
+  if ('serviceWorker' in navigator && !IN_APP && window.top === window && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
   (async () => {
-    if (await detectServer()) { SERVER = true; document.documentElement.dataset.mode = 'server'; await refresh(); }
+    const mode = await detectServer();
+    if (mode === 'server') { SERVER = true; prefs.set('mode', 'server'); document.documentElement.dataset.mode = 'server'; await refresh(); }
+    // Сайт с сервером открылся из офлайн-кеша: показываем честный экран, а не демо-данные вместо ваших.
+    if (mode === 'offline' && prefs.get('mode') === 'server') {
+      renderChrome('');
+      view.innerHTML = emptyState(L('Нет соединения', 'No connection'), L('Сайт открылся без интернета. Ваши сборы и сообщения появятся, как только сеть вернётся.', 'The site opened without internet. Your events and messages will appear as soon as you are back online.'),
+        `<button class="btn btn-primary btn-sm" type="button" data-action="reload">${L('Обновить', 'Reload')}</button>`);
+      window.addEventListener('online', () => location.reload(), { once: true });
+      return;
+    }
     route();
+    ageGate();
   })();
 })();

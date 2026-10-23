@@ -184,3 +184,36 @@ test('администратор: скрыт от обычных, требует
   assert.ok(after.data.audit.some(x => x.type === 'admin_delete_event'), 'действие в журнале');
   assert.equal((await user.call('DELETE', '/admin/comments/c1')).status, 404, 'обычный пользователь не может удалять');
 });
+
+test('приглашение по ссылке: гость видит только главное, ответить можно после входа', async () => {
+  const host = client(); await host.login('0700000001');
+  const { data: { token } } = await host.call('POST', '/events/e1/link');
+  assert.match(token, /^[\w-]{24}$/);
+  assert.equal((await host.call('POST', '/events/e1/link')).data.token, token, 'ссылка у сбора одна');
+
+  const guest = client();
+  const view = await guest.call('GET', '/join/' + token);
+  assert.equal(view.status, 200);
+  assert.equal(view.data.event.title, 'Пятничный сбор');
+  assert.equal(view.data.event.host, 'Алекс');
+  assert.equal(view.data.status, null);
+  assert.ok(!JSON.stringify(view.data).includes('996'), 'номера телефонов по ссылке не видны');
+  assert.equal((await guest.call('POST', '/join/' + token, { status: 'going' })).status, 401);
+  assert.equal((await guest.call('GET', '/join/not-a-real-token-123456')).status, 404);
+
+  const friend = client(); await friend.login('0700000006');
+  assert.equal((await friend.call('POST', '/events/e1/link')).status, 403, 'чужой человек ссылку не создаёт');
+  const r = await friend.call('POST', '/join/' + token, { status: 'going' });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.eventId, 'e1');
+  assert.ok(r.data.data.events.some(e => e.id === 'e1'), 'сбор появился у друга');
+  assert.equal((await friend.call('GET', '/join/' + token)).data.status, 'going');
+  const notes = (await host.call('GET', '/bootstrap')).data.notifications;
+  assert.ok(notes.some(n => n.type === 'rsvp_going' && n.actorId === 'u6'), 'организатор получил уведомление');
+});
+
+test('ошибки со страницы принимаются, но не больше лимита', async () => {
+  const c = client();
+  assert.equal((await c.call('POST', '/client-errors', { msg: 'TypeError: x is undefined', src: 'app.js', line: 10, page: 'event' })).status, 200);
+  assert.equal((await c.call('POST', '/client-errors', { msg: 'x' }, { Origin: 'https://evil.example' })).status, 403);
+});
