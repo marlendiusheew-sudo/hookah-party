@@ -1640,6 +1640,7 @@
 
   // ---------- Каталог ----------
   const cat = { q: '', strength: 'all', tag: '', sort: 'rating' };
+  let favPop = null; // только что добавленный в избранное — для анимации сердечка
   const strengthBar = s => `<div class="strength"><div class="strength-bar">${Array.from({ length: 10 }, (_, i) => `<i class="${i < s ? 'on' : ''} ${i < s && i >= 7 ? 'hot' : ''}"></i>`).join('')}</div><small>${L('Крепость', 'Strength')} ${s}/10</small></div>`;
   const reviewsWord = n => pl(n, ['отзыв', 'отзыва', 'отзывов'], ['review', 'reviews']);
   function tobaccoCard(t, u) {
@@ -1647,7 +1648,7 @@
     return `<article class="cat-card t-card" data-action="tobacco" data-id="${t.id}" role="button" tabindex="0" aria-label="${esc(t.brand + ' ' + t.flavor)}">
       ${packArt(t)}
       <div class="cat-top"><span class="cat-brand">${esc(t.brand)}</span>
-        ${u ? `<button class="fav-btn ${fav ? 'on' : ''}" type="button" data-action="fav" data-id="${t.id}" aria-pressed="${fav}" aria-label="${L('В избранное', 'Favourite')}">${ICON.heart}</button>` : ''}</div>
+        ${u ? `<button class="fav-btn ${fav ? 'on' : ''} ${favPop === t.id ? 'pop' : ''}" type="button" data-action="fav" data-id="${t.id}" aria-pressed="${fav}">${ICON.heart}<span>${fav ? L('В избранном', 'Favourite') : L('В избранное', 'Add to favourites')}</span></button>` : ''}</div>
       <h3>${esc(t.flavor)}</h3><p>${esc(tr(t.note))}</p>
       <div class="rating-line">${stars(r.avg)}<small>${r.n ? `${r.avg.toFixed(1)} · ${r.n} ${reviewsWord(r.n)}` : L('Нет отзывов', 'No reviews')}</small></div>
       ${strengthBar(t.strength)}
@@ -1730,7 +1731,7 @@
         <div class="t-info"><p>${esc(tr(t.note))}</p>${strengthBar(t.strength)}
           <div class="rating-line">${stars(r.avg, 'lg')}<small>${r.n ? `${r.avg.toFixed(1)} ${L('из 5', 'of 5')} · ${r.n} ${reviewsWord(r.n)}` : L('Отзывов пока нет', 'No reviews yet')}</small></div>
           <div class="cat-tags">${t.tags.map(x => `<span class="chip">${esc(tagName(x))}</span>`).join('')}</div>
-          ${u ? `<div><button class="btn btn-sm ${fav ? 'btn-on' : ''}" data-action="fav" data-id="${t.id}" aria-pressed="${fav}">${ICON.heart}${fav ? L('В избранном', 'In favourites') : L('В избранное', 'Add to favourites')}</button></div>` : ''}
+          ${u ? `<div><button class="btn btn-sm fav-big ${fav ? 'btn-on on' : ''} ${favPop === t.id ? 'pop' : ''}" data-action="fav" data-id="${t.id}" aria-pressed="${fav}">${ICON.heart}${fav ? L('В избранном', 'In favourites') : L('В избранное', 'Add to favourites')}</button></div>` : ''}
         </div></div>
       ${inMixes.length ? `<div><span class="label">${L('Встречается в миксах', 'Used in mixes')}</span><div class="cat-tags" style="margin-top:6px">${inMixes.map(m => `<span class="chip chip-accent">${esc(m.name)}</span>`).join('')}</div></div>` : ''}
       ${u ? `<form class="form review-form" id="rv-form">
@@ -2300,11 +2301,15 @@
     tobacco({ id }) { openTobacco(id); },
     fav({ id }, el) {
       const u = me(); if (!u) return;
-      u.favs = u.favs.includes(id) ? u.favs.filter(x => x !== id) : [...u.favs, id];
+      const adding = !u.favs.includes(id), t = tobacco(id);
+      u.favs = adding ? [...u.favs, id] : u.favs.filter(x => x !== id);
       save();
+      favPop = adding ? id : null;
       const inModal = el.closest('.modal');
       render();
       if (inModal) openTobacco(id);
+      favPop = null;
+      toast(adding ? L(`${t.brand} ${t.flavor} добавлен в избранное`, `${t.brand} ${t.flavor} added to favourites`) : L(`${t.brand} ${t.flavor} убран из избранного`, `${t.brand} ${t.flavor} removed from favourites`));
     },
     newMix() {
       if (!requireUser()) return;

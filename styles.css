@@ -292,10 +292,18 @@ p { margin: 0; }
 .strength-bar i.on { background: var(--accent); }
 .strength-bar i.on.hot { background: var(--ember); }
 .strength small { font: 500 11px var(--f-mono); color: var(--muted); }
-.fav-btn { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 2px; }
-.fav-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
-.fav-btn.on { color: var(--ember); }
-.fav-btn.on svg { fill: currentColor; }
+.fav-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px 5px 8px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: 600 12px var(--f-body); white-space: nowrap;
+  transition: color .2s, border-color .2s, background .2s;
+}
+.fav-btn:hover { color: var(--ember); border-color: color-mix(in srgb, var(--ember) 45%, var(--line)); }
+.fav-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; transition: fill .2s; }
+.fav-btn.on { color: var(--ember); border-color: color-mix(in srgb, var(--ember) 50%, transparent); background: color-mix(in srgb, var(--ember) 12%, var(--surface)); }
+.fav-btn.on svg, .fav-big.on svg { fill: currentColor; }
+.fav-big.on { color: var(--ember); border-color: color-mix(in srgb, var(--ember) 50%, transparent); background: color-mix(in srgb, var(--ember) 12%, var(--surface)); }
+.fav-btn.pop svg, .fav-big.pop svg { animation: heartPop .5s cubic-bezier(.3, 1.8, .5, 1); }
+@keyframes heartPop { 0% { transform: scale(.4); } 60% { transform: scale(1.35); } 100% { transform: scale(1); } }
 
 /* ---------- Forms ---------- */
 .form { display: grid; gap: 14px; }
