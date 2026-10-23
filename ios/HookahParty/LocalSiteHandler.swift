@@ -8,7 +8,7 @@ final class LocalSiteHandler: NSObject, WKURLSchemeHandler {
     static let startURL = URL(string: "hookah://app/index.html")!
 
     // Только эти файлы — никаких произвольных путей.
-    private let allowed: Set<String> = ["index.html", "styles.css", "app.js", "art.js", "map-data.js", "admin.js"]
+    private let allowed: Set<String> = ["index.html", "styles.css", "app.js", "art.js", "map-data.js"]
     private let root = Bundle.main.url(forResource: "web", withExtension: nil)
 
     func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {

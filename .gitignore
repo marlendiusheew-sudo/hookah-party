@@ -7,3 +7,6 @@ ios/build/
 ios/build-export.plist
 *.xcuserstate
 xcuserdata/
+
+# Исходник панели администратора — в git только зашифрованным (server/private/admin-panel.enc)
+server/private/admin-panel.js

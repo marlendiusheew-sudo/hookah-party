@@ -21,6 +21,7 @@ const { match } = require('./lib/api');
 const { ApiError } = require('./lib/util');
 const { LIMITS, hit, audit, log } = require('./lib/guard');
 const { sha256, sameHash } = require('./lib/secure');
+const { isAdminUser, panelCode } = require('./lib/panel');
 
 const ROOT = path.join(__dirname, '..');
 const PROD = process.env.NODE_ENV === 'production';
@@ -131,18 +132,17 @@ function createServer(db) {
 function isAdminRequest(req, db) {
   const sid = cookies(req).hp_sid;
   if (!sid) return false;
-  const s = db.q('SELECT s.expires_at, u.role FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?').get(sha256(sid));
-  return !!s && s.expires_at > Date.now() && s.role === 'admin';
+  const s = db.q('SELECT s.expires_at, u.role, u.phone_idx FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?').get(sha256(sid));
+  return !!s && s.expires_at > Date.now() && isAdminUser(s);
 }
 function serveStatic(req, res, url, db) {
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
   if (url.pathname === '/admin.js') {
-    if (!isAdminRequest(req, db)) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Not found'); }
-    return fs.readFile(path.join(ROOT, 'admin.js'), (err, data) => {
-      if (err) { res.writeHead(404); return res.end(); }
-      res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'private, no-store' });
-      res.end(data);
-    });
+    // Панель хранится зашифрованной; расшифровываем в памяти и отдаём только администратору. Остальным её «нет».
+    const code = isAdminRequest(req, db) ? panelCode() : null;
+    if (!code) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Not found'); }
+    res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'private, no-store' });
+    return res.end(req.method === 'HEAD' ? undefined : code);
   }
   const entry = STATIC[url.pathname];
   if (!entry) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Not found'); }

@@ -145,7 +145,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Сайт копируется в приложение прямо из корня репозитория — у приложения и сайта всегда одна версия.\nset -e\nSRC=\"${PROJECT_DIR}/..\"\nDST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/web\"\nmkdir -p \"$DST\"\nfor f in index.html styles.css app.js art.js map-data.js admin.js; do\n  cp \"$SRC/$f\" \"$DST/$f\"\ndone\n";
+			shellScript = "# Сайт копируется в приложение прямо из корня репозитория — у приложения и сайта всегда одна версия.\nset -e\nSRC=\"${PROJECT_DIR}/..\"\nDST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/web\"\nmkdir -p \"$DST\"\nfor f in index.html styles.css app.js art.js map-data.js; do\n  cp \"$SRC/$f\" \"$DST/$f\"\ndone\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

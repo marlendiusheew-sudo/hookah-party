@@ -390,7 +390,7 @@
     return {
       session: 'u1',
       users: [
-        u('u1', 'Алекс', '996700000001', { favs: ['ds-supernova', 'mh-pinkman'], friends: ['u2', 'u3', 'u5'], favVenue: savor.name, role: 'admin' }),
+        u('u1', 'Алекс', '996700000001', { favs: ['ds-supernova', 'mh-pinkman'], friends: ['u2', 'u3', 'u5'], favVenue: savor.name }),
         u('u2', 'Дина', '996700000002', { friends: ['u1', 'u3', 'u6'], favVenue: hydra.name, favs: ['ad-love66'] }),
         u('u3', 'Тимур', '996700000003', { friends: ['u1', 'u2', 'u4'], favVenue: holy.name, favs: ['tg-canemint', 'af-twoapples'] }),
         u('u4', 'Сабина', '996700000004', { friends: ['u3'], favs: ['fu-gummi'] }),
@@ -522,7 +522,7 @@
   function migrate(d) {
     const s = seed();
     if (!d.storiesSeeded) withStories(d);
-    d.users.forEach(u => { u.favs ||= []; u.friends ||= []; u.favVenue ??= ''; u.role ??= u.id === 'u1' ? 'admin' : 'user'; });
+    d.users.forEach(u => { u.favs ||= []; u.friends ||= []; u.favVenue ??= ''; u.role = 'user'; }); // в демо администраторов нет: без сервера права защитить нельзя
     d.events.forEach(e => {
       e.picks ||= {}; e.bowls ||= {}; e.comments ||= []; e.paid ||= {}; e.remind ||= {}; e.notified ||= {};
       e.hookahs ??= 1; e.price ??= 0; e.mapUrl ??= '';
@@ -852,7 +852,6 @@
   function renderChrome(page) {
     const u = me(), theme = prefs.get('theme', 'auto'), themeName = tr(THEMES[theme][0]);
     const navItems = [['venues', L('Заведения', 'Venues')], ['catalog', L('Кальян', 'Hookah')], ['events', L('События', 'Events')], ['history', L('История', 'History')], ['people', L('Люди', 'People')]];
-    if (isAdmin()) navItems.push(['admin', L('Админ', 'Admin')]);
     $('#nav').innerHTML = navItems.map(([k, t]) => `<a href="#/${k}" data-nav="${k}">${t}</a>`).join('');
     $('#nav').setAttribute('aria-label', L('Основное меню', 'Main menu'));
     $('#topbar-actions').innerHTML = `
@@ -2133,9 +2132,10 @@
   function updateTitle() { const n = me() ? unreadCount() : 0; document.title = n ? `(${n}) Hookah Party` : 'Hookah Party'; }
 
   // ---------- Администратор ----------
-  // Код панели лежит в отдельном файле admin.js. На сервере его получает только вошедший администратор,
-  // а каждое действие сервер ещё раз проверяет (роль + подтверждение паролем).
-  const isAdmin = () => !!me() && (SERVER ? db.role === 'admin' : me().role === 'admin');
+  // Панель есть только на сервере и только у владельца: роль + его номер в настройках сервера.
+  // Код панели хранится зашифрованным, сервер отдаёт его (admin.js) лишь администратору,
+  // а каждое действие проверяет ещё раз (роль, номер, подтверждение паролем). В демо панели нет.
+  const isAdmin = () => SERVER && !!me() && db.role === 'admin';
   const ADMIN_V = 23;
   let adminLoading = null;
   function loadAdmin() {
@@ -2417,6 +2417,7 @@
             <div class="stat"><b>${history.length}</b><small>${L('посетил', 'attended')}</small></div>
             <div class="stat"><b>${friends.length}</b><small>${pl(friends.length, ['друг', 'друга', 'друзей'], ['friend', 'friends'])}</small></div>
           </div>
+          ${isAdmin() ? `<a class="admin-entry" href="#/admin">${ICON.shield}<span><b>${L('Администрирование', 'Administration')}</b><small>${L('Только для вас · вход по паролю', 'Only for you · password required')}</small></span><span class="next-go">→</span></a>` : ''}
           <button class="btn btn-ghost btn-sm" data-action="logout">${L('Выйти из аккаунта', 'Sign out')}</button>
         </section>
         <div class="ev-main">
@@ -3435,7 +3436,7 @@
   // ---------- Роутер ----------
   const view = $('#view');
   // render() перерисовывает текущую страницу без прокрутки наверх; route() — полный переход.
-  const navFor = () => ({ join: 'events', admin: 'admin', notifications: 'notifications', history: 'history', venues: 'venues', catalog: 'catalog', events: 'events', event: 'events', people: 'people', user: 'people', profile: 'profile', login: 'profile', register: 'profile' })[location.hash.replace(/^#\/?/, '').split('/')[0]] || '';
+  const navFor = () => ({ join: 'events', admin: 'profile', notifications: 'notifications', history: 'history', venues: 'venues', catalog: 'catalog', events: 'events', event: 'events', people: 'people', user: 'people', profile: 'profile', login: 'profile', register: 'profile' })[location.hash.replace(/^#\/?/, '').split('/')[0]] || '';
   const PAGES = new Set(['', 'venues', 'events', 'event', 'catalog', 'people', 'user', 'how', 'profile', 'login', 'register', 'history', 'notifications', 'admin', 'join', 'privacy', 'terms']);
   const NEEDS_ARG = new Set(['event', 'user', 'join']);
   function render() {

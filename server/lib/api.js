@@ -5,6 +5,7 @@ const { normPhone, validPhone, maskPhone, clean, validName, safeUrl, safeAvatar,
 const { LIMITS, hit, lockLeft, failAttempt, clearFails, audit, log } = require('./guard');
 const { TOBACCOS, BOWLS, EMOJI, venueById } = require('./catalog');
 const { sendSms, exposeCode } = require('./sms');
+const { isAdminUser } = require('./panel');
 
 const id = p => uid(p, crypto);
 const isPast = at => new Date(at).getTime() < Date.now() - 4 * 3600e3;
@@ -61,7 +62,7 @@ function bootstrap(db, me, session) {
   const notifications = meId ? db.q('SELECT * FROM notifications WHERE user_id = ? ORDER BY at DESC LIMIT 100').all(meId)
     .map(n => ({ id: n.id, type: n.type, actorId: n.actor_id, eventId: n.event_id, ref: n.ref, at: n.at, read: !!n.read })) : [];
   return {
-    session: meId, role: me?.role || null, adminUntil: me?.role === 'admin' ? (session?.admin_until || 0) : 0, sessionAt: session?.created_at || null, sessionExp: session?.expires_at || null, csrf: session?.csrf || null,
+    session: meId, role: me ? (isAdminUser(me) ? 'admin' : 'user') : null, adminUntil: isAdminUser(me) ? (session?.admin_until || 0) : 0, sessionAt: session?.created_at || null, sessionExp: session?.expires_at || null, csrf: session?.csrf || null,
     users, events, reviews, mixes, notifications, storiesSeeded: true
   };
 }
@@ -489,10 +490,10 @@ on('POST', '/api/mixes/:id/like', ctx => {
 }, { auth: true, data: true });
 
 // ---------- Администратор ----------
-// Роль выдаётся только командой на сервере (server/admin.js). Каждое действие требует свежего подтверждения
+// Администратор — роль из консоли сервера (server/admin.js) плюс номер в ADMIN_PHONES (см. lib/panel.js). Каждое действие требует свежего подтверждения
 // паролем (15 минут) и записывается в журнал.
 const needAdmin = ctx => {
-  if (ctx.user?.role !== 'admin') { audit(ctx.db, { type: 'admin_denied', userId: ctx.user?.id, ip: ctx.ip, detail: ctx.req.url }); fail(404, 'not_found', 'Неизвестный адрес API.', 'Unknown API endpoint.'); }
+  if (!isAdminUser(ctx.user)) { audit(ctx.db, { type: 'admin_denied', userId: ctx.user?.id, ip: ctx.ip, detail: ctx.req.url }); fail(404, 'not_found', 'Неизвестный адрес API.', 'Unknown API endpoint.'); }
 };
 const needStepUp = ctx => {
   needAdmin(ctx);

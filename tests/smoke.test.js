@@ -199,6 +199,9 @@ const tabTo = async (n, k) => { click($(`.utabs[data-tabs="${n}"] [data-tab="${k
     ok(fs.readFileSync(dir + '/index.html', 'utf8').match(/\?v=(\d+)/g).every(x => x === '?v=' + ver), 'офлайн: версия кеша совпадает с ?v= в index.html');
     await go('#/profile'); click($('.utabs [data-tab="settings"]')); await sleep(10);
     ok(!!$('.sec-panel') && /Журнал безопасности/.test($('.sec-panel').textContent), 'защита: панель безопасности в профиле');
+    ok(!$('#nav').textContent.includes('Админ') && !$('.admin-entry'), 'админ: в демо нет ни вкладки, ни входа в панель');
+    await go('#/admin'); ok(/Такой страницы нет/.test(text()) && !d.querySelector('script[src*="admin.js"]'), 'админ: в демо адрес панели не открывается и код не грузится');
+    await go('#/profile');
     click($('[data-action="logout"]')); await sleep(40);
     ok(/Добро пожаловать в Hookah Party!/.test(text()) && $$('.tiles .tile').length === 3, 'гость: главная');
     await go('#/events'); ok(/Войдите, чтобы видеть свои сборы/.test(text()), 'гость: события просят войти');

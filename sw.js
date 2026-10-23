@@ -1,7 +1,7 @@
 // Офлайн-режим Hookah Party. Страница берётся из сети (если сети нет — из кеша),
 // файлы с версией в адресе (?v=N) — сразу из кеша. API и панель администратора не кешируются никогда.
 // Версию VERSION повышать вместе с ?v= в index.html (это проверяет npm test).
-const VERSION = 27;
+const VERSION = 28;
 const CACHE = 'hp-v' + VERSION;
 const CORE = ['./', `styles.css?v=${VERSION}`, `app.js?v=${VERSION}`, `art.js?v=${VERSION}`, `map-data.js?v=${VERSION}`, 'manifest.webmanifest', 'icon-192.png'];
 

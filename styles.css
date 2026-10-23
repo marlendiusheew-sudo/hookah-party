@@ -1684,3 +1684,14 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 .age-links { font-size: 12.5px; color: var(--muted); }
 .age-links a { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .age-gate, .age-card { animation: none !important; } }
+
+/* Вход в панель администратора — только в профиле владельца */
+.admin-entry {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border-radius: var(--r); text-align: left; text-decoration: none; color: var(--fg);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  transition: transform .4s var(--ease-spring), border-color var(--dur) var(--ease-out);
+}
+.admin-entry:hover { transform: translateY(-2px); border-color: var(--accent); }
+.admin-entry svg { width: 22px; height: 22px; flex: none; stroke: var(--accent); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.admin-entry span:not(.next-go) { display: grid; gap: 2px; margin-right: auto; }
+.admin-entry small { color: var(--muted); font-size: 12px; }

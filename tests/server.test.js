@@ -2,15 +2,23 @@
    Сервер поднимается в памяти на случайном порту. Запуск: npm test */
 process.env.NODE_ENV = 'test';
 process.env.SMS_PROVIDER = 'dev';
+// Администратор в тестовой базе — «Алекс»: его номер — единственный в списке владельцев.
+// Панель для теста шифруется своим ключом во временный файл: настоящего ключа в репозитории нет.
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+process.env.ADMIN_PHONES = '+996700000001';
+process.env.ADMIN_CODE_KEY = require('node:crypto').randomBytes(32).toString('base64');
+process.env.ADMIN_PANEL_ENC = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'hp-')), 'panel.enc');
+const panel = require('../server/lib/panel');
+fs.writeFileSync(process.env.ADMIN_PANEL_ENC, panel.encrypt(Buffer.from('window.HP_ADMIN = { test: true };'), Buffer.from(process.env.ADMIN_CODE_KEY, 'base64')));
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { open } = require('../server/lib/db');
 const { seed } = require('../server/lib/seed');
 const { createServer } = require('../server/index');
 
-let server, base;
+let server, base, db;
 before(async () => {
-  const db = open(':memory:');
+  db = open(':memory:');
   await seed(db);
   server = createServer(db);
   await new Promise(r => server.listen(0, '127.0.0.1', r));
@@ -183,6 +191,31 @@ test('администратор: скрыт от обычных, требует
   assert.ok(!after.data.comments.some(x => x.id === 'c4') && !after.data.events.some(x => x.id === 'e2'));
   assert.ok(after.data.audit.some(x => x.type === 'admin_delete_event'), 'действие в журнале');
   assert.equal((await user.call('DELETE', '/admin/comments/c1')).status, 404, 'обычный пользователь не может удалять');
+});
+
+test('администратор только владелец: роли в базе мало, нужен номер из ADMIN_PHONES', async () => {
+  // Как будто кто-то выдал себе роль прямо в базе.
+  db.q("UPDATE users SET role = 'admin' WHERE id = 'u2'").run();
+  const intruder = client(); const login = await intruder.login('0700000002');
+  assert.equal(login.data.data.role, 'user', 'сайт не считает его администратором');
+  assert.equal((await intruder.call('POST', '/admin/unlock', { password: 'hookah' })).status, 404);
+  assert.equal((await intruder.call('GET', '/admin/overview')).status, 404);
+  const cookieOf = async phone => { const r = await fetch(base + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone, password: 'hookah' }) }); return r.headers.get('set-cookie').split(';')[0]; };
+  assert.equal((await fetch(base + '/admin.js', { headers: { Cookie: await cookieOf('0700000002') } })).status, 404, 'код панели ему не отдаётся');
+  db.q("UPDATE users SET role = 'user' WHERE id = 'u2'").run();
+
+  const owner = await fetch(base + '/admin.js', { headers: { Cookie: await cookieOf('0700000001') } });
+  assert.equal(owner.status, 200, 'владельцу панель отдаётся');
+  assert.match(await owner.text(), /HP_ADMIN/, 'сервер расшифровал панель');
+  assert.equal(owner.headers.get('cache-control'), 'private, no-store');
+});
+
+test('код панели в репозитории только зашифрован', () => {
+  const enc = fs.readFileSync(path.join(__dirname, '..', 'server', 'private', 'admin-panel.enc'));
+  assert.equal(enc.subarray(0, 4).toString(), 'HPA1');
+  assert.ok(!enc.includes('HP_ADMIN') && !enc.includes('function'), 'в файле нет открытого кода');
+  assert.ok(!fs.existsSync(path.join(__dirname, '..', 'admin.js')), 'в открытой папке сайта панели нет');
+  assert.throws(() => panel.decrypt(enc, require('node:crypto').randomBytes(32)), 'чужим ключом не расшифровать');
 });
 
 test('приглашение по ссылке: гость видит только главное, ответить можно после входа', async () => {
