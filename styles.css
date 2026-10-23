@@ -1502,3 +1502,105 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 .install-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
 .install-steps li { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; }
 .install-steps b { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--smoke); color: var(--accent); flex: none; }
+
+/* ================= Плавность ================= */
+/* Единые кривые: мягкое торможение для появлений, лёгкая «пружина» для отклика на нажатие. */
+:root {
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  --ease-spring: cubic-bezier(.34, 1.4, .64, 1);
+  --dur-fast: .18s; --dur: .32s; --dur-slow: .55s;
+}
+
+/* Переход между страницами: блоки страницы проявляются по очереди. */
+.view.view-enter > * { animation: viewIn var(--dur-slow) var(--ease-out) both; }
+.view.view-enter > :nth-child(2) { animation-delay: 50ms; }
+.view.view-enter > :nth-child(3) { animation-delay: 100ms; }
+.view.view-enter > :nth-child(4) { animation-delay: 150ms; }
+.view.view-enter > :nth-child(5) { animation-delay: 200ms; }
+.view.view-enter > :nth-child(n+6) { animation-delay: 240ms; }
+@keyframes viewIn { from { opacity: 0; transform: translateY(14px); } }
+/* Плитки на главной — отдельной волной. */
+.view.view-enter .tiles .tile { animation: tileIn .6s var(--ease-out) both; }
+.view.view-enter .tiles .tile:nth-child(2) { animation-delay: 70ms; }
+.view.view-enter .tiles .tile:nth-child(3) { animation-delay: 140ms; }
+@keyframes tileIn { from { opacity: 0; transform: translateY(18px) scale(.96); } }
+
+/* Карточки проявляются при прокрутке (только где браузер это умеет; иначе они просто видны). */
+@supports (animation-timeline: view()) {
+  .cat-card, .ev-card, .story, .quote, .feature, .person-card, .step, .stats-band, .duo > *, .faq details, .adm-row, .notif-list > li, .feed-item, .rank-row {
+    animation: reveal linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 70%;
+  }
+  .vcard { animation: revealX linear both; animation-timeline: view(inline); animation-range: entry 0% entry 80%; }
+}
+@keyframes reveal { from { opacity: 0; transform: translateY(26px) scale(.985); } }
+@keyframes revealX { from { opacity: .2; transform: translateX(24px) scale(.97); } }
+
+/* Наведение и нажатие — одинаково мягко везде. */
+.btn, .chip-btn, .icon-btn, .plus-btn, .react-btn, .react-chip, .fav-btn, .like-btn, .qa, .vcard, .venue-item, .notif, .tabs button, .segmented button, .lang-switch button, .maplink, .pay-btn {
+  transition: background-color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-spring), box-shadow var(--dur) var(--ease-out), opacity var(--dur) var(--ease-out);
+}
+.btn:active, .chip-btn:active, .icon-btn:active, .plus-btn:active, .qa:active, .maplink:active, .pay-btn:active, .ii-btn:active { transform: scale(.96); transition-duration: var(--dur-fast); }
+.ev-card, .cat-card, .t-card, .story-card, .person-card {
+  transition: transform .45s var(--ease-out), border-color var(--dur) var(--ease-out), box-shadow .45s var(--ease-out);
+}
+.tile-box { transition: transform .5s var(--ease-out), border-color .35s var(--ease-out), background-color .35s var(--ease-out), color .35s var(--ease-out), box-shadow .5s var(--ease-out); }
+.tile-label, .tile-sub { transition: opacity .4s var(--ease-out), transform .5s var(--ease-out); }
+.tile-art { transition: transform .55s var(--ease-out); }
+.utabs-ink { transition: transform .45s var(--ease-out), width .45s var(--ease-out); }
+.tab-panel.in-next { animation: tabNext .42s var(--ease-out); }
+.tab-panel.in-prev { animation: tabPrev .42s var(--ease-out); }
+.nav a { transition: color var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out); }
+
+/* Окна: фон плавно затемняется, окно мягко всплывает и так же уходит. */
+.modal-backdrop { animation: backdropIn .28s var(--ease-out); }
+.modal { animation: modalIn .42s var(--ease-out); }
+.closing.modal-backdrop { animation: backdropOut .2s var(--ease-in-out) forwards; }
+.closing .modal { animation: modalOut .2s var(--ease-in-out) forwards; }
+@keyframes backdropIn { from { opacity: 0; } }
+@keyframes backdropOut { to { opacity: 0; } }
+@keyframes modalIn { from { opacity: 0; transform: translateY(18px) scale(.97); } }
+@keyframes modalOut { to { opacity: 0; transform: translateY(10px) scale(.98); } }
+.emoji-pop, .bell-pop { animation: popIn .26s var(--ease-out); transform-origin: top right; }
+@keyframes popIn { from { opacity: 0; transform: translateY(-6px) scale(.96); } }
+.map-card { animation: popIn .3s var(--ease-out); transform-origin: bottom center; }
+
+/* Уведомления внизу: выезжают снизу, уходят вниз. */
+.toast { animation: toastIn .45s var(--ease-out); transition: opacity .4s var(--ease-in-out), transform .4s var(--ease-in-out); }
+.toast.out { opacity: 0; transform: translateY(12px) scale(.98); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(16px) scale(.96); } }
+
+/* ---------- Значки рядом с приветствием ---------- */
+.intro-icons { display: grid; gap: 14px; align-content: start; }
+.ii-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.ii-btn {
+  display: grid; justify-items: center; gap: 8px; padding: 16px 6px 12px; border-radius: var(--r-lg); cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: 600 12.5px var(--f-body); box-shadow: var(--elev);
+  transition: transform .4s var(--ease-spring), border-color var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out), box-shadow .4s var(--ease-out);
+}
+.ii-btn svg { width: 30px; height: 30px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; color: var(--accent); transition: transform .45s var(--ease-spring); }
+.ii-btn:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); color: var(--fg); }
+.ii-btn:hover svg { transform: scale(1.08); }
+.ii-btn.on { border-color: var(--accent); background-color: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--fg); box-shadow: 0 14px 30px -16px color-mix(in srgb, var(--accent) 70%, transparent); }
+.ii-btn.on svg { transform: scale(1.12) rotate(-4deg); }
+.ii-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ii-panel { min-height: 96px; }
+.ii-hint { color: var(--muted); font-size: 13.5px; text-align: center; padding: 14px 8px; border: 1px dashed var(--line); border-radius: var(--r); animation: fade .4s var(--ease-out); }
+.ii-card {
+  display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px; border-radius: var(--r-lg);
+  background: var(--surface); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); box-shadow: var(--elev);
+  animation: iiIn .45s var(--ease-out);
+}
+.ii-card-ic { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: var(--smoke); color: var(--accent); flex: none; }
+.ii-card-ic svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ii-card b { font-size: 15.5px; }
+.ii-card p { color: var(--muted); font-size: 14.5px; margin: 4px 0 8px; line-height: 1.55; }
+@keyframes iiIn { from { opacity: 0; transform: translateY(-8px) scale(.98); } }
+@media (max-width: 560px) { .ii-row { gap: 6px; } .ii-btn { padding: 12px 2px 10px; font-size: 10.5px; letter-spacing: -.01em; } .ii-btn svg { width: 26px; height: 26px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .view.view-enter > *, .view.view-enter .tiles .tile, .ii-card, .toast, .modal, .modal-backdrop { animation: none !important; }
+}

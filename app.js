@@ -692,7 +692,10 @@
 
   // ---------- Модальные окна и уведомления ----------
   const modalRoot = $('#modal-root');
+  let closeTimer = null;
+  const reduceMotion = () => !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   function openModal(title, body, onMount) {
+    clearTimeout(closeTimer);
     modalRoot.innerHTML = `<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
       <div class="modal-head"><h2>${esc(title)}</h2><button class="modal-x" type="button" data-action="closeModal" aria-label="${L('Закрыть', 'Close')}">×</button></div>
       ${body}</div></div>`;
@@ -703,7 +706,15 @@
     const f = m.querySelector('input:not([type=checkbox]):not([type=radio]), textarea');
     f && f.focus();
   }
-  function closeModal() { modalRoot.innerHTML = ''; modalRoot.hidden = true; document.body.classList.remove('locked'); }
+  // Закрытие с анимацией; если сразу открывается новое окно, оно просто заменит закрывающееся.
+  function closeModal() {
+    const node = modalRoot.firstElementChild;
+    document.body.classList.remove('locked');
+    if (!node || reduceMotion()) { modalRoot.innerHTML = ''; modalRoot.hidden = true; return; }
+    node.classList.add('closing');
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(() => { if (node.parentNode === modalRoot) { modalRoot.innerHTML = ''; modalRoot.hidden = true; } }, 200);
+  }
   modalRoot.addEventListener('mousedown', e => { if (e.target.classList.contains('modal-backdrop')) closeModal(); });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && !modalRoot.hidden) closeModal();
@@ -714,7 +725,7 @@
     t.className = 'toast ' + kind; t.textContent = msg;
     $('#toasts').append(t);
     setTimeout(() => t.classList.add('out'), 3600);
-    setTimeout(() => t.remove(), 4100);
+    setTimeout(() => t.remove(), 4000);
   }
 
   // ---------- Оформление ----------
@@ -1320,7 +1331,7 @@
     const next = u && db.events.filter(e => !isPast(e) && goingIds(e).includes(u.id)).sort((a, b) => new Date(a.at) - new Date(b.at))[0];
     const invites = u ? db.events.filter(e => !isPast(e) && myInvite(e, u)?.status === 'pending').length : 0;
     const openNow = VENUES.filter(v => venueStatus(v).open).length;
-    const point = (icon, h, p) => `<li><span class="intro-ic">${icon}</span><div><b>${h}</b><p>${p}</p></div></li>`;
+    const tips = INTRO_TIPS();
     view.innerHTML = `
       ${tilesHtml()}
       ${next ? `<a class="next-strip" href="#/event/${next.id}"><span class="soon-dot"></span><span><b>${esc(next.title)}</b> · <span data-countdown="${next.at}">${countdown(next.at)}</span> · ${esc(next.venue)}</span><span class="next-go">${L('Открыть', 'Open')} →</span></a>`
@@ -1334,12 +1345,12 @@
           ${u ? `<div class="hero-cta"><button class="btn btn-primary" type="button" data-action="newEvent">${ICON.plus}${L('Собрать друзей', 'Gather friends')}</button><a class="btn" href="#/venues">${L('Выбрать место', 'Pick a place')}</a></div>`
             : `<div class="hero-cta"><a class="btn btn-primary" href="#/register">${L('Зарегистрироваться', 'Sign up')}</a><a class="btn" href="#/login">${L('У меня есть аккаунт', 'I have an account')}</a></div>`}
         </div>
-        <ul class="intro-points">
-          ${point(ICON.home, L('Кальянные на карте', 'Lounges on the map'), L('Адреса, часы работы и что открыто прямо сейчас. Один клик, и место открыто в Google Картах или 2ГИС.', 'Addresses, opening hours and what is open right now. One click opens the place in Google Maps or 2GIS.'))}
-          ${point(ICON.mail, L('Приглашения по номеру', 'Invitations by phone'), L('Позовите друзей по номеру телефона. Они ответят «Иду» или «Не смогу» в одно касание.', 'Invite friends by phone number. They reply “Going” or “Can’t make it” in one tap.'))}
-          ${point(ICON.hookah, L('Общий выбор табака', 'A shared tobacco pick'), L('Каждый отмечает любимые вкусы и чашу. Популярное поднимается наверх, кальянщик получает готовый список.', 'Everyone marks their favourite flavours and bowl. Popular picks rise to the top, and the hookah master gets a ready list.'))}
-          ${point(ICON.wallet, L('Счёт поровну', 'Split the bill'), L('Сервис сам посчитает, сколько с каждого, и напомнит о встрече за час.', 'The service works out each person’s share and reminds you an hour before.'))}
-        </ul>
+        <div class="intro-icons">
+          <div class="ii-row" role="tablist" aria-label="${L('Что умеет Hookah Party', 'What Hookah Party does')}">
+            ${tips.map((t, i) => `<button class="ii-btn" type="button" role="tab" id="ii-tab-${i}" aria-selected="false" aria-controls="ii-panel" data-ii="${i}" title="${t.h}">${t.icon}<span class="ii-label">${t.short}</span></button>`).join('')}
+          </div>
+          <div class="ii-panel" id="ii-panel" role="tabpanel" aria-live="polite"><p class="ii-hint">${L('Нажмите на значок, чтобы узнать подробнее', 'Tap an icon to learn more')}</p></div>
+        </div>
       </section>
       <section class="section map-section">
         <div class="section-head"><div><h2>${L('Кальянные Бишкека', 'Hookah lounges in Bishkek')}</h2>
@@ -1350,8 +1361,33 @@
       </section>
       ${homeExtras(u)}`;
     initMap('home-map');
+    initIntroIcons();
     const sc = $('#venue-scroller');
     $$('[data-scroll]').forEach(b => b.addEventListener('click', () => sc.scrollBy({ left: +b.dataset.scroll * sc.clientWidth * .8, behavior: 'smooth' })));
+  }
+
+  // Значки рядом с приветствием: описание открывается по нажатию, без лишнего текста на экране.
+  const INTRO_TIPS = () => [
+    { icon: ICON.home, short: L('Места', 'Places'), h: L('Кальянные на карте', 'Lounges on the map'), p: L('Адреса, часы работы и что открыто прямо сейчас. Один клик, и место открыто в Google Картах или 2ГИС.', 'Addresses, opening hours and what is open right now. One click opens the place in Google Maps or 2GIS.'), go: '#/venues' },
+    { icon: ICON.mail, short: L('Приглашения', 'Invites'), h: L('Приглашения по номеру', 'Invitations by phone'), p: L('Позовите друзей по номеру телефона. Они ответят «Иду» или «Не смогу» в одно касание.', 'Invite friends by phone number. They reply “Going” or “Can’t make it” in one tap.'), go: '#/events' },
+    { icon: ICON.hookah, short: L('Табак', 'Tobacco'), h: L('Общий выбор табака', 'A shared tobacco pick'), p: L('Каждый отмечает любимые вкусы и чашу. Популярное поднимается наверх, кальянщик получает готовый список.', 'Everyone marks their favourite flavours and bowl. Popular picks rise to the top, and the hookah master gets a ready list.'), go: '#/catalog' },
+    { icon: ICON.wallet, short: L('Счёт', 'Bill'), h: L('Счёт поровну', 'Split the bill'), p: L('Сервис сам посчитает, сколько с каждого, и напомнит о встрече за час.', 'The service works out each person’s share and reminds you an hour before.'), go: '#/how' }
+  ];
+  function initIntroIcons() {
+    const box = $('.intro-icons'); if (!box) return;
+    const tips = INTRO_TIPS(), panel = $('#ii-panel', box), btns = $$('.ii-btn', box);
+    let open = -1;
+    const show = i => {
+      open = open === i ? -1 : i;
+      btns.forEach((b, k) => { b.classList.toggle('on', k === open); b.setAttribute('aria-selected', String(k === open)); });
+      const t = tips[open];
+      panel.innerHTML = t ? `<div class="ii-card" aria-labelledby="ii-tab-${open}"><span class="ii-card-ic">${t.icon}</span><div><b>${t.h}</b><p>${t.p}</p><a class="link-btn" href="${t.go}">${L('Подробнее', 'Learn more')} →</a></div></div>`
+        : `<p class="ii-hint">${L('Нажмите на значок, чтобы узнать подробнее', 'Tap an icon to learn more')}</p>`;
+    };
+    btns.forEach((b, i) => {
+      b.addEventListener('click', () => show(i));
+      b.addEventListener('keydown', e => { if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); const j = (i + (e.key === 'ArrowRight' ? 1 : btns.length - 1)) % btns.length; btns[j].focus(); show(j); } });
+    });
   }
 
   function pageVenues() {
@@ -3195,6 +3231,7 @@
   let pendingStory = null;
   function route() {
     closeModal(); render(); window.scrollTo(0, 0); checkReminders();
+    if (!reduceMotion()) { view.classList.remove('view-enter'); void view.offsetWidth; view.classList.add('view-enter'); }
     if (pendingStory) { const el = $('#story-' + pendingStory); pendingStory = null; if (el) { el.scrollIntoView({ block: 'start' }); window.scrollBy(0, -90); el.classList.add('flash'); } }
   }
   // Кнопка «Наверх» появляется после прокрутки.
