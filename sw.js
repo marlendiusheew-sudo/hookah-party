@@ -1,7 +1,7 @@
 // Офлайн-режим Hookah Party. Страница берётся из сети (если сети нет — из кеша),
 // файлы с версией в адресе (?v=N) и шрифты (версия в имени файла) — сразу из кеша. API и панель администратора не кешируются никогда.
 // Версию VERSION повышать вместе с ?v= в index.html (это проверяет npm test).
-const VERSION = 29;
+const VERSION = 30;
 const CACHE = 'hp-v' + VERSION;
 // Шрифты для русского и английского текста — заранее; остальные наборы (киргизские буквы) — когда понадобятся.
 const FONTS = ['unbounded-v12', 'golostext-v7', 'jetbrainsmono-v24'].flatMap(f => [`fonts/${f}-latin.woff2`, `fonts/${f}-cyrillic.woff2`]);

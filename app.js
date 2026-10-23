@@ -989,7 +989,10 @@
     if (season === 'halloween') fx.innerHTML = [1, 2, 3].map(i => `<span class="bat bat-${i}"><i></i></span>`).join('');
     document.body.append(fx);
     if (season === 'newyear' && !reducedMotion()) startSnow();
+    if (season === 'halloween' && !reducedMotion()) startLeaves();
   }
+  // «Уменьшить движение» переключили, пока страница открыта: снег и листья останавливаются или возвращаются
+  window.matchMedia?.('(prefers-reduced-motion: reduce)').addEventListener?.('change', () => { const s = fxSeason; fxSeason = null; seasonFx(s); });
   function startSnow() {
     const c = document.createElement('canvas'), ctx = c.getContext && c.getContext('2d');
     if (!ctx) return;
@@ -1018,6 +1021,53 @@
     size(); window.addEventListener('resize', size); tick();
     snow = { stop() { cancelAnimationFrame(raf); window.removeEventListener('resize', size); c.remove(); snow = null; }, recolor() { setTimeout(size, 0); } };
   }
+  // Листопад на Хэллоуин: клён, дуб и берёза падают позади содержимого, качаются маятником и переворачиваются (изнанка темнее).
+  // Движение — CSS-анимации, их считает видеокарта, скрипт в кадрах не работает. Раз в секунду листья, которые сейчас
+  // над или под экраном, получают новое место, форму и цвет. Событие animationiteration не берём: с его слушателем
+  // браузер будит главный поток на каждом круге всех анимаций страницы (у крыльев мышей круг — 0,28 с).
+  // Занимает тот же слот, что снег: seasonFx убирает листья при смене праздника.
+  function startLeaves() {
+    const box = document.createElement('div');
+    box.className = 'leaf-fall'; box.setAttribute('aria-hidden', 'true');
+    // светлый край, тёмный край, изнанка и как часто встречается: тыква, золото, клён, ржавчина, багрянец, бурый
+    const COLORS = [['#ffb052', '#e2661a', '#a8430c', 5], ['#ffd968', '#e8a120', '#a86a0e', 4], ['#f56a3c', '#bf301c', '#7f1c10', 4], ['#dd7f34', '#a24614', '#6a2c0b', 3], ['#e84a44', '#9d1f2a', '#661018', 2], ['#b98546', '#7a4a22', '#4f2e14', 2]];
+    const rnd = (a, b) => a + Math.random() * (b - a), sec = v => v.toFixed(2) + 's';
+    const round = new WeakMap(); // на каком круге падения лист сейчас
+    const dress = lf => { // лист в этот момент над или под экраном, подмена не видна
+      let r = Math.random() * 20;
+      const [c1, c2, c3] = COLORS.find(c => (r -= c[3]) < 0) || COLORS[0];
+      lf.classList.remove('lf-m', 'lf-o', 'lf-b'); lf.classList.add('lf-' + 'mmob'[Math.floor(Math.random() * 4)]);
+      lf.style.left = rnd(-4, 98).toFixed(1) + '%';
+      lf.style.setProperty('--c1', c1); lf.style.setProperty('--c2', c2); lf.style.setProperty('--c3', c3);
+    };
+    for (let i = 0; i < 24; i++) { // листья лежат под карточками и видны в промежутках; на телефоне стили оставляют первые 10
+      const lf = document.createElement('i'), sway = document.createElement('i'), turn = document.createElement('i');
+      const z = Math.random() ** 1.3, fall = 24 - z * 11, flip = Math.random() < .35; // z — близость: дальние мельче, бледнее и медленнее
+      lf.className = 'lf' + (flip ? ' lf-flip' : ''); lf.style.setProperty('--z', z.toFixed(2)); dress(lf); round.set(lf, 0);
+      lf.style.animationName = ['lfFall', 'lfFall', 'lfFallL', 'lfFallW'][i % 4];
+      lf.style.animationDuration = sec(fall); lf.style.animationDelay = sec(-rnd(0, fall));
+      sway.style.animationDuration = sec(rnd(1.6, 2.8)); sway.style.animationDelay = sec(-rnd(0, 5.6));
+      const turnDur = flip ? rnd(4, 7) : rnd(1.8, 3.2);
+      turn.style.animationDuration = sec(turnDur); turn.style.animationDelay = sec(-rnd(0, turnDur * 2));
+      sway.append(turn); lf.append(sway); box.append(lf);
+    }
+    document.body.append(box);
+    // в первые 3% круга лист ещё над экраном, после 92% уже под ним: тогда и переодеваем, один раз на круг.
+    // В остальное время лист не трогаем; wake — когда заглянуть к нему снова
+    const wake = new WeakMap();
+    const timer = setInterval(() => {
+      const now = performance.now();
+      for (const lf of box.children) {
+        if (now < (wake.get(lf) || 0)) continue;
+        const t = lf.getAnimations?.()[0]?.effect?.getComputedTiming();
+        if (!t || t.progress == null) { wake.set(lf, now + 5000); continue; } // лист скрыт (телефон) или браузер старый
+        if (t.progress > .03 && t.progress < .92) { wake.set(lf, now + (.92 - t.progress) * t.duration); continue; }
+        const n = t.currentIteration + (t.progress >= .92 ? 1 : 0);
+        if (round.get(lf) !== n) { round.set(lf, n); dress(lf); }
+      }
+    }, 1000);
+    snow = { stop() { clearInterval(timer); box.remove(); snow = null; }, recolor() {} };
+  }
   function seasonRibbon() {
     const season = activeSeason(), el = $('#season-ribbon');
     if (!el) return;
@@ -1025,12 +1075,14 @@
     if (!season || prefs.get('ribbonClosed', '') === key) { el.hidden = true; el.innerHTML = ''; return; }
     const icon = season === 'halloween'
       ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7c-1-2.5 0-4 2-4.5"/><path d="M12 7c-4.5-1-8 2-8 6.5S7 21 12 21s8-3 8-7.5S16.5 6 12 7z"/><path d="M8.5 12l1.5 1.5L11.5 12M12.5 12l1.5 1.5 1.5-1.5M9 16.5c1 .8 2 1 3 1s2-.2 3-1"/></svg>'
-      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9.5 3.5L12 6l2.5-2.5M9.5 20.5L12 18l2.5 2.5M2.7 9.6l3.4.9-.9 3.4M21.3 14.4l-3.4-.9.9-3.4M2.7 14.4l3.4-.9-.9-3.4M21.3 9.6l-3.4.9.9 3.4"/></svg>';
+      : '<svg class="ny-tree" viewBox="0 0 24 24" aria-hidden="true"><rect x="10.9" y="20.3" width="2.2" height="2.7" fill="#7a4e2d"/><path d="M12 12L19 20.2Q12 21.8 5 20.2Z" fill="#17814f"/><path d="M12 12V21Q8.5 21 5 20.2Z" fill="#25a064"/><path d="M12 8L17.4 15.4Q12 16.8 6.6 15.4Z" fill="#17814f"/><path d="M12 8V16.1Q9.3 16.1 6.6 15.4Z" fill="#25a064"/><path d="M12 4.8L16.2 10.4Q12 11.6 7.8 10.4Z" fill="#17814f"/><path d="M12 4.8V11Q9.9 11 7.8 10.4Z" fill="#25a064"/><circle cx="10.3" cy="9.3" r="1" fill="#ff3344"/><circle cx="14" cy="13.7" r="1" fill="#3d7fff"/><circle cx="9" cy="18.3" r="1.1" fill="#ff3344"/><circle cx="15" cy="18.8" r=".95" fill="#f2c14e"/><path d="M12 .6l.71 1.83 1.95.1-1.52 1.24.51 1.9L12 4.6l-1.65 1.07.51-1.9-1.52-1.24 1.95-.1z" fill="#f2c14e"/></svg>';
     const text = season === 'halloween'
-      ? L('Хэллоуин в Hookah Party · тыквенное настроение до 3 ноября', 'Halloween at Hookah Party · pumpkin mood until 3 November')
+      ? L('Хэллоуин в Hookah Party · тыквы, листопад и тёплый свет до 3 ноября', 'Halloween at Hookah Party · pumpkins, leaves and warm light until 3 November')
       : L('С наступающим Новым годом! Праздничное оформление до 10 января', 'Happy New Year! Festive look until 10 January');
+    // Новый год: слева от текста ёлочка, справа подарок
+    const gift = season === 'newyear' ? '<span class="ribbon-ic"><svg class="ny-gift" viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="11" width="15" height="10.5" rx="1.3" fill="#1f6fff"/><rect x="3.5" y="8" width="17" height="3.6" rx="1" fill="#4a8cff"/><rect x="4.5" y="11.6" width="15" height=".8" fill="#000" fill-opacity=".2"/><rect x="10.7" y="8" width="2.6" height="13.5" fill="#fff"/><path d="M12 8.1C10.3 4.2 6.6 4.3 7.4 6.6 7.9 7.9 10 8.1 12 8.1zm0 0c1.7-3.9 5.4-3.8 4.6-1.5-.5 1.3-2.6 1.5-4.6 1.5z" fill="#fff"/><ellipse cx="12" cy="7.9" rx="1.25" ry="1.05" fill="#ffd34d"/></svg></span>' : '';
     el.hidden = false;
-    el.innerHTML = `<div class="wrap ribbon-in"><span class="ribbon-ic">${icon}</span><span>${text}</span>
+    el.innerHTML = `<div class="wrap ribbon-in"><span class="ribbon-ic">${icon}</span><span>${text}</span>${gift}
       <button class="ribbon-x" type="button" data-action="closeRibbon" data-key="${key}" aria-label="${L('Скрыть', 'Hide')}">×</button></div>`;
   }
   applyLook();
@@ -2765,7 +2817,7 @@
             <div class="field"><span class="label">${L('Цвет акцента', 'Accent colour')}</span><div class="swatches" role="radiogroup" aria-label="${L('Цвет акцента', 'Accent colour')}">
               ${activeSeason() ? `<button role="radio" aria-checked="${!accentUser}" class="sw sw-season ${!accentUser ? 'on' : ''}" data-action="setAccent" data-accent="season"><i></i>${L('Как в празднике', 'Holiday colours')}</button>` : ''}
               ${Object.entries(ACCENTS).map(([k, label]) => { const on = accent === k && (accentUser || !activeSeason()); return `<button role="radio" aria-checked="${on}" class="sw sw-${k} ${on ? 'on' : ''}" data-action="setAccent" data-accent="${k}"><i></i>${tr(label)}</button>`; }).join('')}</div>
-              <small class="muted">${L('Цвет кнопок, ссылок и подсветки. Выбранный цвет сохраняется и в праздники.', 'Colour of buttons, links and highlights. Your choice stays during holidays too.')}</small></div>
+              <small class="muted">${L('Цвет кнопок и ссылок. Выбранный цвет сохраняется и в праздники, а свечение под мышкой на праздник всегда праздничное.', 'Colour of buttons and links. Your choice stays during holidays too, while the glow under the mouse is always festive on holidays.')}</small></div>
             <div class="field"><span class="label">${L('Фонарик', 'Lamp')}</span><div class="segmented" role="radiogroup" aria-label="${L('Фонарик', 'Lamp')}">${Object.entries(LAMPS).map(([k, label]) => `<button role="radio" aria-checked="${lampPref === k}" class="${lampPref === k ? 'on' : ''}" data-action="setLamp" data-lamp="${k}"><span class="lamp-dot lamp-${k}"></span>${tr(label)}</button>`).join('')}</div>
               <small class="muted">${L('Мягкое свечение фона, которое плывёт при прокрутке. «Цвет акцента» красит его в выбранный цвет.', 'The soft background glow that drifts as you scroll. “Accent colour” tints it with your chosen colour.')}</small></div>
           </div>

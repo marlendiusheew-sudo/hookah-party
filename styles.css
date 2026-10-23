@@ -112,7 +112,7 @@ body::before {
 }
 a { color: inherit; }
 img { max-width: 100%; }
-h1, h2, h3 { font-family: var(--f-display); font-weight: 700; line-height: 1.15; text-wrap: balance; margin: 0; letter-spacing: -.01em; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 700; line-height: 1.15; text-wrap: balance; margin: 0; letter-spacing: -.01em; overflow-wrap: break-word; }
 h1 { font-size: clamp(26px, 4.4vw, 40px); }
 h2 { font-size: clamp(18px, 2.4vw, 22px); }
 h3 { font-size: 16px; }
@@ -229,9 +229,9 @@ p { margin: 0; }
 /* ---------- Event cards ---------- */
 .greet { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .greet p { color: var(--muted); margin-top: 6px; }
-.ev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.ev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 14px; }
 .ev-card {
-  display: grid; grid-template-columns: auto 1fr; gap: 16px; padding: 18px; text-decoration: none;
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; padding: 18px; text-decoration: none;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
   transition: border-color .15s, transform .15s; min-width: 0;
 }
@@ -244,6 +244,7 @@ p { margin: 0; }
 .ev-date span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
 .ev-body { display: grid; gap: 6px; min-width: 0; }
 .ev-body h3 { overflow-wrap: anywhere; }
+.ev-body .chip { white-space: normal; max-width: 100%; } /* «Лидирует: …» на узком экране переносится, а не раздвигает карточку */
 .ev-venue { color: var(--muted); font-size: 14px; display: flex; gap: 6px; align-items: center; min-width: 0; }
 .ev-venue svg { width: 14px; height: 14px; flex: none; stroke: var(--accent); fill: none; stroke-width: 2; }
 .ev-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
@@ -258,13 +259,13 @@ p { margin: 0; }
   display: grid; gap: 18px; padding: 28px; border-radius: var(--r-lg); border: 1px solid var(--line);
   background: radial-gradient(420px 220px at 100% 0%, color-mix(in srgb, var(--ember) 14%, transparent), transparent 70%), var(--surface);
 }
-.ev-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.ev-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 12px; }
 .fact { display: grid; gap: 3px; padding: 12px 14px; border-radius: var(--r); background: var(--surface-2); min-width: 0; }
 .fact small { font: 500 10.5px/1.2 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 .fact b { font-weight: 600; overflow-wrap: anywhere; }
 .rsvp { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border-radius: var(--r); border: 1px dashed var(--line); }
 .ev-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: start; }
-.ev-main { display: grid; gap: 18px; min-width: 0; }
+.ev-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; min-width: 0; }
 
 .rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .rank-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 14px; border-radius: var(--r); background: var(--surface-2); }
@@ -293,7 +294,7 @@ p { margin: 0; }
 .tabs button { border: 0; background: none; color: var(--muted); font: 600 13.5px var(--f-body); padding: 8px 16px; border-radius: 999px; cursor: pointer; }
 .tabs button.active { background: var(--accent); color: var(--on-accent); }
 .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
-.cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 12px; }
 .cat-card { padding: 16px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line); display: grid; gap: 8px; align-content: start; min-width: 0; }
 .cat-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .cat-brand { font: 500 11px var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
@@ -556,7 +557,7 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 .cta-band p { color: var(--muted); margin-top: 6px; }
 
 /* Люди */
-.people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 12px; }
 .person-card { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); min-width: 0; }
 .person-link { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; text-decoration: none; }
 .person-link:hover b { color: var(--accent); }
@@ -1056,8 +1057,8 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
   .tab-plus svg { stroke-width: 2.6; }
   .hero { grid-template-columns: 1fr; padding: 24px; }
   .steps { grid-template-columns: 1fr; }
-  .ev-layout, .profile { grid-template-columns: 1fr; }
-  .footer-in { grid-template-columns: 1fr 1fr; }
+  .ev-layout, .profile { grid-template-columns: minmax(0, 1fr); }
+  .footer-in { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .footer-brand { grid-column: 1 / -1; }
   .ev-hero { padding: 20px; }
   .panel { padding: 18px; }
@@ -1084,9 +1085,47 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 /* ================= Праздничное оформление ================= */
 /* Цвета: на время праздника акцент меняется, второй цвет --season используется в деталях */
 :root { --season: var(--ember); }
+/* Хэллоуин — осень. Тёмная тема: тёплая ночь, коричнево-чёрный фон; тыква, клён и золото */
 :root[data-season="halloween"] {
-  --acc-d: #f28b30; --acc-d2: #ffad66; --acc-l: #c2560c; --acc-l2: #9c430a;
-  --season: #9a63e6; --web: color-mix(in srgb, var(--fg) 28%, transparent);
+  --bg: #140e0a; --surface: #1e1611; --surface-2: #291e16; --line: #3c2c20; --fg: #f8ede0; --muted: #b59f8a;
+  --season: #e0532f; --web: color-mix(in srgb, var(--fg) 28%, transparent);
+  /* украшения красятся своими цветами и не зависят от выбранного вручную акцента */
+  --hw-pumpkin: #f5862a; --hw-maple: #d9452b; --hw-gold: #f2b632; --hw-bat: #bba8dc;
+  --hw-t1: #f6c046; --hw-t2: #f5862a; --hw-t3: #ec5a3a;
+  /* --hw-wash — цвет широких заливок (лента, полоска сбора): ночью кленовый, днём янтарный, чтобы на креме не уходить в розовый */
+  --hw-wash: var(--hw-maple);
+  /* свет под курсором: золотая середина, тыквенный ореол, ржавый и кленовый край; --muted-lit — приглушённый текст в пятне света */
+  --sun-1: rgba(255, 170, 70, .28); --sun-2: rgba(255, 132, 46, .18); --sun-3: rgba(232, 90, 40, .115); --sun-4: rgba(196, 52, 38, .05);
+  --rim: rgba(255, 192, 104, .9); --rim-2: rgba(240, 106, 40, .42); --muted-lit: #cfbca8;
+  /* тени листьев внутри пятна света, как солнце сквозь листву; светлая тема берёт --gobo-l */
+  --gobo-d: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cdefs%3E%3CradialGradient id='f'%3E%3Cstop offset='.25' stop-color='%23fff'/%3E%3Cstop offset='1' stop-color='%23fff' stop-opacity='0'/%3E%3C/radialGradient%3E%3Cmask id='k'%3E%3Crect width='200' height='200' fill='url(%23f)'/%3E%3C/mask%3E%3Cpath id='m' d='M50 3L56 17L62 14L59.5 27L57 41L66 33L69.5 25L75.5 28.5L87 19L83 33L92 38L80.5 46L69 52.5L79.5 57.5L90 69L78 68.5L75 74.5L57 71L52.2 74.5L51.2 97L48.8 97L47.8 74.5L43 71L25 74.5L22 68.5L10 69L20.5 57.5L31 52.5L19.5 46L8 38L17 33L13 19L24.5 28.5L30.5 25L34 33L43 41L40.5 27L38 14L44 17Z'/%3E%3Cpath id='o' d='M50 13A36 8.5 90 1 0 50 85A36 8.5 90 1 0 50 13ZM50 5.5A8.5 6.5 90 1 0 50 22.5A8.5 6.5 90 1 0 50 5.5ZM52 30.8A9.5 5.6 -38 1 0 67 19.2A9.5 5.6 -38 1 0 52 30.8ZM33 22.2A9.5 5.6 38 1 0 48 33.8A9.5 5.6 38 1 0 33 22.2ZM51.9 46.7A12.5 6.6 -22 1 0 75.1 37.3A12.5 6.6 -22 1 0 51.9 46.7ZM24.9 40.8A12.5 6.6 22 1 0 48.1 50.2A12.5 6.6 22 1 0 24.9 40.8ZM51.1 61.6A11.5 6.2 -8 1 0 73.9 58.4A11.5 6.2 -8 1 0 51.1 61.6ZM26.1 60.9A11.5 6.2 8 1 0 48.9 64.1A11.5 6.2 8 1 0 26.1 60.9ZM49.2 72.7A7.5 4.6 14 1 0 63.8 76.3A7.5 4.6 14 1 0 49.2 72.7ZM36.2 77.8A7.5 4.6 -14 1 0 50.8 74.2A7.5 4.6 -14 1 0 36.2 77.8ZM48.8 82v15h2.4v-15z'/%3E%3Cpath id='b' d='M50 5C63 15 74 34 71 54C69 69 58 79 52 83L51.2 97L48.8 97L48 83C42 79 31 69 29 54C26 34 37 15 50 5Z'/%3E%3C/defs%3E%3Cg mask='url(%23k)' fill='%231a0800' fill-opacity='0.42'%3E%3Cuse href='%23m' transform='translate(42 56) rotate(20) scale(0.54) translate(-50 -50)'/%3E%3Cuse href='%23o' transform='translate(152 40) rotate(150) scale(0.46) translate(-50 -50)'/%3E%3Cuse href='%23m' transform='translate(174 118) rotate(250) scale(0.5) translate(-50 -50)'/%3E%3Cuse href='%23b' transform='translate(30 140) rotate(100) scale(0.46) translate(-50 -50)'/%3E%3Cuse href='%23m' transform='translate(110 176) rotate(200) scale(0.52) translate(-50 -50)'/%3E%3Cuse href='%23b' transform='translate(82 14) rotate(300) scale(0.4) translate(-50 -50)'/%3E%3Cuse href='%23o' transform='translate(6 94) rotate(60) scale(0.38) translate(-50 -50)'/%3E%3Cuse href='%23b' transform='translate(192 86) rotate(330) scale(0.34) translate(-50 -50)'/%3E%3Cuse href='%23b' transform='translate(140 150) rotate(30) scale(0.3) translate(-50 -50)'/%3E%3Cuse href='%23o' transform='translate(54 188) rotate(160) scale(0.36) translate(-50 -50)'/%3E%3C/g%3E%3C/svg%3E");
+  --gobo-l: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cdefs%3E%3CradialGradient id='f'%3E%3Cstop offset='.25' stop-color='%23fff'/%3E%3Cstop offset='1' stop-color='%23fff' stop-opacity='0'/%3E%3C/radialGradient%3E%3Cmask id='k'%3E%3Crect width='200' height='200' fill='url(%23f)'/%3E%3C/mask%3E%3Cpath id='m' d='M50 3L56 17L62 14L59.5 27L57 41L66 33L69.5 25L75.5 28.5L87 19L83 33L92 38L80.5 46L69 52.5L79.5 57.5L90 69L78 68.5L75 74.5L57 71L52.2 74.5L51.2 97L48.8 97L47.8 74.5L43 71L25 74.5L22 68.5L10 69L20.5 57.5L31 52.5L19.5 46L8 38L17 33L13 19L24.5 28.5L30.5 25L34 33L43 41L40.5 27L38 14L44 17Z'/%3E%3Cpath id='o' d='M50 13A36 8.5 90 1 0 50 85A36 8.5 90 1 0 50 13ZM50 5.5A8.5 6.5 90 1 0 50 22.5A8.5 6.5 90 1 0 50 5.5ZM52 30.8A9.5 5.6 -38 1 0 67 19.2A9.5 5.6 -38 1 0 52 30.8ZM33 22.2A9.5 5.6 38 1 0 48 33.8A9.5 5.6 38 1 0 33 22.2ZM51.9 46.7A12.5 6.6 -22 1 0 75.1 37.3A12.5 6.6 -22 1 0 51.9 46.7ZM24.9 40.8A12.5 6.6 22 1 0 48.1 50.2A12.5 6.6 22 1 0 24.9 40.8ZM51.1 61.6A11.5 6.2 -8 1 0 73.9 58.4A11.5 6.2 -8 1 0 51.1 61.6ZM26.1 60.9A11.5 6.2 8 1 0 48.9 64.1A11.5 6.2 8 1 0 26.1 60.9ZM49.2 72.7A7.5 4.6 14 1 0 63.8 76.3A7.5 4.6 14 1 0 49.2 72.7ZM36.2 77.8A7.5 4.6 -14 1 0 50.8 74.2A7.5 4.6 -14 1 0 36.2 77.8ZM48.8 82v15h2.4v-15z'/%3E%3Cpath id='b' d='M50 5C63 15 74 34 71 54C69 69 58 79 52 83L51.2 97L48.8 97L48 83C42 79 31 69 29 54C26 34 37 15 50 5Z'/%3E%3C/defs%3E%3Cg mask='url(%23k)' fill='%236b4a1a' fill-opacity='0.16'%3E%3Cuse href='%23m' transform='translate(42 56) rotate(20) scale(0.54) translate(-50 -50)'/%3E%3Cuse href='%23o' transform='translate(152 40) rotate(150) scale(0.46) translate(-50 -50)'/%3E%3Cuse href='%23m' transform='translate(174 118) rotate(250) scale(0.5) translate(-50 -50)'/%3E%3Cuse href='%23b' transform='translate(30 140) rotate(100) scale(0.46) translate(-50 -50)'/%3E%3Cuse href='%23m' transform='translate(110 176) rotate(200) scale(0.52) translate(-50 -50)'/%3E%3Cuse href='%23b' transform='translate(82 14) rotate(300) scale(0.4) translate(-50 -50)'/%3E%3Cuse href='%23o' transform='translate(6 94) rotate(60) scale(0.38) translate(-50 -50)'/%3E%3Cuse href='%23b' transform='translate(192 86) rotate(330) scale(0.34) translate(-50 -50)'/%3E%3Cuse href='%23b' transform='translate(140 150) rotate(30) scale(0.3) translate(-50 -50)'/%3E%3Cuse href='%23o' transform='translate(54 188) rotate(160) scale(0.36) translate(-50 -50)'/%3E%3C/g%3E%3C/svg%3E");
+  --gobo: var(--gobo-d);
+  --a1t: rgba(245, 134, 42, .22); --a1b: rgba(217, 69, 43, .18); --a2t: rgba(242, 182, 50, .12); --a2b: rgba(196, 84, 28, .16);
+  --a3t: rgba(245, 150, 60, .10); --a3b: rgba(150, 40, 50, .16); --hl: rgba(245, 134, 42, .14);
+}
+/* тыквенный акцент и «уголёк» (днём жжёно-оранжевый); выбранный вручную цвет по-прежнему сильнее */
+:root[data-season="halloween"]:not([data-accent-user]) { --acc-d: #f5862a; --acc-d2: #ffab5c; --acc-l: #b04a0a; --acc-l2: #8f3b08; --ember: var(--hw-ember, #ff6b3d); }
+/* Светлая тема — пергамент: тёплый кремовый фон и тыквенные акценты */
+@media (prefers-color-scheme: light) {
+  :root[data-season="halloween"]:not([data-theme="dark"]) {
+    --bg: #f7efe2; --surface: #fffaf3; --surface-2: #f5ebdc; --line: #eadbc4; --fg: #2b1d12; --muted: #7b6552;
+    --season: #b8381c; --hw-ember: #b8400c; --hw-wash: #e0841c; --hw-bat: #4d3b66; --hw-t1: #a8650a; --hw-t2: #b04a0a; --hw-t3: #a3301a;
+    --sun-1: rgba(255, 184, 92, .42); --sun-2: rgba(240, 150, 40, .22); --sun-3: rgba(214, 120, 30, .11); --sun-4: rgba(180, 110, 40, .05);
+    --rim: rgba(236, 128, 30, .85); --rim-2: rgba(196, 92, 22, .3); --gobo: var(--gobo-l); --muted-lit: #6a5442; --lf-fade: .12;
+    --a1t: rgba(255, 166, 80, .42); --a1b: rgba(236, 124, 40, .26); --a2t: rgba(255, 200, 90, .34); --a2b: rgba(220, 110, 50, .24);
+    --a3t: rgba(255, 214, 120, .34); --a3b: rgba(210, 112, 40, .18); --hl: rgba(245, 134, 42, .18);
+    --map-bg: #efe6d8; --map-park: #dfe3c6; --map-water: #a9c6d6;
+  }
+}
+:root[data-theme="light"][data-season="halloween"] {
+  --bg: #f7efe2; --surface: #fffaf3; --surface-2: #f5ebdc; --line: #eadbc4; --fg: #2b1d12; --muted: #7b6552;
+  --season: #b8381c; --hw-ember: #b8400c; --hw-wash: #e0841c; --hw-bat: #4d3b66; --hw-t1: #a8650a; --hw-t2: #b04a0a; --hw-t3: #a3301a;
+  --sun-1: rgba(255, 184, 92, .42); --sun-2: rgba(240, 150, 40, .22); --sun-3: rgba(214, 120, 30, .11); --sun-4: rgba(180, 110, 40, .05);
+  --rim: rgba(236, 128, 30, .85); --rim-2: rgba(196, 92, 22, .3); --gobo: var(--gobo-l); --muted-lit: #6a5442; --lf-fade: .12;
+  --a1t: rgba(255, 166, 80, .42); --a1b: rgba(236, 124, 40, .26); --a2t: rgba(255, 200, 90, .34); --a2b: rgba(220, 110, 50, .24);
+  --a3t: rgba(255, 214, 120, .34); --a3b: rgba(210, 112, 40, .18); --hl: rgba(245, 134, 42, .18);
+  --map-bg: #efe6d8; --map-park: #dfe3c6; --map-water: #a9c6d6;
 }
 
 [data-season] .tile-label { background-image: linear-gradient(90deg, var(--accent), var(--season)); }
@@ -1100,8 +1139,6 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 .ribbon-in { display: flex; align-items: center; justify-content: center; gap: 10px; padding-block: 9px; text-align: center; position: relative; }
 .ribbon-ic { display: grid; place-items: center; color: var(--accent); flex: none; }
 .ribbon-ic svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-[data-season="newyear"] .ribbon-ic svg { animation: spinSlow 12s linear infinite; }
-@keyframes spinSlow { to { transform: rotate(360deg); } }
 .ribbon-x { border: 0; background: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 0 4px; margin-left: 6px; }
 .ribbon-x:hover { color: var(--fg); }
 
@@ -1126,7 +1163,7 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 .season-fx { position: fixed; inset: 0; pointer-events: none; z-index: 19; overflow: hidden; }
 .bat { position: absolute; left: -60px; width: 46px; height: 20px; opacity: 0; animation: batFly 22s linear infinite; }
 .bat i {
-  display: block; width: 100%; height: 100%; background: color-mix(in srgb, var(--fg) 75%, var(--season));
+  display: block; width: 100%; height: 100%; background: var(--hw-bat);
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 28'%3E%3Cpath d='M32 8C30 4 28 4 27 6 24 2 18 0 12 2c2 2 2 5 0 7-4-1-8 1-12 5 6 0 10 2 12 6 3-3 7-3 10 0 2-3 6-3 8 0l2 2 2-2c2-3 6-3 8 0 3-3 7-3 10 0 2-4 6-6 12-6-4-4-8-6-12-5-2-2-2-5 0-7-6-2-12 0-15 4-1-2-3-2-5 2z'/%3E%3C/svg%3E") no-repeat center / contain;
           mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 28'%3E%3Cpath d='M32 8C30 4 28 4 27 6 24 2 18 0 12 2c2 2 2 5 0 7-4-1-8 1-12 5 6 0 10 2 12 6 3-3 7-3 10 0 2-3 6-3 8 0l2 2 2-2c2-3 6-3 8 0 3-3 7-3 10 0 2-4 6-6 12-6-4-4-8-6-12-5-2-2-2-5 0-7-6-2-12 0-15 4-1-2-3-2-5 2z'/%3E%3C/svg%3E") no-repeat center / contain;
   animation: batFlap .28s ease-in-out infinite alternate; transform-origin: 50% 40%;
@@ -1143,6 +1180,131 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
   80%, 100% { transform: translate(110vw, 0); opacity: 0; }
 }
 @keyframes batFlap { to { transform: scaleY(.45); } }
+/* осенние цвета в деталях: подписи плиток, лента, кнопки, полоска ближайшего сбора, образец «как в празднике» */
+:root[data-season="halloween"]:not([data-accent-user]) .tile-label { background-image: linear-gradient(90deg, var(--hw-t1), var(--hw-t2) 50%, var(--hw-t3)); }
+[data-season="halloween"] .season-ribbon {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--hw-wash) 17%, var(--surface)), color-mix(in srgb, var(--hw-pumpkin) 15%, var(--surface)) 50%, color-mix(in srgb, var(--hw-gold) 15%, var(--surface)));
+}
+/* в ленте тыква-фонарь вместо значка-контура; тёплый ореол вокруг неё мерцает, как свеча (только прозрачность — это дёшево) */
+[data-season="halloween"] .ribbon-ic { position: relative; isolation: isolate; width: 24px; height: 20px; }
+[data-season="halloween"] .ribbon-ic > svg { display: none; }
+[data-season="halloween"] .ribbon-ic::after {
+  content: ""; position: absolute; inset: -2px 0; pointer-events: none; filter: drop-shadow(0 0 4px rgba(255, 158, 48, .55));
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 58'%3E%3Cdefs%3E%3CradialGradient id='a' cx='.38' cy='.3' r='.8'%3E%3Cstop offset='0' stop-color='%23ffc36a'/%3E%3Cstop offset='.45' stop-color='%23f58a2c'/%3E%3Cstop offset='.82' stop-color='%23d2601a'/%3E%3Cstop offset='1' stop-color='%23a4440f'/%3E%3C/radialGradient%3E%3CradialGradient id='o' cx='.42' cy='.32' r='.8'%3E%3Cstop offset='0' stop-color='%23f79a42'/%3E%3Cstop offset='.5' stop-color='%23dc681e'/%3E%3Cstop offset='1' stop-color='%238f370c'/%3E%3C/radialGradient%3E%3CradialGradient id='f' cx='.5' cy='.58' r='.72'%3E%3Cstop offset='0' stop-color='%23fffce8'/%3E%3Cstop offset='.42' stop-color='%23ffe17a'/%3E%3Cstop offset='.8' stop-color='%23ffb433'/%3E%3Cstop offset='1' stop-color='%23ff9a1f'/%3E%3C/radialGradient%3E%3ClinearGradient id='s' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%239fb44f'/%3E%3Cstop offset='1' stop-color='%234a6020'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg stroke='%238a360b' stroke-opacity='.5' stroke-width='1.2'%3E%3Cellipse cx='17' cy='37' rx='14.5' ry='18' fill='url(%23o)'/%3E%3Cellipse cx='47' cy='37' rx='14.5' ry='18' fill='url(%23o)'/%3E%3Cellipse cx='24.5' cy='37' rx='13' ry='19.5' fill='url(%23a)'/%3E%3Cellipse cx='39.5' cy='37' rx='13' ry='19.5' fill='url(%23a)'/%3E%3Cellipse cx='32' cy='36.5' rx='10.5' ry='20.5' fill='url(%23a)'/%3E%3C/g%3E%3Cpath d='M30.2 18.6c-.6-4.6.2-8.6 3-12l3.6 1.6c-2.4 3-3 6.4-2.6 10.6z' fill='url(%23s)'/%3E%3Cpath d='M35 9.6c3.4-3.6 9-3.2 9.4.4.3 2.6-2.8 3.4-3.8 1.6' fill='none' stroke='%236f8a2e' stroke-width='1.6' stroke-linecap='round'/%3E%3Cellipse cx='27' cy='22.5' rx='3.2' ry='1.4' fill='%23fff' opacity='.22' transform='rotate(-24 27 22.5)'/%3E%3Cpath fill='url(%23f)' d='M18.5 31.5L25.5 24.5L28 32.5ZM45.5 31.5L38.5 24.5L36 32.5ZM32 33.5L29.6 38L34.4 38ZM16.5 40.5Q20 42.5 22.5 42.2L24.2 45.5L26.6 42.8Q32 43.6 37.4 42.8L39.8 45.5L41.5 42.2Q44 42.5 47.5 40.5Q45 51.5 32 51.5Q19 51.5 16.5 40.5Z'/%3E%3C/svg%3E") no-repeat center / contain;
+}
+[data-season="halloween"] .ribbon-ic::before {
+  content: ""; position: absolute; inset: -8px; z-index: -1; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(255, 168, 60, .5), rgba(255, 140, 40, .16) 60%, transparent); animation: hwGlow 3.1s ease-in-out infinite;
+}
+:root[data-season="halloween"]:not([data-accent-user]) .btn-primary { background-image: linear-gradient(135deg, transparent 30%, color-mix(in srgb, var(--hw-maple) 45%, transparent)); }
+:root[data-season="halloween"]:not([data-accent-user]) .next-strip { background-color: color-mix(in srgb, var(--hw-pumpkin) 9%, var(--surface)); border-color: color-mix(in srgb, var(--hw-pumpkin) 34%, var(--line)); }
+[data-season="halloween"] .sw-season i { background: conic-gradient(from 30deg, var(--hw-pumpkin), var(--hw-maple), var(--hw-gold), var(--hw-pumpkin)); }
+/* гирлянда под шапкой: тыквы-огоньки и листья на нитке */
+[data-season="halloween"] .topbar::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -13px; height: 26px; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 176 26'%3E%3Cdefs%3E%3CradialGradient id='a' cx='.45' cy='.4' r='.75'%3E%3Cstop offset='0' stop-color='%23ffd98a'/%3E%3Cstop offset='.55' stop-color='%23f58a2c'/%3E%3Cstop offset='1' stop-color='%23c2521a'/%3E%3C/radialGradient%3E%3Cpath id='m' d='M50 3L56 17L62 14L59.5 27L57 41L66 33L69.5 25L75.5 28.5L87 19L83 33L92 38L80.5 46L69 52.5L79.5 57.5L90 69L78 68.5L75 74.5L57 71L52.2 74.5L51.2 97L48.8 97L47.8 74.5L43 71L25 74.5L22 68.5L10 69L20.5 57.5L31 52.5L19.5 46L8 38L17 33L13 19L24.5 28.5L30.5 25L34 33L43 41L40.5 27L38 14L44 17Z'/%3E%3Cpath id='o' d='M50 13A36 8.5 90 1 0 50 85A36 8.5 90 1 0 50 13ZM50 5.5A8.5 6.5 90 1 0 50 22.5A8.5 6.5 90 1 0 50 5.5ZM52 30.8A9.5 5.6 -38 1 0 67 19.2A9.5 5.6 -38 1 0 52 30.8ZM33 22.2A9.5 5.6 38 1 0 48 33.8A9.5 5.6 38 1 0 33 22.2ZM51.9 46.7A12.5 6.6 -22 1 0 75.1 37.3A12.5 6.6 -22 1 0 51.9 46.7ZM24.9 40.8A12.5 6.6 22 1 0 48.1 50.2A12.5 6.6 22 1 0 24.9 40.8ZM51.1 61.6A11.5 6.2 -8 1 0 73.9 58.4A11.5 6.2 -8 1 0 51.1 61.6ZM26.1 60.9A11.5 6.2 8 1 0 48.9 64.1A11.5 6.2 8 1 0 26.1 60.9ZM49.2 72.7A7.5 4.6 14 1 0 63.8 76.3A7.5 4.6 14 1 0 49.2 72.7ZM36.2 77.8A7.5 4.6 -14 1 0 50.8 74.2A7.5 4.6 -14 1 0 36.2 77.8ZM48.8 82v15h2.4v-15z'/%3E%3C/defs%3E%3Cpath d='M0 3Q22 11 44 3T88 3T132 3T176 3' fill='none' stroke='%238a6a50' stroke-opacity='.8' stroke-width='1'/%3E%3Cpath d='M22 7v3' stroke='%235f7a2a' stroke-width='1.4' stroke-linecap='round'/%3E%3Cg stroke='%23a4440f' stroke-opacity='.5' stroke-width='.5'%3E%3Cellipse cx='19.6' cy='14.2' rx='3.3' ry='4.1' fill='url(%23a)'/%3E%3Cellipse cx='24.4' cy='14.2' rx='3.3' ry='4.1' fill='url(%23a)'/%3E%3Cellipse cx='22' cy='14' rx='2.5' ry='4.4' fill='url(%23a)'/%3E%3C/g%3E%3Cpath d='M19.4 13.1l1-1.3.7 1.5zM24.6 13.1l-1-1.3-.7 1.5zM19.5 15.4q2.5 2 5 0q-2.5.9-5 0z' fill='%23fff0a8'/%3E%3Cpath d='M66 7v1.6' stroke='%237a5a3a' stroke-width='.8'/%3E%3Cuse href='%23m' fill='%23f2b632' transform='translate(66 8.2) rotate(8) scale(0.12) translate(-50 -4)'/%3E%3Cpath d='M110 7v3' stroke='%235f7a2a' stroke-width='1.4' stroke-linecap='round'/%3E%3Cg stroke='%23a4440f' stroke-opacity='.5' stroke-width='.5'%3E%3Cellipse cx='107.6' cy='14.2' rx='3.3' ry='4.1' fill='url(%23a)'/%3E%3Cellipse cx='112.4' cy='14.2' rx='3.3' ry='4.1' fill='url(%23a)'/%3E%3Cellipse cx='110' cy='14' rx='2.5' ry='4.4' fill='url(%23a)'/%3E%3C/g%3E%3Cpath d='M107.4 13.1l1-1.3.7 1.5zM112.6 13.1l-1-1.3-.7 1.5zM107.5 15.4q2.5 2 5 0q-2.5.9-5 0z' fill='%23fff0a8'/%3E%3Cpath d='M154 7v1.6' stroke='%237a5a3a' stroke-width='.8'/%3E%3Cuse href='%23o' fill='%23d9452b' transform='translate(154 8.2) rotate(-10) scale(0.13) translate(-50 -4)'/%3E%3C/svg%3E") repeat-x 0 0 / 176px 26px;
+}
+/* ореолы тыкв-огоньков — отдельный слой под гирляндой, мерцает только прозрачностью */
+[data-season="halloween"] .topbar::before {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -13px; height: 26px; pointer-events: none;
+  background: radial-gradient(circle 11px at 22px 14.5px, rgba(255, 176, 58, .55), rgba(255, 138, 31, .14) 62%, transparent) 0 0 / 88px 26px repeat-x;
+  animation: hwGlow 3.6s ease-in-out infinite;
+}
+/* ведьмина шляпа на кальяне в логотипе, слегка покачивается */
+[data-season="halloween"] .topbar .brand { position: relative; }
+[data-season="halloween"] .topbar .brand::before {
+  content: ""; position: absolute; left: 4px; top: -10.5px; width: 18px; aspect-ratio: 26 / 22; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 22'%3E%3Cdefs%3E%3ClinearGradient id='c' x1='0' y1='0' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='%235a4386'/%3E%3Cstop offset='1' stop-color='%232e2148'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cellipse cx='13' cy='18.2' rx='12' ry='2.9' fill='%232e2148' stroke='%237d68a8' stroke-width='.6'/%3E%3Cpath d='M6.5 18C8.6 12.8 9.6 7.6 13.4 3.2C14.6 1.8 17.6 1.2 19.6 2.6C17 3.2 15.6 5.4 15.4 8.6C15.2 12 16.4 15.4 19 18Z' fill='url(%23c)' stroke='%237d68a8' stroke-width='.5'/%3E%3Cpath d='M7.4 15.8Q13 17.6 18.2 15.8L18.9 17.6Q13 19.6 6.6 17.6Z' fill='%23f5862a'/%3E%3Crect x='11.6' y='16' width='2.8' height='2.6' rx='.4' fill='none' stroke='%23f2b632' stroke-width='.8'/%3E%3C/svg%3E") no-repeat center / contain; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .25));
+  transform-origin: 50% 85%; transform: rotate(-13deg); animation: hwHat 6s ease-in-out infinite;
+}
+@keyframes hwHat { 50% { transform: rotate(-7deg) translateY(-.5px); } }
+/* тыквы выглядывают из-за нижнего края средней плитки; при наведении приподнимаются и разгораются ярче.
+   Ширина не заходит на подписи в центре */
+[data-season="halloween"] .tile:nth-child(2) .tile-box::before {
+  content: ""; position: absolute; right: 4%; bottom: 0; width: max(0px, calc(46% - 76px)); aspect-ratio: 100 / 76; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 76'%3E%3Cdefs%3E%3CradialGradient id='qa' cx='.38' cy='.3' r='.8'%3E%3Cstop offset='0' stop-color='%23ffc36a'/%3E%3Cstop offset='.45' stop-color='%23f58a2c'/%3E%3Cstop offset='.82' stop-color='%23d2601a'/%3E%3Cstop offset='1' stop-color='%23a4440f'/%3E%3C/radialGradient%3E%3CradialGradient id='qo' cx='.42' cy='.32' r='.8'%3E%3Cstop offset='0' stop-color='%23f79a42'/%3E%3Cstop offset='.5' stop-color='%23dc681e'/%3E%3Cstop offset='1' stop-color='%238f370c'/%3E%3C/radialGradient%3E%3CradialGradient id='qf' cx='.5' cy='.58' r='.72'%3E%3Cstop offset='0' stop-color='%23fffce8'/%3E%3Cstop offset='.42' stop-color='%23ffe17a'/%3E%3Cstop offset='.8' stop-color='%23ffb433'/%3E%3Cstop offset='1' stop-color='%23ff9a1f'/%3E%3C/radialGradient%3E%3ClinearGradient id='qs' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%239fb44f'/%3E%3Cstop offset='1' stop-color='%234a6020'/%3E%3C/linearGradient%3E%3Cg id='pk'%3E%3Cg stroke='%238a360b' stroke-opacity='.45' stroke-width='.8'%3E%3Cellipse cx='17' cy='37' rx='14.5' ry='18' fill='url(%23qo)'/%3E%3Cellipse cx='47' cy='37' rx='14.5' ry='18' fill='url(%23qo)'/%3E%3Cellipse cx='24.5' cy='37' rx='13' ry='19.5' fill='url(%23qa)'/%3E%3Cellipse cx='39.5' cy='37' rx='13' ry='19.5' fill='url(%23qa)'/%3E%3Cellipse cx='32' cy='36.5' rx='10.5' ry='20.5' fill='url(%23qa)'/%3E%3C/g%3E%3Cpath d='M30.2 18.6c-.6-4.6.2-8.6 3-12l3.6 1.6c-2.4 3-3 6.4-2.6 10.6z' fill='url(%23qs)'/%3E%3Cpath d='M35 9.6c3.4-3.6 9-3.2 9.4.4.3 2.6-2.8 3.4-3.8 1.6' fill='none' stroke='%236f8a2e' stroke-width='1.3' stroke-linecap='round'/%3E%3Cellipse cx='27' cy='22.5' rx='3.2' ry='1.4' fill='%23fff' opacity='.22' transform='rotate(-24 27 22.5)'/%3E%3Cpath d='M18.5 31.5L25.5 24.5L28 32.5ZM45.5 31.5L38.5 24.5L36 32.5ZM32 33.5L29.6 38L34.4 38ZM16.5 40.5Q20 42.5 22.5 42.2L24.2 45.5L26.6 42.8Q32 43.6 37.4 42.8L39.8 45.5L41.5 42.2Q44 42.5 47.5 40.5Q45 51.5 32 51.5Q19 51.5 16.5 40.5Z' fill='url(%23qf)'/%3E%3C/g%3E%3C/defs%3E%3Cg transform='translate(48 36.9) scale(-0.65625 0.65625)'%3E%3Cuse href='%23pk'/%3E%3C/g%3E%3Cg transform='translate(32 17) scale(1 1)'%3E%3Cuse href='%23pk'/%3E%3C/g%3E%3C/svg%3E") no-repeat bottom / contain;
+  filter: drop-shadow(0 0 5px rgba(255, 150, 40, .45)); transform: translateY(24%); transition: transform .6s var(--ease-spring), filter .6s;
+}
+[data-season="halloween"] .tile:nth-child(2):hover .tile-box::before, [data-season="halloween"] .tile:nth-child(2):focus-visible .tile-box::before { transform: translateY(5%); filter: drop-shadow(0 0 9px rgba(255, 170, 60, .66)) brightness(1.06); }
+/* подвал: куча листьев с тыквами-фонарями на верхней границе; свет лиц мерцает отдельным слоем */
+[data-season="halloween"] .footer { position: relative; }
+[data-season="halloween"] .footer::before, [data-season="halloween"] .footer::after {
+  content: ""; position: absolute; right: max(16px, calc(50% - 560px)); bottom: calc(100% - 6px); width: 300px; aspect-ratio: 300 / 86; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 86'%3E%3Cdefs%3E%3CradialGradient id='pa' cx='.38' cy='.3' r='.8'%3E%3Cstop offset='0' stop-color='%23ffc36a'/%3E%3Cstop offset='.45' stop-color='%23f58a2c'/%3E%3Cstop offset='.82' stop-color='%23d2601a'/%3E%3Cstop offset='1' stop-color='%23a4440f'/%3E%3C/radialGradient%3E%3CradialGradient id='po' cx='.42' cy='.32' r='.8'%3E%3Cstop offset='0' stop-color='%23f79a42'/%3E%3Cstop offset='.5' stop-color='%23dc681e'/%3E%3Cstop offset='1' stop-color='%238f370c'/%3E%3C/radialGradient%3E%3CradialGradient id='pf' cx='.5' cy='.58' r='.72'%3E%3Cstop offset='0' stop-color='%23fffce8'/%3E%3Cstop offset='.42' stop-color='%23ffe17a'/%3E%3Cstop offset='.8' stop-color='%23ffb433'/%3E%3Cstop offset='1' stop-color='%23ff9a1f'/%3E%3C/radialGradient%3E%3ClinearGradient id='ps' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%239fb44f'/%3E%3Cstop offset='1' stop-color='%234a6020'/%3E%3C/linearGradient%3E%3Cpath id='m' d='M50 3L56 17L62 14L59.5 27L57 41L66 33L69.5 25L75.5 28.5L87 19L83 33L92 38L80.5 46L69 52.5L79.5 57.5L90 69L78 68.5L75 74.5L57 71L52.2 74.5L51.2 97L48.8 97L47.8 74.5L43 71L25 74.5L22 68.5L10 69L20.5 57.5L31 52.5L19.5 46L8 38L17 33L13 19L24.5 28.5L30.5 25L34 33L43 41L40.5 27L38 14L44 17Z'/%3E%3Cpath id='o' d='M50 13A36 8.5 90 1 0 50 85A36 8.5 90 1 0 50 13ZM50 5.5A8.5 6.5 90 1 0 50 22.5A8.5 6.5 90 1 0 50 5.5ZM52 30.8A9.5 5.6 -38 1 0 67 19.2A9.5 5.6 -38 1 0 52 30.8ZM33 22.2A9.5 5.6 38 1 0 48 33.8A9.5 5.6 38 1 0 33 22.2ZM51.9 46.7A12.5 6.6 -22 1 0 75.1 37.3A12.5 6.6 -22 1 0 51.9 46.7ZM24.9 40.8A12.5 6.6 22 1 0 48.1 50.2A12.5 6.6 22 1 0 24.9 40.8ZM51.1 61.6A11.5 6.2 -8 1 0 73.9 58.4A11.5 6.2 -8 1 0 51.1 61.6ZM26.1 60.9A11.5 6.2 8 1 0 48.9 64.1A11.5 6.2 8 1 0 26.1 60.9ZM49.2 72.7A7.5 4.6 14 1 0 63.8 76.3A7.5 4.6 14 1 0 49.2 72.7ZM36.2 77.8A7.5 4.6 -14 1 0 50.8 74.2A7.5 4.6 -14 1 0 36.2 77.8ZM48.8 82v15h2.4v-15z'/%3E%3Cpath id='b' d='M50 5C63 15 74 34 71 54C69 69 58 79 52 83L51.2 97L48.8 97L48 83C42 79 31 69 29 54C26 34 37 15 50 5Z'/%3E%3Cg id='pk'%3E%3Cg stroke='%238a360b' stroke-opacity='.45' stroke-width='.8'%3E%3Cellipse cx='17' cy='37' rx='14.5' ry='18' fill='url(%23po)'/%3E%3Cellipse cx='47' cy='37' rx='14.5' ry='18' fill='url(%23po)'/%3E%3Cellipse cx='24.5' cy='37' rx='13' ry='19.5' fill='url(%23pa)'/%3E%3Cellipse cx='39.5' cy='37' rx='13' ry='19.5' fill='url(%23pa)'/%3E%3Cellipse cx='32' cy='36.5' rx='10.5' ry='20.5' fill='url(%23pa)'/%3E%3C/g%3E%3Cpath d='M30.2 18.6c-.6-4.6.2-8.6 3-12l3.6 1.6c-2.4 3-3 6.4-2.6 10.6z' fill='url(%23ps)'/%3E%3Cpath d='M35 9.6c3.4-3.6 9-3.2 9.4.4.3 2.6-2.8 3.4-3.8 1.6' fill='none' stroke='%236f8a2e' stroke-width='1.3' stroke-linecap='round'/%3E%3Cellipse cx='27' cy='22.5' rx='3.2' ry='1.4' fill='%23fff' opacity='.22' transform='rotate(-24 27 22.5)'/%3E%3Cpath d='M18.5 31.5L25.5 24.5L28 32.5ZM45.5 31.5L38.5 24.5L36 32.5ZM32 33.5L29.6 38L34.4 38ZM16.5 40.5Q20 42.5 22.5 42.2L24.2 45.5L26.6 42.8Q32 43.6 37.4 42.8L39.8 45.5L41.5 42.2Q44 42.5 47.5 40.5Q45 51.5 32 51.5Q19 51.5 16.5 40.5Z' fill='url(%23pf)'/%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23m' fill='%239a5a1c' transform='translate(135.8 74.5) rotate(147) scale(0.192) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23a8481a' transform='translate(141.3 71.6) rotate(257) scale(0.153) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%237a3a16' transform='translate(117.9 70.3) rotate(78) scale(0.145) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%237a3a16' transform='translate(174.7 70.6) rotate(111) scale(0.154) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%239a5a1c' transform='translate(67.8 72.6) rotate(319) scale(0.163) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%237a3a16' transform='translate(42 76.4) rotate(7) scale(0.194) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%238a4a20' transform='translate(232.6 65.2) rotate(288) scale(0.15) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23a8481a' transform='translate(212.1 63) rotate(222) scale(0.155) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%237a3a16' transform='translate(271.1 76.3) rotate(0) scale(0.192) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%238a4a20' transform='translate(270.9 77.5) rotate(156) scale(0.191) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23a8481a' transform='translate(130 66.1) rotate(17) scale(0.154) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%239a5a1c' transform='translate(237.7 78.4) rotate(136) scale(0.173) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%238a4a20' transform='translate(44.4 77.4) rotate(198) scale(0.174) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%238a4a20' transform='translate(42.4 74) rotate(133) scale(0.174) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%238a4a20' transform='translate(189.1 71.7) rotate(92) scale(0.172) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%237a3a16' transform='translate(168.6 64.2) rotate(346) scale(0.15) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%239a5a1c' transform='translate(93.2 66.2) rotate(174) scale(0.193) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%238f3a18' transform='translate(78 78.5) rotate(273) scale(0.156) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%239a5a1c' transform='translate(247 74.6) rotate(12) scale(0.141) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%239a5a1c' transform='translate(95.2 66.5) rotate(356) scale(0.178) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%239a5a1c' transform='translate(218.8 77.1) rotate(95) scale(0.155) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23a8481a' transform='translate(182.9 72.4) rotate(183) scale(0.169) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%237a3a16' transform='translate(184.8 66.5) rotate(77) scale(0.174) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%239a5a1c' transform='translate(116.1 78.3) rotate(71) scale(0.163) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%237a3a16' transform='translate(263.1 77) rotate(300) scale(0.19) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%237a3a16' transform='translate(80.5 75.6) rotate(331) scale(0.159) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23a8481a' transform='translate(166.7 72.6) rotate(267) scale(0.167) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%237a3a16' transform='translate(226.2 67.1) rotate(175) scale(0.187) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%239a5a1c' transform='translate(242.4 66.8) rotate(132) scale(0.15) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%238a4a20' transform='translate(217.4 72) rotate(218) scale(0.174) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23a8481a' transform='translate(100.2 78.6) rotate(300) scale(0.198) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%238a4a20' transform='translate(171.1 67.5) rotate(66) scale(0.162) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%238a4a20' transform='translate(192.6 77.7) rotate(231) scale(0.161) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%238f3a18' transform='translate(23.3 78.9) rotate(57) scale(0.186) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%238f3a18' transform='translate(216 66.8) rotate(305) scale(0.183) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%239e5a26' transform='translate(107.1 75.2) rotate(189) scale(0.156) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%23e8a120' transform='translate(283.4 82.3) rotate(326) scale(0.176) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23d9452b' transform='translate(194.5 72.2) rotate(6) scale(0.211) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%23e8a120' transform='translate(285.3 82.4) rotate(3) scale(0.15) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23e9661f' transform='translate(153 73) rotate(93) scale(0.184) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23f0a040' transform='translate(232.3 81.3) rotate(145) scale(0.213) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23d9452b' transform='translate(109.3 77.6) rotate(152) scale(0.183) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23b5541c' transform='translate(277.3 81.5) rotate(224) scale(0.188) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23c2361f' transform='translate(40.6 82.3) rotate(294) scale(0.158) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23e9661f' transform='translate(16.7 82.5) rotate(340) scale(0.193) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%23f0a040' transform='translate(214.9 69.1) rotate(149) scale(0.158) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23b5541c' transform='translate(193.1 71.5) rotate(348) scale(0.176) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23f2b632' transform='translate(172.2 75) rotate(105) scale(0.199) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23b5541c' transform='translate(229.3 81.6) rotate(264) scale(0.194) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23e9661f' transform='translate(226.9 77.8) rotate(45) scale(0.216) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23c2361f' transform='translate(143.4 74.8) rotate(252) scale(0.183) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23d9452b' transform='translate(245.8 82.1) rotate(85) scale(0.214) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23f2b632' transform='translate(31.9 80.2) rotate(140) scale(0.206) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23e8a120' transform='translate(192.3 82.8) rotate(123) scale(0.155) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%239e5a26' transform='translate(29.9 81.1) rotate(238) scale(0.179) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%23e9661f' transform='translate(192.6 77.2) rotate(44) scale(0.203) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23c2361f' transform='translate(16.5 82.9) rotate(336) scale(0.157) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23c2361f' transform='translate(209.1 78.5) rotate(87) scale(0.219) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23b5541c' transform='translate(226.3 70.8) rotate(326) scale(0.169) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%239e5a26' transform='translate(32.6 82) rotate(316) scale(0.182) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23f2b632' transform='translate(270.4 80.3) rotate(25) scale(0.206) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23f0a040' transform='translate(206.1 71.4) rotate(88) scale(0.176) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23e8a120' transform='translate(80.9 71.1) rotate(33) scale(0.218) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23f2b632' transform='translate(125.7 81.4) rotate(192) scale(0.201) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%23d9452b' transform='translate(179.8 70.7) rotate(200) scale(0.169) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%23b5541c' transform='translate(19.9 82) rotate(61) scale(0.16) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%23f5862a' transform='translate(110.1 75.4) rotate(348) scale(0.21) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23e9661f' transform='translate(127.4 77.8) rotate(122) scale(0.177) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23f5862a' transform='translate(142.5 67.9) rotate(254) scale(0.174) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23f0a040' transform='translate(250.6 74.9) rotate(178) scale(0.156) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%239e5a26' transform='translate(72.5 73.5) rotate(340) scale(0.197) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%23d9452b' transform='translate(202.6 77.2) rotate(115) scale(0.213) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23b5541c' transform='translate(96.2 79.1) rotate(337) scale(0.155) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23c2361f' transform='translate(219.3 68.5) rotate(130) scale(0.164) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23c2361f' transform='translate(102 69.2) rotate(99) scale(0.182) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23e8a120' transform='translate(275.9 81.7) rotate(141) scale(0.167) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23e9661f' transform='translate(101.6 76.8) rotate(68) scale(0.181) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%239e5a26' transform='translate(228 81.7) rotate(66) scale(0.19) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23f2b632' transform='translate(63.1 74.8) rotate(135) scale(0.17) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23f0a040' transform='translate(102 70) rotate(190) scale(0.164) translate(-50 -55)'/%3E%3Cg transform='translate(118 14) scale(1 1)'%3E%3Cuse href='%23pk'/%3E%3C/g%3E%3Cg transform='translate(251 33.3) scale(-0.71875 0.71875)'%3E%3Cuse href='%23pk'/%3E%3C/g%3E%3Cg transform='translate(62 46.2) scale(0.53125 0.53125)'%3E%3Cuse href='%23pk'/%3E%3C/g%3E%3Cuse href='%23b' fill='%239e5a26' transform='translate(147.2 75.4) rotate(259) scale(0.164) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%239e5a26' transform='translate(168.3 81.1) rotate(93) scale(0.142) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%239e5a26' transform='translate(120.4 78.7) rotate(130) scale(0.184) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23b5541c' transform='translate(169.2 74.1) rotate(20) scale(0.148) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23e9661f' transform='translate(157.3 72.1) rotate(123) scale(0.171) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23f0a040' transform='translate(164.6 79.4) rotate(354) scale(0.176) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%23e9661f' transform='translate(113.6 77.6) rotate(71) scale(0.175) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%23c2361f' transform='translate(124.6 78.1) rotate(180) scale(0.155) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23b5541c' transform='translate(174.1 71.5) rotate(21) scale(0.192) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23c2361f' transform='translate(168.3 77.8) rotate(112) scale(0.195) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%239e5a26' transform='translate(117.3 75.3) rotate(146) scale(0.183) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23e9661f' transform='translate(162.2 74) rotate(30) scale(0.172) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%23c2361f' transform='translate(254 77.3) rotate(164) scale(0.165) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23f0a040' transform='translate(224.7 76.8) rotate(90) scale(0.16) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23e9661f' transform='translate(238.4 75.9) rotate(298) scale(0.192) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23f0a040' transform='translate(212.5 77.9) rotate(270) scale(0.163) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23f5862a' transform='translate(221.5 76) rotate(183) scale(0.15) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%23b5541c' transform='translate(234.6 77.9) rotate(310) scale(0.161) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23f5862a' transform='translate(220.4 78) rotate(350) scale(0.174) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23d9452b' transform='translate(209.4 80.7) rotate(344) scale(0.198) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%239e5a26' transform='translate(88.8 80.3) rotate(163) scale(0.18) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23c2361f' transform='translate(67.7 82.6) rotate(153) scale(0.142) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%239e5a26' transform='translate(75.9 82.3) rotate(137) scale(0.138) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23e8a120' transform='translate(88 79.3) rotate(65) scale(0.161) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23e8a120' transform='translate(92.3 81) rotate(306) scale(0.19) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%23b5541c' transform='translate(66.5 81.5) rotate(40) scale(0.14) translate(-50 -55)'/%3E%3Cuse href='%23m' fill='%23d9452b' transform='translate(8 81) rotate(200) scale(0.12) translate(-50 -55)'/%3E%3Cuse href='%23o' fill='%23e8a120' transform='translate(292 81) rotate(130) scale(0.12) translate(-50 -55)'/%3E%3Cuse href='%23b' fill='%23f5862a' transform='translate(24 82) rotate(250) scale(0.11) translate(-50 -55)'/%3E%3C/svg%3E") no-repeat bottom / contain;
+}
+[data-season="halloween"] .footer::after { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 86'%3E%3Cdefs%3E%3CradialGradient id='h'%3E%3Cstop offset='0' stop-color='%23ffb340' stop-opacity='.55'/%3E%3Cstop offset='.5' stop-color='%23ff8a1f' stop-opacity='.18'/%3E%3Cstop offset='1' stop-color='%23ff7a10' stop-opacity='0'/%3E%3C/radialGradient%3E%3Cpath id='fc' d='M18.5 31.5L25.5 24.5L28 32.5ZM45.5 31.5L38.5 24.5L36 32.5ZM32 33.5L29.6 38L34.4 38ZM16.5 40.5Q20 42.5 22.5 42.2L24.2 45.5L26.6 42.8Q32 43.6 37.4 42.8L39.8 45.5L41.5 42.2Q44 42.5 47.5 40.5Q45 51.5 32 51.5Q19 51.5 16.5 40.5Z'/%3E%3C/defs%3E%3Ccircle cx='150' cy='50' r='60.8' fill='url(%23h)'/%3E%3Ccircle cx='228' cy='59.2' r='43.7' fill='url(%23h)'/%3E%3Ccircle cx='79' cy='65.3' r='32.3' fill='url(%23h)'/%3E%3Cg transform='translate(118 14) scale(1 1)'%3E%3Cuse href='%23fc' fill='%23fff6c8' opacity='.55'/%3E%3C/g%3E%3Cg transform='translate(251 33.3) scale(-0.71875 0.71875)'%3E%3Cuse href='%23fc' fill='%23fff6c8' opacity='.55'/%3E%3C/g%3E%3Cg transform='translate(62 46.2) scale(0.53125 0.53125)'%3E%3Cuse href='%23fc' fill='%23fff6c8' opacity='.55'/%3E%3C/g%3E%3C/svg%3E"); animation: hwGlow 3.2s ease-in-out infinite; }
+@keyframes hwGlow { 0%, 100% { opacity: .9; } 14% { opacity: .62; } 19% { opacity: 1; } 37% { opacity: .78; } 52% { opacity: .96; } 64% { opacity: .7; } 70% { opacity: 1; } 86% { opacity: .82; } }
+/* Листопад (листья создаёт startLeaves в app.js): лист падает (.lf), качается маятником (> i) и поворачивается в 3D (> i > i),
+   изнанка темнее. Всё движение — transform в CSS-анимациях, их считает видеокарта. Слой лежит позади содержимого:
+   листья видны в промежутках и сквозь стеклянную шапку, а текст и карточки всегда поверх. --z — близость листа (0…1) */
+.leaf-fall { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; contain: strict; }
+.lf { position: absolute; top: 0; width: calc(18px + var(--z, .5) * 18px); aspect-ratio: 1; opacity: calc(1 - (1 - var(--z, .5)) * var(--lf-fade, .38)); animation: lfFall 18s linear infinite; }
+.lf > i, .lf > i > i { position: absolute; inset: 0; }
+.lf > i { animation: lfSway 2.2s infinite alternate; }
+.lf > i > i { transform-style: preserve-3d; animation: lfTurn 2.6s ease-in-out infinite alternate; }
+.lf > i > i::before, .lf > i > i::after {
+  content: ""; position: absolute; inset: 0; -webkit-backface-visibility: hidden; backface-visibility: hidden;
+  -webkit-mask: var(--lf) center / contain no-repeat; mask: var(--lf) center / contain no-repeat;
+}
+.lf > i > i::before { background: var(--lf-v) center / contain no-repeat, linear-gradient(155deg, var(--c1), var(--c2)); }
+.lf > i > i::after { background: linear-gradient(155deg, var(--c2), var(--c3)); transform: rotateY(180deg); }
+.lf-flip > i > i { animation-name: lfFlip; animation-timing-function: linear; animation-direction: normal; }
+.lf-m { --lf: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 3L56 17L62 14L59.5 27L57 41L66 33L69.5 25L75.5 28.5L87 19L83 33L92 38L80.5 46L69 52.5L79.5 57.5L90 69L78 68.5L75 74.5L57 71L52.2 74.5L51.2 97L48.8 97L47.8 74.5L43 71L25 74.5L22 68.5L10 69L20.5 57.5L31 52.5L19.5 46L8 38L17 33L13 19L24.5 28.5L30.5 25L34 33L43 41L40.5 27L38 14L44 17Z'/%3E%3C/svg%3E");
+  --lf-v: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 73L50 9M50 62L85 23M50 62L15 23M50 68L88 64M50 68L12 64' fill='none' stroke='%235a1e00' stroke-opacity='.42' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E"); }
+.lf-o { --lf: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 13A36 8.5 90 1 0 50 85A36 8.5 90 1 0 50 13ZM50 5.5A8.5 6.5 90 1 0 50 22.5A8.5 6.5 90 1 0 50 5.5ZM52 30.8A9.5 5.6 -38 1 0 67 19.2A9.5 5.6 -38 1 0 52 30.8ZM33 22.2A9.5 5.6 38 1 0 48 33.8A9.5 5.6 38 1 0 33 22.2ZM51.9 46.7A12.5 6.6 -22 1 0 75.1 37.3A12.5 6.6 -22 1 0 51.9 46.7ZM24.9 40.8A12.5 6.6 22 1 0 48.1 50.2A12.5 6.6 22 1 0 24.9 40.8ZM51.1 61.6A11.5 6.2 -8 1 0 73.9 58.4A11.5 6.2 -8 1 0 51.1 61.6ZM26.1 60.9A11.5 6.2 8 1 0 48.9 64.1A11.5 6.2 8 1 0 26.1 60.9ZM49.2 72.7A7.5 4.6 14 1 0 63.8 76.3A7.5 4.6 14 1 0 49.2 72.7ZM36.2 77.8A7.5 4.6 -14 1 0 50.8 74.2A7.5 4.6 -14 1 0 36.2 77.8ZM48.8 82v15h2.4v-15z'/%3E%3C/svg%3E");
+  --lf-v: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 84L50 9M50 31L62 22M50 34L38 25M50 47L69 39M50 51L31 42M50 63L67 59M50 66L33 61' fill='none' stroke='%235a1e00' stroke-opacity='.42' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E"); }
+.lf-b { --lf: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 5C63 15 74 34 71 54C69 69 58 79 52 83L51.2 97L48.8 97L48 83C42 79 31 69 29 54C26 34 37 15 50 5Z'/%3E%3C/svg%3E");
+  --lf-v: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 84L50 11M50 30L61 23M50 30L39 23M50 45L66 37M50 45L34 37M50 60L66 54M50 60L34 54M50 72L60 68M50 72L40 68' fill='none' stroke='%235a1e00' stroke-opacity='.42' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E"); }
+@keyframes lfFall { from { transform: translate3d(0, -12vh, 0); } to { transform: translate3d(8vw, 112vh, 0); } }
+@keyframes lfFallL { from { transform: translate3d(0, -12vh, 0); } to { transform: translate3d(-6vw, 112vh, 0); } }
+@keyframes lfFallW { from { transform: translate3d(0, -12vh, 0); } to { transform: translate3d(18vw, 112vh, 0); } }
+/* маятник: в крайних точках лист выше и сильнее наклонён, внизу дуги летит быстрее всего */
+@keyframes lfSway {
+  0% { transform: translate(-120%, -22%) rotate(32deg); animation-timing-function: ease-in; }
+  50% { transform: translate(0, 0) rotate(0deg); animation-timing-function: ease-out; }
+  100% { transform: translate(120%, -22%) rotate(-32deg); }
+}
+@keyframes lfTurn { from { transform: perspective(80px) rotateX(-46deg) rotateY(-24deg); } to { transform: perspective(80px) rotateX(44deg) rotateY(28deg); } }
+/* переворот: лист подолгу летит то лицом, то изнанкой и быстро проскакивает ребро */
+@keyframes lfFlip {
+  0% { transform: perspective(80px) rotateY(18deg) rotateX(0deg); }
+  42% { transform: perspective(80px) rotateY(18deg) rotateX(40deg); }
+  50% { transform: perspective(80px) rotateY(18deg) rotateX(180deg); }
+  92% { transform: perspective(80px) rotateY(18deg) rotateX(220deg); }
+  100% { transform: perspective(80px) rotateY(18deg) rotateX(360deg); }
+}
+/* Свет под курсором осенью — как низкое солнце сквозь листву: золотая середина, тыквенный ореол, кленовый край
+   и мягкие тени листьев, которые едут вместе со светом. Шире и ярче обычного; рядом с курсором загорается и край карточки.
+   Свет праздничный при любом цвете акцента; двойной атрибут [data-season] держит ту же силу селектора. */
+:root[data-season="halloween"][data-season] :where(.tile-box, .ev-card, .cat-card, .vcard, .quote, .spot, .feature, .person-card, .step, .story-card, .venue-item, .next-card, .next-strip, .ev-hero, .stats-band, .cta-band, .history-stats > div, .notif, .feed-item, .map-card, .panel) {
+  --sun: radial-gradient(460px circle at var(--mx, -999px) var(--my, -999px), var(--sun-1), var(--sun-2) 13%, var(--sun-3) 29%, var(--sun-4) 44%, transparent 62%);
+  --gobo-at: calc(var(--mx, -999px) - 210px) calc(var(--my, -999px) - 210px);
+  background-image: var(--gobo), var(--sun); background-repeat: no-repeat; background-size: 420px, auto; background-position: var(--gobo-at), 0 0;
+}
+:root[data-season="halloween"][data-season] :where(.next-card) { background-size: 420px, auto, auto; background-position: var(--gobo-at), 0 0, 0 0; background-image: var(--gobo), var(--sun), radial-gradient(520px 220px at 100% 0%, color-mix(in srgb, var(--hw-pumpkin) 16%, transparent), transparent 70%); }
+:root[data-season="halloween"][data-season] :where(.ev-hero) { background-size: 420px, auto, auto; background-position: var(--gobo-at), 0 0, 0 0; background-image: var(--gobo), var(--sun), radial-gradient(420px 220px at 100% 0%, color-mix(in srgb, var(--hw-pumpkin) 14%, transparent), transparent 70%); }
+:root[data-season="halloween"][data-season] :where(.stats-band) { background-size: 420px, auto, auto; background-position: var(--gobo-at), 0 0, 0 0; background-image: var(--gobo), var(--sun), radial-gradient(600px 160px at 50% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%); }
+:root[data-season="halloween"][data-season] :where(.cta-band) { background-size: 420px, auto, auto; background-position: var(--gobo-at), 0 0, 0 0; background-image: var(--gobo), var(--sun), radial-gradient(420px 200px at 0% 100%, color-mix(in srgb, var(--hw-pumpkin) 18%, transparent), transparent 70%); }
+:root[data-season="halloween"][data-season] :where(.next-strip) { background-size: 420px, auto, auto; background-position: var(--gobo-at), 0 0, 0 0; background-image: var(--gobo), var(--sun), linear-gradient(90deg, color-mix(in srgb, var(--hw-wash) 10%, transparent), transparent 45%, color-mix(in srgb, var(--hw-gold) 10%, transparent)); }
+:root[data-season="halloween"][data-season] :where(.ev-card, .cat-card, .vcard, .spot, .feature, .person-card, .step, .story-card, .venue-item, .next-card, .next-strip, .ev-hero, .stats-band, .cta-band, .history-stats > div, .notif, .feed-item) { position: relative; }
+:root[data-season="halloween"][data-season] .notif { transition: background-color .15s, border-color .15s; } /* тени листьев не отстают от курсора */
+:root[data-season="halloween"][data-season] :where(.tile-box, .ev-card, .cat-card, .vcard, .quote, .spot, .feature, .person-card, .step, .story-card, .venue-item, .next-card, .next-strip, .ev-hero, .stats-band, .cta-band, .history-stats > div, .notif, .feed-item, .map-card)::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; pointer-events: none;
+  background: radial-gradient(240px circle at var(--mx, -999px) var(--my, -999px), var(--rim), var(--rim-2) 45%, transparent 75%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+/* на узких полосках и строках от теней листьев видны только обрывки — там один свет */
+[data-season="halloween"] :where(.next-strip, .notif, .feed-item, .venue-item, .history-stats > div) { --gobo: none; }
+/* в пятне света приглушённый текст чуть ярче (в светлой теме темнее), чтобы читался и на самом светлом месте */
+@media (hover: hover) {
+  :root[data-season="halloween"][data-season] :where(.tile-box, .ev-card, .cat-card, .vcard, .quote, .spot, .feature, .person-card, .step, .story-card, .venue-item, .next-card, .next-strip, .ev-hero, .stats-band, .cta-band, .history-stats > div, .notif, .feed-item, .map-card, .panel):hover { --muted: var(--muted-lit); }
+}
+@media (max-width: 760px) {
+  [data-season="halloween"] .footer::before, [data-season="halloween"] .footer::after { width: 210px; right: 12px; bottom: calc(100% - 4px); }
+  .lf { width: calc(15px + var(--z, .5) * 12px); }
+  .lf:nth-child(n+11) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .leaf-fall { display: none; } }
 
 /* --- Новый год --- */
 [data-season="newyear"] .brand-coal { fill: var(--accent); filter: drop-shadow(0 0 4px var(--accent)); animation: twinkle 1.6s ease-in-out infinite; }
@@ -1202,8 +1364,7 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 @keyframes lamp { 0%, 100% { transform: scale(1); opacity: 1; } 45% { transform: scale(1.04); opacity: .9; } 52% { opacity: .97; } 58% { opacity: .88; } }
 @keyframes drift1 { 50% { transform: translate(6vw, -4vh) scale(1.08); } }
 @keyframes drift2 { 50% { transform: translate(-5vw, 5vh) scale(.94); } }
-/* В праздники свечение берёт цвета праздника */
-:root[data-season="halloween"] { --a1t: rgba(242, 139, 48, .20); --a1b: rgba(242, 110, 30, .18); --a2t: rgba(154, 99, 230, .20); --a2b: rgba(120, 70, 210, .18); --a3t: rgba(242, 139, 48, .10); --a3b: rgba(154, 99, 230, .14); --hl: rgba(242, 139, 48, .12); }
+/* В праздники свечение берёт цвета праздника (Хэллоуин — в блоке «Праздничное оформление») */
 
 /* Свечение под курсором на карточках */
 .tile-box, .ev-card, .cat-card, .vcard, .quote, .spot, .feature, .person-card, .panel, .step {
@@ -1503,6 +1664,25 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
   .topbar-actions [data-action="cycleTheme"] { display: none; }
   .topbar-actions { gap: 8px; }
 }
+/* Узкие телефоны (360–375 px): шапка компактнее, чтобы страница не уезжала вбок */
+@media (max-width: 420px) {
+  .topbar-in { gap: 10px; }
+  .brand { gap: 7px; }
+  .brand-word { font-size: 15px; letter-spacing: .04em; }
+  .topbar-actions { gap: 6px; }
+}
+@media (max-width: 420px) {
+  .topbar-actions .lang-switch button { padding: 4px 6px; }
+}
+@media (max-width: 380px) {
+  .topbar-in { gap: 8px; }
+  .brand-word { font-size: 14.5px; letter-spacing: .03em; }
+}
+/* Совсем узкие (до 350 px): язык меняется в Профиль → Настройки, в шапке ему места нет; подвал — в одну колонку */
+@media (max-width: 350px) {
+  .topbar-actions .lang-switch { display: none; }
+  .footer-in { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ---------- Свет под курсором: остальные блоки ---------- */
 /* Тот же «фонарик», что на карточках людей: светится только место под мышкой. */
@@ -1712,8 +1892,8 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 @media (max-width: 820px) { .join { grid-template-columns: 1fr; } .join-card { padding: 20px; } }
 
 /* ================= Правила и конфиденциальность ================= */
-.legal { max-width: 760px; margin: 0 auto; padding: 12px 0 40px; display: grid; gap: 14px; }
-.legal h1 { margin-top: 6px; }
+.legal { grid-template-columns: minmax(0, 1fr); max-width: 760px; margin: 0 auto; padding: 12px 0 40px; display: grid; gap: 14px; }
+.legal h1 { margin-top: 6px; hyphens: auto; } /* «конфиденциальности» на узком телефоне переносится по слогам */
 .legal section { padding: 18px 0 0; border-top: 1px solid var(--line); }
 .legal h2 { font-size: 17px; margin-bottom: 8px; }
 .legal p { color: var(--muted); line-height: 1.65; margin: 0; }
@@ -1856,48 +2036,84 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
 .segmented button { display: inline-flex; align-items: center; gap: 7px; }
 
 /* ================= Новый год: красный и синий ================= */
-/* Тёмная тема — ночное синее небо и красные огни */
+/* Тёмная тема — ночное синее небо и яркий красный, как шуба Деда Мороза */
 :root[data-season="newyear"] {
   --bg: #0c1120; --surface: #141b2f; --surface-2: #1b2440; --line: #28324f; --fg: #eef3ff; --muted: #9aa6c4;
-  --acc-d: #ff5a64; --acc-d2: #ff8d93; --acc-l: #d01f2e; --acc-l2: #a8141f;
-  --season: #4f9dff; --pine: #2fa66a; --snowcap: #f1f6fd; --gold: #f2c14e; --ember: #ff5a64;
-  --a1t: rgba(255, 90, 100, .24); --a1b: rgba(79, 157, 255, .24); --a2t: rgba(79, 157, 255, .22); --a2b: rgba(255, 90, 100, .18);
-  --a3t: rgba(242, 193, 78, .10); --a3b: rgba(79, 157, 255, .16); --hl: rgba(255, 110, 120, .16);
+  --acc-d: #ff4757; --acc-d2: #ff6b79; --acc-l: #d01628; --acc-l2: #b0101f;
+  --season: #3d7fff; --pine: #2fa66a; --snowcap: #f1f6fd; --gold: #f2c14e; --ember: #ff4757;
+  /* Украшения всегда красно-синие, даже если цвет акцента выбран вручную */
+  --ny-red: #e3202f; --ny-red2: #ff3344; --ny-blue: #1f6fff;
+  /* Свет под мышкой: яркая красная сердцевина и тёплый ореол, который мягко гаснет; --ny-rim — край карточки.
+     Красный чуть тёплый: на ночном синем он остаётся красным, а не уходит в малиновый. */
+  --ny-g0: rgba(255, 45, 38, .36); --ny-g1: rgba(255, 42, 36, .23); --ny-g2: rgba(232, 30, 30, .11); --ny-g3: rgba(232, 30, 30, .035);
+  --ny-rim: rgba(255, 60, 66, .95);
+  --a1t: rgba(255, 51, 68, .28); --a1b: rgba(31, 111, 255, .26); --a2t: rgba(31, 111, 255, .24); --a2b: rgba(255, 51, 68, .22);
+  --a3t: rgba(255, 51, 68, .14); --a3b: rgba(31, 111, 255, .18); --hl: rgba(255, 51, 68, .2);
 }
+/* На красном — белый текст и значки (если цвет не выбран вручную) */
+:root[data-season="newyear"]:not([data-accent-user]) { --on-accent: #fff; }
 /* Светлая тема — морозное утро: голубоватый фон, насыщенные красный и синий */
 @media (prefers-color-scheme: light) {
   :root[data-season="newyear"]:not([data-theme="dark"]) {
     --bg: #eef3fb; --surface: #ffffff; --surface-2: #e9eff9; --line: #d6dfee; --fg: #131a2e; --muted: #56617e;
-    --season: #1f63d6; --snowcap: #dde8f6; --ember: #d01f2e;
-    --a1t: rgba(255, 96, 110, .34); --a1b: rgba(80, 150, 255, .36); --a2t: rgba(80, 150, 255, .34); --a2b: rgba(255, 96, 110, .26);
-    --a3t: rgba(242, 193, 78, .26); --a3b: rgba(80, 150, 255, .26); --hl: rgba(255, 96, 110, .16);
+    --season: #1a5ff0; --snowcap: #dde8f6; --ember: var(--accent);
+    --ny-g0: rgba(255, 51, 68, .22); --ny-g1: rgba(255, 51, 68, .15); --ny-g2: rgba(227, 32, 47, .08); --ny-g3: rgba(227, 32, 47, .03);
+    --ny-rim: rgba(227, 32, 47, .85);
+    --a1t: rgba(255, 70, 86, .34); --a1b: rgba(80, 140, 255, .34); --a2t: rgba(80, 140, 255, .32); --a2b: rgba(255, 70, 86, .28);
+    --a3t: rgba(255, 70, 86, .22); --a3b: rgba(80, 140, 255, .26); --hl: rgba(255, 51, 68, .16);
   }
 }
 :root[data-theme="light"][data-season="newyear"] {
   --bg: #eef3fb; --surface: #ffffff; --surface-2: #e9eff9; --line: #d6dfee; --fg: #131a2e; --muted: #56617e;
-  --season: #1f63d6; --snowcap: #dde8f6; --ember: #d01f2e;
-  --a1t: rgba(255, 96, 110, .34); --a1b: rgba(80, 150, 255, .36); --a2t: rgba(80, 150, 255, .34); --a2b: rgba(255, 96, 110, .26);
-  --a3t: rgba(242, 193, 78, .26); --a3b: rgba(80, 150, 255, .26); --hl: rgba(255, 96, 110, .16);
+  --season: #1a5ff0; --snowcap: #dde8f6; --ember: var(--accent);
+  --ny-g0: rgba(255, 51, 68, .22); --ny-g1: rgba(255, 51, 68, .15); --ny-g2: rgba(227, 32, 47, .08); --ny-g3: rgba(227, 32, 47, .03);
+  --ny-rim: rgba(227, 32, 47, .85);
+  --a1t: rgba(255, 70, 86, .34); --a1b: rgba(80, 140, 255, .34); --a2t: rgba(80, 140, 255, .32); --a2b: rgba(255, 70, 86, .28);
+  --a3t: rgba(255, 70, 86, .22); --a3b: rgba(80, 140, 255, .26); --hl: rgba(255, 51, 68, .16);
 }
-/* Лента: красно-синяя с полоской как у леденца */
+/* Цвет, выбранный вручную, сильнее праздничного и в светлой теме: им светятся фонарик и свет под мышкой (как в тёмной) */
+:root[data-season="newyear"][data-lamp="accent"][data-accent-user] {
+  --a1t: color-mix(in srgb, var(--acc-d) calc(var(--lk) * 100%), transparent); --a1b: color-mix(in srgb, var(--acc-d2) calc(var(--lk) * 90%), transparent);
+  --a2t: color-mix(in srgb, var(--acc-d2) calc(var(--lk) * 60%), transparent); --a2b: color-mix(in srgb, var(--acc-d) calc(var(--lk) * 70%), transparent);
+  --a3t: color-mix(in srgb, var(--acc-d2) calc(var(--lk) * 45%), transparent); --a3b: color-mix(in srgb, var(--acc-d) calc(var(--lk) * 60%), transparent);
+  --hl: color-mix(in srgb, var(--acc-d) calc(var(--lk) * 55%), transparent);
+}
+/* Лента: ярко-красная, как шуба Деда Мороза, с белым текстом и полоской-леденцом */
 [data-season="newyear"] .season-ribbon {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 24%, var(--surface)), color-mix(in srgb, var(--season) 24%, var(--surface)));
-  border-bottom: 0; position: relative;
+  background: linear-gradient(90deg, #ad0f1e, #d81c2c 28%, var(--ny-red) 50%, #d81c2c 72%, #ad0f1e); color: #fff;
+  border-bottom: 0; position: relative; overflow: hidden;
 }
+[data-season="newyear"] .ribbon-x { color: rgba(255, 255, 255, .8); }
+[data-season="newyear"] .ribbon-x:hover { color: #fff; }
+/* полоска шире ленты на один период узора и едет сдвигом (transform) — без перерисовки каждый кадр */
 [data-season="newyear"] .season-ribbon::after {
-  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4px;
-  background: repeating-linear-gradient(-45deg, var(--accent) 0 8px, #fff 8px 16px, var(--season) 16px 24px, #fff 24px 32px);
-  animation: candy 3s linear infinite;
+  content: ""; position: absolute; left: -67.88px; right: 0; bottom: 0; height: 4px;
+  background: repeating-linear-gradient(-45deg, var(--ny-red) 0 8px, #fff 8px 16px, var(--ny-red) 16px 24px, #fff 24px 32px, var(--ny-blue) 32px 40px, #fff 40px 48px) 0 0 / 67.88px 100%;
+  animation: candy 4s linear infinite;
 }
-@keyframes candy { to { background-position: 45px 0; } }
-/* Гирлянда: красный, синий, золотой, белый */
+@keyframes candy { to { transform: translateX(67.88px); } }
+/* Ёлочка слева от текста и подарок справа (значки — в seasonRibbon) */
+[data-season="newyear"] .ribbon-ic svg { width: 22px; height: 22px; stroke: none; transform-origin: 50% 92%; animation: nySway 3.6s ease-in-out infinite; }
+[data-season="newyear"] .ribbon-ic .ny-gift { animation-name: nyHop; }
+@keyframes nySway { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+@keyframes nyHop { 0%, 64%, 100% { transform: none; } 72% { transform: translateY(-2px) rotate(-6deg); } 82% { transform: rotate(4deg); } 91% { transform: rotate(-2deg); } }
+[data-season="newyear"] .ribbon-in > span:not(.ribbon-ic) { text-wrap: balance; }
+@media (max-width: 560px) {
+  [data-season="newyear"] .ribbon-in { gap: 6px; }
+  [data-season="newyear"] .ribbon-ic svg { width: 20px; height: 20px; }
+  [data-season="newyear"] .ribbon-x { margin-left: 0; }
+}
+/* Гирлянда: больше красных огоньков, между ними белый, синий и золотой */
 [data-season="newyear"] .topbar::after {
   background-image:
-    radial-gradient(circle at 50% 70%, var(--accent) 0 3.4px, transparent 4px),
-    radial-gradient(circle at 50% 70%, var(--season) 0 3.4px, transparent 4px),
-    radial-gradient(circle at 50% 70%, var(--gold) 0 3.4px, transparent 4px),
-    radial-gradient(circle at 50% 70%, #ffffff 0 3.4px, transparent 4px),
+    radial-gradient(circle at 50% 70%, var(--ny-red2) 0 3.2px, rgba(255, 255, 255, .85) 3.5px 4.3px, transparent 4.8px),
+    radial-gradient(circle at 50% 70%, #ffffff 0 3.6px, transparent 4.2px),
+    radial-gradient(circle at 50% 70%, var(--ny-blue) 0 3.2px, rgba(255, 255, 255, .85) 3.5px 4.3px, transparent 4.8px),
+    radial-gradient(circle at 50% 70%, var(--ny-red2) 0 3.2px, rgba(255, 255, 255, .85) 3.5px 4.3px, transparent 4.8px),
+    radial-gradient(circle at 50% 70%, var(--gold) 0 3.2px, rgba(255, 255, 255, .85) 3.5px 4.3px, transparent 4.8px),
     radial-gradient(ellipse 50% 70% at 50% 0, transparent 60%, color-mix(in srgb, var(--fg) 30%, transparent) 62% 66%, transparent 68%);
+  background-size: 130px 16px, 130px 16px, 130px 16px, 130px 16px, 130px 16px, 26px 16px;
+  background-position: 0 0, 26px 0, 52px 0, 78px 0, 104px 0, 0 -6px;
 }
 /* Шарики на ниточках над плитками */
 [data-season="newyear"] .tiles::after {
@@ -1906,12 +2122,83 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
   transform-origin: 50% 0; animation: baubles 5s ease-in-out infinite;
 }
 @keyframes baubles { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
-@media (max-width: 760px) { [data-season="newyear"] .tiles::after { right: 4%; width: 44px; height: 60px; } }
-/* Кнопки и карточки в праздник */
+/* на телефоне шарики висят от полоски-леденца (или от гирлянды, если ленту скрыли) и не закрывают значок плитки */
+@media (max-width: 760px) { [data-season="newyear"] .tiles::after { top: -30px; right: 3%; width: 41px; height: 56px; } }
+/* Главные кнопки — красные с белым текстом, как шуба Деда Мороза */
 [data-season="newyear"] .btn-primary { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, var(--season))); border-color: transparent; }
+[data-season="newyear"]:not([data-accent-user]) .btn-primary {
+  background: linear-gradient(180deg, #ee2b3b, #c8132a); color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 8px 22px -10px rgba(227, 32, 47, .85);
+}
+[data-season="newyear"]:not([data-accent-user]) .btn-primary:hover { background: linear-gradient(180deg, #f6323f, #cf1529); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 10px 26px -10px rgba(255, 51, 68, .95); }
+/* Счётчики уведомлений — тот же красный, белые цифры читаются лучше */
+[data-season="newyear"]:not([data-accent-user]) :is(.bell-badge, .cnt.alert) { background: var(--ny-red); }
 [data-season="newyear"] .tile:hover .tile-box { border-color: color-mix(in srgb, var(--season) 60%, var(--line)); box-shadow: 0 18px 40px -18px color-mix(in srgb, var(--season) 70%, transparent), 0 10px 30px -20px var(--accent); }
+[data-season="newyear"][data-season] .tile:hover .tile-box {
+  background-color: color-mix(in srgb, var(--ny-red) 3%, var(--surface)); border-color: color-mix(in srgb, var(--ny-red2) 50%, var(--line));
+  box-shadow: 0 22px 46px -22px rgba(255, 51, 68, .7), 0 10px 28px -20px rgba(214, 20, 36, .9);
+}
 [data-season="newyear"] .eyebrow { color: var(--season); }
-@media (prefers-reduced-motion: reduce) { [data-season="newyear"] .season-ribbon::after, [data-season="newyear"] .tiles::after{ animation: none; } }
+/* Мелкие красные подписи на красноватых плашках — оттенок поконтрастнее, чтобы читались */
+[data-season="newyear"]:not([data-accent-user]) :is(.is-top .rank-pos, .lead-badge, .react-btn.on, .react-btn.on b, .react-chip.on b, .active .cnt:not(.alert), .fav-btn.on) { color: var(--accent-strong); }
+/* Свет под мышкой — красный, как огоньки на ёлке: яркая сердцевина и тёплый ореол, который мягко гаснет.
+   Он праздничный при любом цвете акцента. Двойной атрибут [data-season="newyear"][data-season] держит ту же силу
+   селектора, что и правила для акцента, чтобы праздничный свет не перебивали обычные. */
+[data-season="newyear"][data-season] :is(.tile-box, .ev-card, .cat-card, .vcard, .quote, .spot, .feature, .person-card, .panel, .step, .story-card,
+  .venue-item, .next-strip, .notif, .feed-item, .map-card, .next-card, .ev-hero, .stats-band, .cta-band, .history-stats > div) {
+  --nyg: radial-gradient(440px circle at var(--mx, -999px) var(--my, -999px), var(--ny-g0), var(--ny-g1) 10%, var(--ny-g2) 28%, var(--ny-g3) 44%, transparent 62%);
+  background-image: var(--nyg);
+}
+[data-season="newyear"][data-season] .next-card { background-image: var(--nyg), radial-gradient(520px 220px at 100% 0%, color-mix(in srgb, var(--ember) 16%, transparent), transparent 70%); }
+[data-season="newyear"][data-season] .ev-hero { background-image: var(--nyg), radial-gradient(420px 220px at 100% 0%, color-mix(in srgb, var(--ember) 14%, transparent), transparent 70%); }
+[data-season="newyear"][data-season] .stats-band { background-image: var(--nyg), radial-gradient(600px 160px at 50% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%); }
+[data-season="newyear"][data-season] .cta-band { background-image: var(--nyg), radial-gradient(420px 200px at 0% 100%, color-mix(in srgb, var(--ember) 18%, transparent), transparent 70%); }
+/* …а край карточки рядом с мышкой загорается красной каймой */
+[data-season="newyear"][data-season] :is(.ev-card, .cat-card, .vcard, .person-card, .feature, .step, .story-card, .next-card) { position: relative; }
+[data-season="newyear"][data-season] :is(.tile-box, .ev-card, .cat-card, .vcard, .quote, .person-card, .feature, .step, .story-card, .next-card)::after {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1.5px; pointer-events: none;
+  background: radial-gradient(220px circle at var(--mx, -999px) var(--my, -999px), var(--ny-rim), transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+[data-season="newyear"][data-season] :is(.tile-box, .quote, .story-card)::after { inset: 0; }
+/* Внизу страницы — ёлочка с игрушками и подарки на снежном сугробе; огоньки мерцают */
+[data-season="newyear"] .footer { position: relative; }
+[data-season="newyear"] .footer::before {
+  content: ""; position: absolute; left: 0; right: 0; top: -5px; height: 10px; z-index: 1; pointer-events: none; background: var(--snowcap);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 10' preserveAspectRatio='none'%3E%3Cpath d='M0 10V1.5C22 1.5 23 4 45 4C70 4 70 1 95 1C118 1 117 3.6 140 3.6C160 3.6 160 1.5 180 1.5V10Z'/%3E%3C/svg%3E") repeat-x 0 0 / 180px 100%; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 10' preserveAspectRatio='none'%3E%3Cpath d='M0 10V1.5C22 1.5 23 4 45 4C70 4 70 1 95 1C118 1 117 3.6 140 3.6C160 3.6 160 1.5 180 1.5V10Z'/%3E%3C/svg%3E") repeat-x 0 0 / 180px 100%;
+}
+[data-season="newyear"] .footer::after, [data-season="newyear"] .footer-in::before, [data-season="newyear"] .footer-in::after {
+  content: ""; position: absolute; top: -71px; right: max(24px, calc(50% - 576px)); width: 120px; height: 76px; pointer-events: none;
+}
+[data-season="newyear"] .footer::after {
+  background: radial-gradient(farthest-side at 50% 100%, var(--snowcap) calc(100% - 1px), transparent) 50% 100% / 100% 10px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='22 0 132 84'%3E%3Cdefs%3E%3CradialGradient id='g' cx='.5' cy='.5' r='.5'%3E%3Cstop offset='0' stop-color='%23ffd76a' stop-opacity='.9'/%3E%3Cstop offset='1' stop-color='%23ffd76a' stop-opacity='0'/%3E%3C/radialGradient%3E%3ClinearGradient id='rb' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23ef2a3a'/%3E%3Cstop offset='1' stop-color='%23c3142a'/%3E%3C/linearGradient%3E%3ClinearGradient id='bb' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%232f7bff'/%3E%3Cstop offset='1' stop-color='%231a56d6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='54.5' y='70' width='7' height='10' fill='%237a4e2d'/%3E%3Cpath d='M58 36L88 72Q58 77 28 72Z' fill='%2317814f'/%3E%3Cpath d='M58 36L58 74.5Q43 74.5 28 72Z' fill='%2325a064'/%3E%3Cpath d='M58 24L80 52Q58 57 36 52Z' fill='%2317814f'/%3E%3Cpath d='M58 24L58 54.5Q47 54.5 36 52Z' fill='%2325a064'/%3E%3Cpath d='M58 13L72 33Q58 37 44 33Z' fill='%2317814f'/%3E%3Cpath d='M58 13L58 35Q51 35 44 33Z' fill='%2325a064'/%3E%3Cpath d='M45.5 39.5Q58 46 70.5 38.5M41.5 55Q58 63 75 54' fill='none' stroke='%23f2c14e' stroke-width='1' stroke-opacity='.75'/%3E%3Cg stroke='%23000' stroke-opacity='.12' stroke-width='.6'%3E%3Ccircle cx='52' cy='28' r='3.2' fill='%23e3202f'/%3E%3Ccircle cx='69' cy='45' r='3.2' fill='%23e3202f'/%3E%3Ccircle cx='40' cy='65' r='3.4' fill='%23e3202f'/%3E%3Ccircle cx='45' cy='47' r='3.2' fill='%231f6fff'/%3E%3Ccircle cx='74' cy='63' r='3.4' fill='%231f6fff'/%3E%3Ccircle cx='64.5' cy='30.5' r='2.3' fill='%23f2c14e'/%3E%3Ccircle cx='57' cy='66' r='2.6' fill='%23f2c14e'/%3E%3C/g%3E%3Cg fill='%23fff' fill-opacity='.75'%3E%3Ccircle cx='51' cy='27' r='.9'/%3E%3Ccircle cx='68' cy='44' r='.9'/%3E%3Ccircle cx='39' cy='64' r='1'/%3E%3Ccircle cx='44' cy='46' r='.9'/%3E%3Ccircle cx='73' cy='62' r='1'/%3E%3C/g%3E%3Ccircle cx='58' cy='9' r='10' fill='url(%23g)'/%3E%3Cpath d='M58.0 1.8L59.8 6.6L64.8 6.8L60.9 9.9L62.2 14.8L58.0 12.0L53.8 14.8L55.1 9.9L51.2 6.8L56.2 6.6Z' fill='%23f2c14e' stroke='%23e0a82e' stroke-width='.6' stroke-linejoin='round'/%3E%3Crect x='93' y='57' width='28' height='22' rx='1.5' fill='url(%23rb)'/%3E%3Crect x='91' y='51.5' width='32' height='7' rx='1.5' fill='%23f0303f'/%3E%3Crect x='93' y='58.5' width='28' height='1.4' fill='%23000' fill-opacity='.16'/%3E%3Crect x='104' y='51.5' width='6' height='27.5' fill='%23fff'/%3E%3Crect x='106.2' y='51.5' width='1.6' height='27.5' fill='%231f6fff'/%3E%3Cpath d='M91 53C91 52.1 91.7 51.5 92.6 51.5H121.4C122.3 51.5 123 52.1 123 53V53.4C121.6 54.6 120 54.6 118.6 53.7C117 55 114.8 54.9 113.4 53.7C111.6 55 109.2 54.8 107.8 53.6C106.2 54.9 103.8 54.9 102.3 53.7C100.6 55 98.4 54.8 97 53.7C95.4 54.8 93.4 54.8 91 53.6Z' fill='%23fff'/%3E%3Cpath d='M107 51.5C101 43 95.5 46.5 98.5 50C100 51.6 104 51.8 107 51.5ZM107 51.5C113 43 118.5 46.5 115.5 50C114 51.6 110 51.8 107 51.5Z' fill='%231f6fff'/%3E%3Cellipse cx='107' cy='51' rx='2.4' ry='2' fill='%23fff'/%3E%3Crect x='126' y='64' width='22' height='15' rx='1.4' fill='url(%23bb)'/%3E%3Crect x='124.5' y='59.5' width='25' height='5.5' rx='1.2' fill='%233d86ff'/%3E%3Crect x='126' y='65' width='22' height='1.2' fill='%23000' fill-opacity='.16'/%3E%3Crect x='135' y='59.5' width='4' height='19.5' fill='%23e3202f'/%3E%3Cpath d='M124.5 60.8C124.5 60.1 125.1 59.5 125.8 59.5H148.2C148.9 59.5 149.5 60.1 149.5 60.8V61.2C148.2 62.2 146.8 62.1 145.6 61.4C144.2 62.4 142.4 62.3 141.2 61.4C139.8 62.4 138 62.3 136.8 61.4C135.4 62.4 133.6 62.3 132.4 61.4C131 62.4 129.2 62.3 128 61.4C126.8 62.2 125.6 62.1 124.5 61.4Z' fill='%23fff'/%3E%3Cpath d='M137 59.5C132.5 53 128.5 55.5 130.8 58.2C132 59.4 135 59.6 137 59.5ZM137 59.5C141.5 53 145.5 55.5 143.2 58.2C142 59.4 139 59.6 137 59.5Z' fill='%23e3202f'/%3E%3Cellipse cx='137' cy='59.2' rx='1.8' ry='1.5' fill='%23ff5a66'/%3E%3C/svg%3E") 50% 0 / 100% auto no-repeat;
+}
+[data-season="newyear"] .footer-in::before { z-index: 2; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='22 0 132 84'%3E%3Cdefs%3E%3CradialGradient id='s'%3E%3Cstop offset='0' stop-color='%23fff8d6'/%3E%3Cstop offset='.35' stop-color='%23ffd25a' stop-opacity='.75'/%3E%3Cstop offset='1' stop-color='%23ffd25a' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='r'%3E%3Cstop offset='0' stop-color='%23fff' stop-opacity='.95'/%3E%3Cstop offset='.32' stop-color='%23ff5a68' stop-opacity='.75'/%3E%3Cstop offset='1' stop-color='%23ff3344' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='58' cy='9' r='14' fill='url(%23s)'/%3E%3Cpath d='M58 -.5L59 8 67.5 9 59 10 58 18.5 57 10 48.5 9 57 8Z' fill='%23fff' fill-opacity='.9'/%3E%3Ccircle cx='52' cy='28' r='6.5' fill='url(%23r)'/%3E%3Ccircle cx='69' cy='45' r='6.5' fill='url(%23r)'/%3E%3Ccircle cx='40' cy='65' r='7' fill='url(%23r)'/%3E%3C/svg%3E") 50% 0 / 100% auto no-repeat; animation: nyTwinkle 3s ease-in-out infinite; }
+[data-season="newyear"] .footer-in::after { z-index: 2; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='22 0 132 84'%3E%3Cdefs%3E%3CradialGradient id='b'%3E%3Cstop offset='0' stop-color='%23fff' stop-opacity='.95'/%3E%3Cstop offset='.32' stop-color='%235b95ff' stop-opacity='.75'/%3E%3Cstop offset='1' stop-color='%231f6fff' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='y'%3E%3Cstop offset='0' stop-color='%23fff' stop-opacity='.95'/%3E%3Cstop offset='.32' stop-color='%23ffd25a' stop-opacity='.75'/%3E%3Cstop offset='1' stop-color='%23f2c14e' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='45' cy='47' r='6.5' fill='url(%23b)'/%3E%3Ccircle cx='74' cy='63' r='7' fill='url(%23b)'/%3E%3Ccircle cx='64.5' cy='30.5' r='5' fill='url(%23y)'/%3E%3Ccircle cx='57' cy='66' r='5.5' fill='url(%23y)'/%3E%3C/svg%3E") 50% 0 / 100% auto no-repeat; animation: nyTwinkle 3s ease-in-out -1.5s infinite; }
+@keyframes nyTwinkle { 0%, 100% { opacity: .1; } 50% { opacity: 1; } }
+@media (max-width: 760px) {
+  [data-season="newyear"] .footer::after, [data-season="newyear"] .footer-in::before, [data-season="newyear"] .footer-in::after { top: -56px; right: 16px; width: 94px; height: 60px; }
+}
+/* «Что-то сильное»: шапка Деда Мороза на кальяне в логотипе. Опушка лежит на угольке:
+   под ней видны горящий уголёк и чаша, ниже шахта и колба — кальян остаётся кальяном */
+[data-season="newyear"] .topbar .brand { position: relative; }
+[data-season="newyear"] .topbar .brand::before {
+  content: ""; position: absolute; left: 4px; top: -11.5px; width: 20px; height: 18.75px; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 30'%3E%3Cdefs%3E%3ClinearGradient id='h' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23ff4d5b'/%3E%3Cstop offset='.55' stop-color='%23e3202f'/%3E%3Cstop offset='1' stop-color='%23a80f1f'/%3E%3C/linearGradient%3E%3ClinearGradient id='f' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23fff'/%3E%3Cstop offset='1' stop-color='%23dfe6f0'/%3E%3C/linearGradient%3E%3Cfilter id='s' x='-10%25' y='-10%25' width='120%25' height='140%25'%3E%3CfeDropShadow dx='0' dy='1.4' stdDeviation='.8' flood-opacity='.32'/%3E%3C/filter%3E%3C/defs%3E%3Cg filter='url(%23s)'%3E%3Cpath d='M5 21C5.5 13 10 5.5 18 4C23.5 3 27.5 6.5 28.5 12.5C26.7 10.8 24.6 10.6 23.3 12C24.5 15 25.6 18 26 21Z' fill='url(%23h)'/%3E%3Ccircle cx='28.4' cy='13.6' r='3.3' fill='url(%23f)'/%3E%3Crect x='3' y='19' width='25.5' height='6.5' rx='3.25' fill='url(%23f)'/%3E%3C/g%3E%3C/svg%3E") no-repeat center / contain;
+  transform: rotate(-14deg); transform-origin: 40% 90%; animation: nyHat 4.5s ease-in-out infinite; will-change: transform;
+}
+@keyframes nyHat { 50% { transform: rotate(-8deg); } }
+/* при наведении на логотип шапка приподнимается, как в приветствии, и под ней горит уголёк */
+[data-season="newyear"] .topbar .brand:hover::before { animation: nyHatTip .7s ease-in-out; }
+@keyframes nyHatTip { 0%, 100% { transform: rotate(-14deg); } 45% { transform: translateY(-3px) rotate(-26deg); } }
+/* уголёк под опушкой горит ровно, без мерцания; дымок убран — он прошёл бы сквозь шапку */
+[data-season="newyear"] .topbar .brand-coal { animation: none; filter: drop-shadow(0 0 2.5px var(--accent)); }
+[data-season="newyear"] .topbar .brand-smoke { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  [data-season="newyear"] .season-ribbon::after, [data-season="newyear"] .tiles::after { animation: none; }
+  [data-season="newyear"] .footer-in::before, [data-season="newyear"] .footer-in::after { opacity: .6; }
+}
 .mix-thumbs .flavor-thumb, .fit-chip .flavor-thumb, .mix-parts .flavor-thumb { margin-right: 0; }
 /* Выбранный вручную цвет красит и «уголёк»: полоску ближайшего сбора, точки и стрелки */
 :root[data-accent-user] { --ember: var(--accent); }
