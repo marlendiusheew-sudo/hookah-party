@@ -262,9 +262,9 @@
           picks: { u1: ['ds-supernova', 'mh-pinkman'], u2: ['ds-supernova', 'ad-love66'], u3: ['ds-supernova', 'mh-pinkman', 'tg-canemint'], u5: ['ds-bananapapa'] },
           bowls: { u1: 'b-phunnel', u2: 'b-phunnel', u3: 'b-killer' },
           comments: [
-            { id: 'c1', userId: 'u3', text: 'Бронь на 20:30 подтвердили?', at: ago(180) },
-            { id: 'c2', userId: 'u1', text: 'Да, диван у окна наш до двух ночи.', at: ago(150) },
-            { id: 'c3', userId: 'u2', text: 'Возьму свой мундштук и калауд.', at: ago(40) }
+            { id: 'c1', userId: 'u3', text: 'Бронь на 20:30 подтвердили?', at: ago(180), reactions: { u1: '👍' } },
+            { id: 'c2', userId: 'u1', text: 'Да, диван у окна наш до двух ночи. 🔥', at: ago(150), reactions: { u2: '🔥', u3: '👍', u5: '👍' } },
+            { id: 'c3', userId: 'u2', text: 'Возьму свой мундштук и калауд 💨', at: ago(40), reactions: { u3: '❤️', u5: '😂' } }
           ],
           remind: {}, notified: {}
         },
@@ -331,7 +331,7 @@
             text: 'Последний тёплый вечер на веранде. Взяли два кальяна на фанеле и просидели до двух ночи. «Ледяной грейпфрут» по нашему миксу зашёл всем, второй забили так же.',
             highlights: ['Pinkman + грейпфрут + капля Supernova — лучший микс лета', 'Веранда с видом на проспект, бронируйте заранее', 'Вышло по 480 сом с человека'],
             comments: [
-              { id: 'sc2', userId: 'u1', text: 'Лучший вечер этого лета, без вариантов.', at: past(54, 13) },
+              { id: 'sc2', userId: 'u1', text: 'Лучший вечер этого лета, без вариантов.', at: past(54, 13), reactions: { u2: '❤️', u3: '🔥', u6: '❤️' } },
               { id: 'sc3', userId: 'u5', text: 'Повторим в сентябре, пока не похолодало?', at: past(53, 18) },
               { id: 'sc4', userId: 'u6', text: 'Микс записала себе в избранное.', at: past(52, 10) }
             ] }),
@@ -347,7 +347,7 @@
             text: 'Отмечали втроём. Первый кальян на грейпфруте с мармеладными мишками, второй — Blue Mist. Музыка не громкая, можно спокойно поговорить.',
             highlights: ['Чаша на грейпфруте — must have для праздника', 'Gummi Bear + Love 66 — сладко, но не приторно', 'Попросите столик у окна'],
             comments: [
-              { id: 'sc6', userId: 'u2', text: 'Мишки на грейпфруте — это любовь.', at: past(19, 14) },
+              { id: 'sc6', userId: 'u2', text: 'Мишки на грейпфруте — это любовь 🍊🐻', at: past(19, 14), reactions: { u4: '❤️', u6: '😂' } },
               { id: 'sc7', userId: 'u3', text: 'Надо будет сводить туда парней.', at: past(18, 20) }
             ] }),
         ev('e7', 'Новогодний сбор', 'n5620015285', nyAt, 'u1', ['u2', 'u3', 'u4', 'u5', 'u6'],
@@ -1382,6 +1382,7 @@
     const v = eventVenue(e);
     const q = placeQuery(e.venue, e.address);
     const votes = n => pl(n, ['голос', 'голоса', 'голосов'], ['vote', 'votes']);
+    const quota = chatQuota(e, u);
 
     const rankHtml = (rank, kind) => {
       if (!rank.length) return emptyState(kind === 't' ? L('Пока никто не выбрал табак', 'No tobacco picked yet') : L('Чашу ещё не выбрали', 'No bowl picked yet'), kind === 't' ? L('Отметьте свои вкусы, и список начнёт складываться.', 'Mark your flavours and the list will start to form.') : L('Проголосуйте за чашу, на которой хотите курить.', 'Vote for the bowl you want.'));
@@ -1469,15 +1470,14 @@
           </section>
           <section class="panel">
             <div class="panel-head"><h2>${L('Обсуждение', 'Discussion')}</h2><span class="muted" style="font-size:13.5px">${e.comments.length} ${pl(e.comments.length, ['сообщение', 'сообщения', 'сообщений'], ['message', 'messages'])}</span></div>
-            <ul class="comments">${e.comments.length ? e.comments.map(c => {
-              const p = userById(c.userId);
-              return `<li class="comment">${avatar(p, 'sm')}<div class="comment-body"><div class="comment-head"><b>${esc(p?.name || '—')}</b><small>${timeAgo(c.at)}</small>
-                ${c.userId === u.id || isHost ? `<button class="link-btn danger" data-action="deleteComment" data-id="${e.id}" data-comment="${c.id}">${L('Удалить', 'Delete')}</button>` : ''}</div><p>${esc(c.text)}</p></div></li>`;
-            }).join('') : `<li class="muted">${L('Пока тихо. Напишите первым: кто что берёт, во сколько встречаемся.', 'Quiet so far. Be the first: who brings what, what time to meet.')}</li>`}</ul>
+            <ul class="comments">${e.comments.length ? e.comments.map(c => commentItem(c, { scope: 'ev', eventId: e.id, u, canDelete: c.userId === u.id || isHost, delAction: 'deleteComment' })).join('')
+              : `<li class="muted">${L('Пока тихо. Напишите первым: кто что берёт, во сколько встречаемся.', 'Quiet so far. Be the first: who brings what, what time to meet.')}</li>`}</ul>
             <form class="comment-form" id="comment-form">
-              <textarea id="comment-text" rows="2" maxlength="500" placeholder="${L('Сообщение участникам', 'Message to guests')}" aria-label="${L('Сообщение', 'Message')}"></textarea>
-              <button class="btn btn-primary" type="submit">${L('Отправить', 'Send')}</button>
+              <div class="cf-box"><textarea id="comment-text" rows="2" maxlength="500" placeholder="${L('Сообщение участникам', 'Message to guests')}" aria-label="${L('Сообщение', 'Message')}" ${quota.ok ? '' : 'disabled'}></textarea>
+                <button type="button" class="emoji-btn" data-action="emoji" data-target="comment-text" data-pop-anchor aria-label="${L('Смайлики', 'Emoji')}" ${quota.ok ? '' : 'disabled'}>${SMILE}</button></div>
+              <button class="btn btn-primary" type="submit" ${quota.ok ? '' : 'disabled'}>${L('Отправить', 'Send')}</button>
             </form>
+            <p class="quota ${quota.ok ? '' : 'blocked'}">${ICON.clock}<span>${quotaText(quota)}</span></p>
           </section>
         </div>
         <div class="ev-main">
@@ -1508,11 +1508,128 @@
       ev.preventDefault();
       const text = ta.value.trim();
       if (!text) return;
-      e.comments.push({ id: uid('c'), userId: u.id, text, at: new Date().toISOString() });
+      const q = chatQuota(e, u);
+      if (!q.ok) { toast(L('Сейчас отправить нельзя: сработало ограничение на сообщения', 'You can’t send right now: message limit reached'), 'err'); render(); return; }
+      e.comments.push({ id: uid('c'), userId: u.id, text, at: new Date().toISOString(), reactions: {} });
       save(); render();
-      $('#comment-text')?.focus();
     });
+    if (!quota.ok) startQuotaTimer();
     ta.addEventListener('keydown', ev => { if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) form.requestSubmit(); });
+  }
+
+  // ---------- Сообщения: защита от спама, реакции, смайлики ----------
+  // Ограничения на одного человека. Это удобство для честных пользователей: настоящую защиту от DDoS и спама
+  // даёт сервер (те же правила в API плюс ограничение запросов на уровне nginx/Cloudflare).
+  const LIMITS = {
+    cooldownMs: 3 * 60e3,          // одно сообщение раз в 3 минуты в обсуждении сбора
+    perEvent: 10,                  // не больше 10 сообщений в одном сборе…
+    perEventWindowMs: 24 * 3600e3, // …за сутки
+    global: 144,                   // не больше 144 сообщений на всём сайте…
+    globalWindowMs: 7 * 3600e3     // …за 7 часов (считаются и комментарии в «Истории»)
+  };
+  const msgTime = c => new Date(c.at).getTime();
+  function myRecentMessages(u) {
+    const now = Date.now(), out = [];
+    for (const e of db.events) for (const c of [...e.comments, ...(e.story?.comments || [])]) if (c.userId === u.id && now - msgTime(c) < LIMITS.globalWindowMs) out.push(msgTime(c));
+    return out.sort((a, b) => a - b);
+  }
+  function chatQuota(e, u) {
+    const now = Date.now(), global = myRecentMessages(u);
+    const mine = e.comments.filter(c => c.userId === u.id).map(msgTime).sort((a, b) => a - b);
+    const inEvent = mine.filter(t => now - t < LIMITS.perEventWindowMs), last = mine[mine.length - 1] || 0;
+    const q = { leftEvent: LIMITS.perEvent - inEvent.length, leftGlobal: LIMITS.global - global.length };
+    if (q.leftGlobal <= 0) return { ...q, ok: false, reason: 'global', until: global[0] + LIMITS.globalWindowMs };
+    if (q.leftEvent <= 0) return { ...q, ok: false, reason: 'event', until: inEvent[0] + LIMITS.perEventWindowMs };
+    if (last && now - last < LIMITS.cooldownMs) return { ...q, ok: false, reason: 'cooldown', until: last + LIMITS.cooldownMs };
+    return { ...q, ok: true };
+  }
+  function fmtWait(ms) {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    if (s < 3600) return `${Math.floor(s / 60)}:${pad(s % 60)}`;
+    const h = Math.floor(s / 3600), m = Math.ceil((s % 3600) / 60);
+    return L(`${h} ч ${m} мин`, `${h} h ${m} min`);
+  }
+  function quotaText(q) {
+    if (q.ok) return L(`Можно написать ещё ${q.leftEvent} ${plural(q.leftEvent, 'сообщение', 'сообщения', 'сообщений')} в этом сборе сегодня · одно сообщение раз в 3 минуты`,
+      `${q.leftEvent} more ${q.leftEvent === 1 ? 'message' : 'messages'} in this event today · one message every 3 minutes`);
+    const w = `<b class="mono" data-until="${q.until}">${fmtWait(q.until - Date.now())}</b>`;
+    return {
+      cooldown: L(`Следующее сообщение можно отправить через ${w}. Так обсуждение остаётся читаемым.`, `You can send the next message in ${w}. This keeps the discussion readable.`),
+      event: L(`Вы уже отправили ${LIMITS.perEvent} сообщений в этом сборе за сутки. Следующее — через ${w}.`, `You have sent ${LIMITS.perEvent} messages in this event today. Next one in ${w}.`),
+      global: L(`Лимит: ${LIMITS.global} ${plural(LIMITS.global, 'сообщение', 'сообщения', 'сообщений')} за 7 часов. Следующее — через ${w}.`, `Limit: ${LIMITS.global} messages per 7 hours. Next one in ${w}.`)
+    }[q.reason];
+  }
+  // Обратный отсчёт: когда ожидание закончилось, форма снова становится доступной.
+  let quotaTimer = null;
+  function startQuotaTimer() {
+    clearInterval(quotaTimer);
+    quotaTimer = setInterval(() => {
+      const els = $$('[data-until]');
+      if (!els.length) { clearInterval(quotaTimer); return; }
+      let done = false;
+      els.forEach(el => { const left = +el.dataset.until - Date.now(); if (left <= 0) done = true; else el.textContent = fmtWait(left); });
+      if (done) { clearInterval(quotaTimer); render(); }
+    }, 1000);
+  }
+
+  const SMILE = svg('<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14c.9 1.3 2.1 2 3.5 2s2.6-.7 3.5-2"/><circle cx="9.3" cy="10" r=".7" fill="currentColor"/><circle cx="14.7" cy="10" r=".7" fill="currentColor"/>');
+  const QUICK = '👍 ❤️ 😂 🔥 😮 😢 💨 🎉';
+  const EMOJI = [
+    [['Эмоции', 'Feelings'], '😀 😂 🥲 😍 😎 🤩 🥳 😏 😴 🤔 😮 😢 😡 🤯 🥶 🤤'],
+    [['Жесты', 'Gestures'], '👍 👎 👏 🙌 🙏 🤝 💪 ✌️ 👌 🤙 👀 💯'],
+    [['Вкусы и кальян', 'Flavours & hookah'], '💨 🔥 🧊 ❄️ 🍉 🍒 🍋 🍏 🍎 🍌 🥭 🍇 🫐 🍓 🍐 🥥 🍹 ☕'],
+    [['Праздник', 'Party'], '🎉 🎂 🎁 🎃 🎄 ✨ ❤️ 🖤 🌙 ⭐']
+  ];
+  // Реакции: один смайлик от человека на сообщение. Тот же смайлик ещё раз — реакция снимается.
+  function reactionsHtml(c, scope, eventId, u) {
+    const by = {};
+    Object.entries(c.reactions || {}).forEach(([who, em]) => (by[em] ||= []).push(who));
+    const chips = Object.entries(by).sort((a, b) => b[1].length - a[1].length).map(([em, ids]) => {
+      const mine = !!u && ids.includes(u.id), names = ids.map(i => userById(i)?.name).filter(Boolean).join(', ');
+      return `<button type="button" class="react-chip ${mine ? 'on' : ''}" data-action="react" data-scope="${scope}" data-id="${eventId}" data-comment="${c.id}" data-emoji="${em}" title="${esc(names)}" aria-pressed="${mine}"><span>${em}</span><b>${ids.length}</b></button>`;
+    }).join('');
+    if (!chips && !u) return '';
+    return `<div class="reacts">${chips}${u ? `<button type="button" class="react-add" data-action="reactPick" data-scope="${scope}" data-id="${eventId}" data-comment="${c.id}" data-pop-anchor aria-label="${L('Поставить реакцию', 'Add a reaction')}" title="${L('Реакция', 'Reaction')}">${SMILE}<span>+</span></button>` : ''}</div>`;
+  }
+  function commentItem(c, { scope, eventId, u, canDelete, delAction }) {
+    const p = userById(c.userId);
+    return `<li class="comment">${avatar(p, 'sm')}<div class="comment-body"><div class="comment-head"><b>${esc(p?.name || '—')}</b><small>${timeAgo(c.at)}</small>
+      ${canDelete ? `<button class="link-btn danger" type="button" data-action="${delAction}" data-id="${eventId}" data-comment="${c.id}">${L('Удалить', 'Delete')}</button>` : ''}</div>
+      <p>${esc(c.text)}</p>${reactionsHtml(c, scope, eventId, u)}</div></li>`;
+  }
+  function setReaction(scope, eventId, commentId, em) {
+    const u = me(), e = eventById(eventId); if (!u || !e) return;
+    const c = (scope === 'story' ? e.story?.comments : e.comments)?.find(x => x.id === commentId); if (!c) return;
+    c.reactions ||= {};
+    if (c.reactions[u.id] === em) delete c.reactions[u.id]; else c.reactions[u.id] = em;
+    save(); render();
+  }
+  // Панель смайликов: для реакции и для вставки в текст сообщения.
+  let pop = null;
+  function closePop() { pop?.remove(); pop = null; }
+  function openEmojiPop(anchor, groups, onPick, key) {
+    if (pop && pop.dataset.key === key) { closePop(); return; }
+    closePop();
+    pop = document.createElement('div');
+    pop.className = 'emoji-pop'; pop.dataset.key = key; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', L('Смайлики', 'Emoji'));
+    pop.innerHTML = groups.map(([title, list]) => `${title ? `<div class="ep-title">${tr(title)}</div>` : ''}<div class="ep-grid">${list.split(' ').map(em => `<button type="button" data-e="${em}" aria-label="${em}">${em}</button>`).join('')}</div>`).join('');
+    document.body.append(pop);
+    const r = anchor.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight;
+    const left = Math.max(8, Math.min(r.left + r.width / 2 - pw / 2, window.innerWidth - pw - 8));
+    let top = r.top - ph - 8;
+    if (top < 70) top = r.bottom + 8;
+    pop.style.left = left + window.scrollX + 'px'; pop.style.top = top + window.scrollY + 'px';
+    pop.addEventListener('click', ev => { const b = ev.target.closest('[data-e]'); if (b) { const em = b.dataset.e; closePop(); onPick(em); } });
+  }
+  document.addEventListener('mousedown', ev => { if (pop && !pop.contains(ev.target) && !ev.target.closest('[data-pop-anchor]')) closePop(); });
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape') closePop(); });
+  window.addEventListener('hashchange', closePop);
+  function insertAtCursor(ta, text) {
+    if (!ta || ta.disabled) return;
+    const s = ta.selectionStart ?? ta.value.length, en = ta.selectionEnd ?? s;
+    ta.value = ta.value.slice(0, s) + text + ta.value.slice(en);
+    ta.focus(); ta.selectionStart = ta.selectionEnd = s + text.length;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   // ---------- История ----------
@@ -1563,15 +1680,12 @@
             <span class="muted story-count">${ICON.chat}${st.comments.length}</span>
           </div>
           <section class="story-comments">
-            ${st.comments.length ? `<ul class="comments">${st.comments.map(c => {
-              const p = userById(c.userId);
-              return `<li class="comment">${avatar(p, 'sm')}<div class="comment-body"><div class="comment-head"><b>${esc(p?.name || '—')}</b><small>${timeAgo(c.at)}</small>
-                ${u && c.userId === u.id ? `<button class="link-btn danger" type="button" data-action="deleteStoryComment" data-id="${e.id}" data-comment="${c.id}">${L('Удалить', 'Delete')}</button>` : ''}</div><p>${esc(c.text)}</p></div></li>`;
-            }).join('')}</ul>` : ''}
+            ${st.comments.length ? `<ul class="comments">${st.comments.map(c => commentItem(c, { scope: 'story', eventId: e.id, u, canDelete: !!u && c.userId === u.id, delAction: 'deleteStoryComment' })).join('')}</ul>` : ''}
             ${!u ? `<p class="muted story-limit"><a href="#/login" style="color:var(--accent)">${L('Войдите', 'Sign in')}</a>${L(', чтобы оставить комментарий.', ' to leave a comment.')}</p>`
               : commented ? `<p class="story-limit">${ICON.clock}${L(`Вы уже комментировали этот вечер сегодня. Следующий комментарий можно оставить через ${untilTomorrow()}.`, `You have already commented on this evening today. You can comment again in ${untilTomorrow()}.`)}</p>`
               : `<form class="comment-form story-form" data-story="${e.id}">
-                  ${avatar(u, 'sm')}<textarea rows="1" maxlength="300" placeholder="${L('Как вам вечер? Один комментарий в день', 'How was it? One comment per day')}" aria-label="${L('Комментарий', 'Comment')}"></textarea>
+                  ${avatar(u, 'sm')}<div class="cf-box"><textarea rows="1" maxlength="300" placeholder="${L('Как вам вечер? Один комментарий в день', 'How was it? One comment per day')}" aria-label="${L('Комментарий', 'Comment')}"></textarea>
+                  <button type="button" class="emoji-btn" data-action="emoji" data-pop-anchor aria-label="${L('Смайлики', 'Emoji')}">${SMILE}</button></div>
                   <button class="btn btn-primary btn-sm" type="submit">${L('Отправить', 'Send')}</button></form>`}
           </section>
         </div>
@@ -1616,7 +1730,8 @@
         const e = eventById(f.dataset.story), text = ta.value.trim();
         if (!e || !text) return;
         if (myStoryCommentToday(e, u)) { toast(L('Сегодня вы уже комментировали этот вечер', 'You have already commented on this evening today'), 'err'); return; }
-        e.story.comments.push({ id: uid('sc'), userId: u.id, text, at: new Date().toISOString() });
+        if (myRecentMessages(u).length >= LIMITS.global) { toast(L(`Лимит: ${LIMITS.global} ${plural(LIMITS.global, 'сообщение', 'сообщения', 'сообщений')} за 7 часов. Попробуйте позже.`, `Limit: ${LIMITS.global} messages per 7 hours. Try again later.`), 'err'); return; }
+        e.story.comments.push({ id: uid('sc'), userId: u.id, text, at: new Date().toISOString(), reactions: {} });
         save(); toast(L('Комментарий опубликован', 'Comment published')); render();
       });
     });
@@ -2355,6 +2470,12 @@
       render();
     },
     switchTab({ tabs, tab: t }) { switchTo(tabs, t); },
+    reactPick({ scope, id, comment }, el) { openEmojiPop(el, [[null, QUICK]], em => setReaction(scope, id, comment, em), 'r' + comment); },
+    react({ scope, id, comment, emoji }) { if (requireUser()) setReaction(scope, id, comment, emoji); },
+    emoji({ target }, el) {
+      const ta = (target && $('#' + target)) || el.closest('form')?.querySelector('textarea');
+      openEmojiPop(el, EMOJI, em => insertAtCursor(ta, em), 'e' + (target || 'story'));
+    },
     storyFire({ id }) {
       if (!requireUser()) return;
       const e = eventById(id), u = me(); if (!e?.story) return;

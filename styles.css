@@ -1329,3 +1329,56 @@ button.chip { cursor: pointer; font: inherit; font-size: 12.5px; }
   .history-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .history-stats b { font-size: 22px; }
 }
+
+/* ================= Сообщения: реакции, смайлики, лимиты ================= */
+.cf-box { position: relative; flex: 1; min-width: 0; display: flex; }
+.cf-box textarea { flex: 1; padding-right: 44px !important; }
+.comment-form > .cf-box textarea, .comment-form textarea { width: 100%; }
+.emoji-btn {
+  position: absolute; right: 6px; bottom: 6px; width: 32px; height: 32px; border-radius: 50%; border: 0; background: none;
+  color: var(--muted); cursor: pointer; display: grid; place-items: center; transition: color .15s, background .15s, transform .15s;
+}
+.emoji-btn:hover:not(:disabled) { color: var(--accent); background: var(--smoke); transform: rotate(-8deg) scale(1.08); }
+.emoji-btn:disabled { opacity: .4; cursor: not-allowed; }
+.emoji-btn svg, .react-add svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; }
+.comment-form textarea:disabled { opacity: .55; cursor: not-allowed; }
+.quota { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+.quota svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; flex: none; margin-top: 1px; }
+.quota.blocked { color: var(--fg); padding: 10px 12px; border-radius: var(--r-sm); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
+.quota.blocked svg { color: var(--warn); }
+.quota b { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+.reacts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; align-items: center; }
+.react-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 7px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); font: 600 12px var(--f-body); line-height: 1.4;
+  transition: transform .15s, border-color .15s, background .15s;
+}
+.react-chip span { font-size: 15px; line-height: 1; }
+.react-chip b { font-variant-numeric: tabular-nums; color: var(--muted); }
+.react-chip:hover { border-color: var(--accent); }
+.react-chip.on { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.react-chip.on b { color: var(--accent); }
+.react-chip:active { transform: scale(.92); }
+.react-add {
+  display: inline-flex; align-items: center; gap: 1px; height: 26px; padding: 0 7px; border-radius: 999px; cursor: pointer;
+  border: 1px dashed var(--line); background: none; color: var(--muted); font: 700 12px var(--f-body);
+  opacity: .7; transition: opacity .15s, color .15s, border-color .15s;
+}
+.react-add svg { width: 16px; height: 16px; }
+.comment:hover .react-add, .react-add:focus-visible { opacity: 1; }
+.react-add:hover { color: var(--accent); border-color: var(--accent); }
+@media (hover: none) { .react-add { opacity: 1; } }
+
+.emoji-pop {
+  position: absolute; z-index: 70; width: min(320px, calc(100vw - 16px)); max-height: 300px; overflow-y: auto; padding: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); animation: rise .15s ease-out;
+}
+.ep-title { font: 500 10.5px var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 6px 4px 4px; }
+.ep-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+.ep-grid button { border: 0; background: none; font-size: 21px; line-height: 1; padding: 6px 0; border-radius: 8px; cursor: pointer; transition: transform .12s, background .12s; }
+.ep-grid button:hover, .ep-grid button:focus-visible { background: var(--surface-2); transform: scale(1.2); }
+.emoji-pop:not(:has(.ep-title)) { width: auto; max-height: none; padding: 6px; border-radius: 999px; }
+.emoji-pop:not(:has(.ep-title)) .ep-grid { display: flex; gap: 2px; }
+.emoji-pop:not(:has(.ep-title)) .ep-grid button { width: 38px; height: 38px; border-radius: 50%; padding: 0; }
+.story-form .cf-box textarea { background: var(--surface); }
